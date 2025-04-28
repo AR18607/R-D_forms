@@ -22,10 +22,15 @@ def connect_google_sheet(sheet_name):
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
+        # Check if first row is empty or wrong
+        if worksheet.row_values(1) != headers:
+            worksheet.clear()  # Optional: clear old messy stuff
+            worksheet.insert_row(headers, 1)
     except gspread.exceptions.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
         worksheet.insert_row(headers, 1)
     return worksheet
+
 
 # ------------------ ID AND UTILITY FUNCTIONS ------------------
 
