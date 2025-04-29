@@ -7,6 +7,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # -------------- GOOGLE SHEET CONFIG --------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
+TAB_MODULE = "Module Tbl"
 TAB_WOUND_MODULE = "Wound Module Tbl"
 TAB_WRAP_MODULE = "Wrap per Module Tbl"
 TAB_SPOOLS_WIND = "Spools per Wind Tbl"
@@ -23,13 +24,16 @@ def connect_google_sheet(sheet_name):
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
+        if worksheet.row_values(1) != headers:
+            worksheet.clear()
+            worksheet.insert_row(headers, 1)
     except gspread.exceptions.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
         worksheet.insert_row(headers, 1)
     return worksheet
 
 def get_last_id(worksheet, id_prefix):
-    records = worksheet.col_values(1)[1:]  # Skip header
+    records = worksheet.col_values(1)[1:]
     if not records:
         return f"{id_prefix}-001"
     nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
@@ -37,12 +41,12 @@ def get_last_id(worksheet, id_prefix):
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
 # -------------- APP STARTS --------------
-
-st.title("🌀 Winding Form (4 Tables Connected)")
+st.title("🌀 Winding Form (4 Connected Tables)")
 
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
 # Setup Sheets
+module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
 sheet_wound_module = get_or_create_tab(spreadsheet, TAB_WOUND_MODULE, [
     "Wound Module ID", "Module ID", "Wind Program ID", "Operator Initials", "Notes",
     "MFG DB Wind ID", "MFG DB Potting ID", "MFG DB Mod ID"
@@ -63,14 +67,19 @@ sheet_wind_program = get_or_create_tab(spreadsheet, TAB_WIND_PROGRAM, [
     "Number of loops / layer", "C - Active area / layer", "Notes"
 ])
 
+# Fetch existing IDs
+existing_module_ids = module_sheet.col_values(1)[1:]
+existing_wind_program_ids = sheet_wind_program.col_values(1)[1:]
+existing_mfg_db_wind_ids = sheet_wound_module.col_values(6)[1:] if len(sheet_wound_module.col_values(6)) > 1 else []
+
 # Form UI
 with st.form("winding_full_form"):
     st.subheader("🔹 Wound Module Entry")
     wound_module_id = get_last_id(sheet_wound_module, "WMOD")
     st.markdown(f"**Auto-generated Wound Module ID:** `{wound_module_id}`")
 
-    module_id = st.text_input("Module ID (from Module Tbl)")
-    wind_program_id_fk = st.text_input("Wind Program ID (from Wind Program Tbl)")
+    module_id = st.selectbox("Module ID (from Module Tbl)", existing_module_ids) if existing_module_ids else st.text_input("Module ID")
+    wind_program_id_fk = st.selectbox("Wind Program ID (from Wind Program Tbl)", existing_wind_program_ids) if existing_wind_program_ids else st.text_input("Wind Program ID")
     operator_initials = st.text_input("Operator Initials")
     notes_wound = st.text_area("Wound Module Notes")
     mfg_db_wind_id = st.text_input("MFG DB Wind ID")
@@ -81,7 +90,7 @@ with st.form("winding_full_form"):
     wrap_module_pk = get_last_id(sheet_wrap_module, "WPM")
     st.markdown(f"**Auto-generated Wrap Per Module PK:** `{wrap_module_pk}`")
 
-    wrap_module_id_fk = st.text_input("Module ID (Wrap)", value=module_id)
+    wrap_module_id_fk = st.selectbox("Module ID (Wrap)", existing_module_ids) if existing_module_ids else st.text_input("Module ID (Wrap)")
     wrap_after_layer = st.number_input("Wrap After Layer #", step=1)
     type_of_wrap = st.text_input("Type of Wrap")
     notes_wrap = st.text_area("Wrap Notes")
@@ -90,7 +99,7 @@ with st.form("winding_full_form"):
     spools_wind_pk = get_last_id(sheet_spools_wind, "SPW")
     st.markdown(f"**Auto-generated Spool Per Wind PK:** `{spools_wind_pk}`")
 
-    spools_mfg_db_wind_id = st.text_input("MFG DB Wind ID (Spool)", value=mfg_db_wind_id)
+    spools_mfg_db_wind_id = st.selectbox("MFG DB Wind ID (Spool)", existing_mfg_db_wind_ids) if existing_mfg_db_wind_ids else st.text_input("MFG DB Wind ID (Spool)")
     coated_spool_id = st.number_input("Coated Spool ID", step=1)
     length_used = st.number_input("Length Used", format="%.2f")
     notes_spools = st.text_area("Spool Notes")
@@ -102,7 +111,7 @@ with st.form("winding_full_form"):
     program_name = st.text_input("Program Name")
     number_of_bundles = st.number_input("Number of bundles / wind", step=1)
     fibers_per_ribbon = st.number_input("Number of fibers / ribbon", step=1)
-    space_between_ribbons = st.number_input("Space between ribbons", format="%.2f")
+    space_between_ribbons = st.number_input("Space between ribbons (mm)", format="%.2f")
     wind_angle = st.number_input("Wind Angle (deg)", step=1)
     active_fiber_length = st.number_input("Active fiber length (inch)", format="%.2f")
     total_fiber_length = st.number_input("Total fiber length (inch)", format="%.2f")
