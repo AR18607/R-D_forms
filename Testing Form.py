@@ -48,15 +48,12 @@ existing_module_ids = module_sheet.col_values(1)[1:]
 
 with st.form("pressure_test_form"):
     st.subheader("🔹 Pressure Test Entry")
-    
+
     pressure_test_id = get_last_id(pressure_test_sheet, "PT")
     st.markdown(f"**Auto-generated Pressure Test ID:** `{pressure_test_id}`")
 
-    if existing_module_ids:
-        module_id = st.selectbox("Select Module ID", existing_module_ids)
-    else:
-        module_id = st.text_input("Module ID (Manual Entry)", "")
-
+    module_id = st.selectbox("Select Module ID", existing_module_ids) if existing_module_ids else st.text_input("Module ID (Manual Entry)")
+    
     feed_pressure = st.number_input("Feed Pressure (psi)", format="%.2f")
     permeate_flow = st.number_input("Permeate Flow (L/min)", format="%.2f")
     test_datetime = st.datetime_input("Pressure Test Date & Time", datetime.now())
@@ -66,7 +63,6 @@ with st.form("pressure_test_form"):
 
     submit_button = st.form_submit_button("🚀 Submit Pressure Test Record")
 
-# SAVE TO GOOGLE SHEET
 if submit_button:
     try:
         passed_bool = True if passed == "Yes" else False
@@ -83,4 +79,3 @@ if submit_button:
         st.success("✅ Pressure Test record successfully saved!")
     except Exception as e:
         st.error(f"❌ Error saving record: {e}")
-
