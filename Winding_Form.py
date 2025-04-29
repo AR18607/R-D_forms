@@ -70,8 +70,20 @@ spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
 ])
 
 # Fetch Dropdown Data
-module_ids = fetch_column_values(module_sheet)
-wind_program_ids = fetch_column_values(wind_program_sheet)
+try:
+    records = module_sheet.get_all_records()
+    module_ids = [row['Module ID'] for row in records if row.get('Module ID')]
+except Exception as e:
+    st.error(f"Error fetching Module IDs: {e}")
+    module_ids = []
+
+try:
+    records = wind_program_sheet.get_all_records()
+    wind_program_ids = [row['Wind Program ID'] for row in records if row.get('Wind Program ID')]
+except Exception as e:
+    st.error(f"Error fetching Wind Program IDs: {e}")
+    wind_program_ids = []
+
 
 # Form
 with st.form("winding_form"):
