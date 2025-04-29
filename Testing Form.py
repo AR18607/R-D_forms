@@ -30,9 +30,15 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]  # Skip header
-    if not records:
+    nums = []
+    for r in records:
+        if r.startswith(id_prefix):
+            try:
+                nums.append(int(r.split('-')[-1]))
+            except Exception:
+                continue
+    if not nums:
         return f"{id_prefix}-001"
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
     next_num = max(nums) + 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
@@ -66,7 +72,6 @@ with st.form("pressure_test_form"):
     feed_pressure = st.number_input("Feed Pressure (psi)", format="%.2f")
     permeate_flow = st.number_input("Permeate Flow (L/min)", format="%.2f")
 
-    # Corrected: separate date and time inputs
     test_date = st.date_input("Pressure Test Date", datetime.now())
     test_time = st.time_input("Pressure Test Time", datetime.now().time())
     test_datetime = datetime.combine(test_date, test_time)
