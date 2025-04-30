@@ -29,9 +29,10 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
             worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
             worksheet.insert_row(headers, 1)
         except gspread.exceptions.APIError as e:
-            st.warning(f"⚠️ Worksheet '{tab_name}' may already exist. Skipping creation.")
-            worksheet = spreadsheet.worksheet(tab_name)  # Try to access again
+            st.error(f"❌ Failed to create worksheet '{tab_name}': {e}")
+            raise e
     return worksheet
+
 
 
 
