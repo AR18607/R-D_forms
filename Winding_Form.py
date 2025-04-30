@@ -73,14 +73,19 @@ spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
 # Fetch Module IDs from Module Tbl
 try:
     module_records = module_sheet.get_all_records()
-    module_ids = [str(row['Module ID']).strip() for row in module_records if row.get('Module ID')]
+    st.write("Fetched Module Records:", module_records)  # Debugging output
+    module_ids = [str(row.get('Module ID', '')).strip() for row in module_records if row.get('Module ID')]
+    st.write("Extracted Module IDs:", module_ids)  # Debugging output
 except Exception as e:
     st.error(f"⚠️ Could not load Module IDs: {e}")
     module_ids = []
 
 # Dropdown to select Module ID
-module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids)
-
+if module_ids:
+    module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids)
+else:
+    st.warning("No Module IDs available to select.")
+    module_fk = None
 
 try:
     wind_program_records = wind_program_sheet.get_all_records()
