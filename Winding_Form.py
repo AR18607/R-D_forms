@@ -18,9 +18,16 @@ TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 # ----------------- CONNECT GOOGLE SHEETS -----------------
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
-    client = gspread.authorize(creds)
-    return client.open(sheet_name)
+    try:
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
+        client = gspread.authorize(creds)
+        return client.open(sheet_name)
+    except gspread.exceptions.APIError as e:
+        st.error(f"APIError: {e}")
+        return None
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
+        return None
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
@@ -38,18 +45,12 @@ def get_last_id(worksheet, id_prefix):
     next_num = max(nums) + 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
-def fetch_column_values(worksheet, col_index=1):
-    """Fetch non-header column values safely"""
-    try:
-        values = worksheet.col_values(col_index)[1:]  # Skip header
-        return [v for v in values if v]
-    except Exception:
-        return []
-
 # ----------------- MAIN APP -----------------
 st.title("🌀 Winding Form (Connected)")
 
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+if not spreadsheet:
+    st.stop()
 
 # Create/Connect tabs
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
@@ -70,32 +71,19 @@ spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
 ])
 
 # Fetch Dropdown Data
-# Fetch Module IDs from Module Tbl
 try:
     module_records = module_sheet.get_all_records()
-    st.write("Fetched Module Records:", module_records)  # Debugging output
     module_ids = [str(row.get('Module ID', '')).strip() for row in module_records if row.get('Module ID')]
-    st.write("Extracted Module IDs:", module_ids)  # Debugging output
 except Exception as e:
     st.error(f"⚠️ Could not load Module IDs: {e}")
     module_ids = []
 
-# Dropdown to select Module ID
-if module_ids:
-    module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids)
-else:
-    st.warning("No Module IDs available to select.")
-    module_fk = None
-
 try:
     wind_program_records = wind_program_sheet.get_all_records()
-    wind_program_ids = [str(row['Wind Program ID']).strip() for row in wind_program_records if row.get('Wind Program ID')]
+    wind_program_ids = [str(row.get('Wind Program ID', '')).strip() for row in wind_program_records if row.get('Wind Program ID')]
 except Exception as e:
     st.error(f"⚠️ Could not load Wind Program IDs: {e}")
     wind_program_ids = []
-
-# Dropdown to select Wind Program ID
-wind_fk = st.selectbox("Wind Program ID (from Wind Program Tbl)", wind_program_ids)
 
 # Form
 with st.form("winding_form"):
@@ -104,15 +92,8 @@ with st.form("winding_form"):
     wound_module_id = get_last_id(wound_module_sheet, "WMOD")
     st.markdown(f"**Auto-generated Wound Module ID:** `{wound_module_id}`")
 
-    if module_ids:
-        module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids)
-    else:
-        module_fk = st.text_input("Module ID (manually)", "")
-
-    if wind_program_ids:
-        wind_program_fk = st.selectbox("Wind Program ID (from Wind Program Tbl)", wind_program_ids)
-    else:
-        wind_program_fk = st.text_input("Wind Program ID (manually)", "")
+    module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids) if module_ids else st.text_input("Module ID (manually)", "")
+    wind_program_fk = st.selectbox("Wind Program ID (from Wind Program Tbl)", wind_program_ids) if wind_program_ids else st.text_input("Wind Program ID (manually)", "")
 
     operator_initials = st.text_input("Operator Initials")
     notes_wound = st.text_area("Wound Module Notes")
@@ -135,7 +116,7 @@ with st.form("winding_form"):
     spool_per_wind_pk = get_last_id(spools_per_wind_sheet, "SPOOL")
     st.markdown(f"**Auto-generated Spool Per Wind PK:** `{spool_per_wind_pk}`")
 
-    mfg_db_wind_fk = st.selectbox("MFG DB Wind ID (FK)", module_ids) if module_ids else st.text_input("MFG DB Wind ID (Manual)", "")
+    mfg_db_wind_fk = st.text_input("MFG DB Wind ID (FK)")
     coated_spool_id = st.text_input("Coated Spool ID")
     length_used = st.number_input("Length Used", format="%.2f")
     spool_notes = st.text_area("Spool Notes")
