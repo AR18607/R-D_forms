@@ -70,20 +70,27 @@ spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
 ])
 
 # Fetch Dropdown Data
+# Fetch Module IDs from Module Tbl
 try:
-    records = module_sheet.get_all_records()
-    module_ids = [row['Module ID'] for row in records if row.get('Module ID')]
+    module_records = module_sheet.get_all_records()
+    module_ids = [str(row['Module ID']).strip() for row in module_records if row.get('Module ID')]
 except Exception as e:
-    st.error(f"Error fetching Module IDs: {e}")
+    st.error(f"⚠️ Could not load Module IDs: {e}")
     module_ids = []
 
+# Dropdown to select Module ID
+module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids)
+
+
 try:
-    records = wind_program_sheet.get_all_records()
-    wind_program_ids = [row['Wind Program ID'] for row in records if row.get('Wind Program ID')]
+    wind_program_records = wind_program_sheet.get_all_records()
+    wind_program_ids = [str(row['Wind Program ID']).strip() for row in wind_program_records if row.get('Wind Program ID')]
 except Exception as e:
-    st.error(f"Error fetching Wind Program IDs: {e}")
+    st.error(f"⚠️ Could not load Wind Program IDs: {e}")
     wind_program_ids = []
 
+# Dropdown to select Wind Program ID
+wind_fk = st.selectbox("Wind Program ID (from Wind Program Tbl)", wind_program_ids)
 
 # Form
 with st.form("winding_form"):
