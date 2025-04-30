@@ -8,7 +8,26 @@ from datetime import datetime
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 SERVICE_ACCOUNT_FILE = 'path_to_your_service_account.json'  # Replace with your service account file path
 
-credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+import json
+
+gcp_service_account = """
+{
+  "type": "service_account",
+  "project_id": "rnd-form-sheets",
+  "private_key_id": "b47d625d6fd990cb396b1c559daa3647595d6765",
+  "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCTgcNXEKIvxeLn\\nKLfu4ru/I4osM7UOKwa1w1YF/s+ERiLU8sXY2xb589/B8zTxsMonaNbuVLVF6/hS\\nJyZ3Iq6lbi6OWU46ndyhdQvrvinczlOiDGjrg4kLQy73ylhscTz+m8yg2FnFufmC\\ngPDoKH+M1vBFQ+E/mDS19cr0lYiNwCg5QVYw4ASV3EOG8pm4WZ0hHKMR3fTYyShN\\nYgj1rdKcQBXjbbKFXsMqG0uc55Ul/WQCmf5MdK7ltUElkCmGEH6oYLKxqcKUyGHF\\nhRzGFIxQGILuJ1jJxbcWuruHDPkO3h/MKuuwUqN40YmZkH4cV+23FM8hgfJJNx3m\\nnM+10YWpAgMBAAECggEABf+L2vmBLuIkJPRB7oPn0JD4aG292hKj1jZYRCwlciKL\\n/g7VPslB+O4S1kc2ivF+dvXLb6ugJ3S+B1EyPjv50B5X5E/7X2TV+PbSgkacWy9E\\ntV090v3pT7zupwLib553NX9OZegGVoUGgWkO4tHqxeZjpN1qxnRBCHkzRJjkEaeD\\n6X7ym361mx0q8rMfXGuKxNH4myJdqYIiJtiVeP+lB7d4fSE/GQ8mtY2ATkNAKxpa\\nK0HkBVJvzBXqkJXXf+j9rbsBkN2xk7Lg0BE6F/AsqxwToJ7xH4mWn86ZAUrfzhRz\\n/l/YAG948xPRDTamwkuJyF8sBbFCl0UT3qVC8/fXEQKBgQDK+f3kZBtovj+GjLSZ\\ndEeR+bSF6Co0n/HGy05fhZ4fONDpEj2RtzVGqyPzQCgdNBisp5wskK65zMbxnluw\\nRWBvPgELN9iGnmkfMnuUcALzdCfVenSefN1JyYiFLID0Fu9rkufnsdFuQQfmFc7g\\noYdL9ZUD9ISEFy2R21oM1Y6XTQKBgQC6CkB07WXiRW49OvrZZ9BqmlHJfAc/ISJX\\nIrbu7eOCprlo5J4YUprcAhFkGrOEA7Xoq/bgUG4lp1HEMWJh1n6IYcIu7ssj0Eni\\ntjD/b06JdlVHFLx0UpppIgs64QrnxUi0h0c0xA3+svWGmQOcbaBOYmdz3sUcr4YH\\nBwWDdE9RzQKBgQC5mTn1WyxM7Jl92K9TGiZPbnsJbq8ZC5+y3Tg+1BkwB23PkORH\\nl7TZd6gZx3JmsbpWNbTycyGxt3O6f8jrN6TkU1f1AA23mqYY5rplkr7AClhaNezo\\n9tgJnoR88aLAjzBBt0TicZBFNqWYWByg/lKOvHKT+UQq3F7I3kBLOAN4iQKBgBAd\\nhTnbuqCgHQ2Gx2X/vSkO1xjZ+pK4Xw4nPqtxxexyXss8SomW1j1KnJEMUxKTc7WE\\n9+y0auYuGUIieQA6oVlVBookO0qN52iRGat2y9nSe06d+DknUqLaxRhDmDs9dq/U\\nrBFhDklK3UPci1iIkoNXuNhrqq1ycuy26f5aG+jdAoGBALUmLPuK8R2z/l5ZbVMp\\nwAex2x5xpCY7KxqjK9QEPT4ltpSIEO1wcCLpyJu4ywF+ZEK4tX4m83QSnz3jSJ2P\\n+s2lYdzPlH/h9PmN4dZNEe2Ych2krJ6enL4XFTwLdaTBxhzelBxsIMOBRY+Q8lEk\\nGuc9jxGajgMRjNcZ6KDwxDI0\\n-----END PRIVATE KEY-----\\n",
+  "client_email": "streamlit-sheets-access@rnd-form-sheets.iam.gserviceaccount.com",
+  "client_id": "110606493187856294523",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/streamlit-sheets-access%40rnd-form-sheets.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
+"""
+
+credentials = Credentials.from_service_account_info(json.loads(gcp_service_account), scopes=SCOPES)
+
 client = gspread.authorize(credentials)
 
 # --- Google Sheet URLs ---
