@@ -24,16 +24,16 @@ def connect_google_sheet(sheet_name):
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
+        st.warning(f"⚠️ Worksheet '{tab_name}' already exists. Skipping creation.")
     except gspread.exceptions.WorksheetNotFound:
         try:
             worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
             worksheet.insert_row(headers, 1)
+            st.success(f"✅ Created worksheet: '{tab_name}'")
         except gspread.exceptions.APIError as e:
             st.error(f"❌ Failed to create worksheet '{tab_name}': {e}")
-            raise e
+            raise
     return worksheet
-
-
 
 
 
