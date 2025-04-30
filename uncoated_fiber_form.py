@@ -5,11 +5,16 @@ from datetime import datetime
 import json
 from google.oauth2 import service_account
 
+
 # Load credentials from Streamlit secrets
-service_account_info = json.loads(st.secrets["gcp_service_account"])
+service_account_info = st.secrets["gcp_service_account"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 credentials = service_account.Credentials.from_service_account_info(
     service_account_info,
-    scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    scopes=SCOPES
 )
 client = gspread.authorize(credentials)
 
