@@ -34,6 +34,7 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
     return worksheet
 
 
+
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]  # Skip header
     if not records:
