@@ -2,49 +2,32 @@ import streamlit as st
 import pandas as pd
 import gspread
 import json
-import time
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
 GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
 
-# Sheet tabs
 TAB_MODULE = "Module Tbl"
 TAB_WIND_PROGRAM = "Wind Program Tbl"
 TAB_WOUND_MODULE = "Wound Module Tbl"
 TAB_WRAP_PER_MODULE = "Wrap Per Module Tbl"
 TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 
-# ----------------- CONNECT GOOGLE SHEETS -----------------
-@st.cache_resource
+# ----------------- GOOGLE SHEET FUNCTIONS -----------------
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
-def get_or_create_tab(spreadsheet, tab_name, headers, max_retries=5):
-    delay = 1
-    for attempt in range(max_retries):
-        try:
-            try:
-                worksheet = spreadsheet.worksheet(tab_name)
-                return worksheet
-            except gspread.exceptions.WorksheetNotFound:
-                worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-                worksheet.insert_row(headers, 1)
-                return worksheet
-        except gspread.exceptions.APIError as e:
-            if e.response.status_code == 429:
-                st.warning(f"⏳ Quota limit hit accessing '{tab_name}'. Retrying in {delay}s...")
-                time.sleep(delay)
-                delay *= 2
-            else:
-                raise e
-    raise RuntimeError(f"❌ Maximum retries exceeded for accessing or creating '{tab_name}'")
-
-
+def get_or_create_tab(spreadsheet, tab_name, headers):
+    try:
+        worksheet = spreadsheet.worksheet(tab_name)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+        worksheet.insert_row(headers, 1)
+    return worksheet
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]  # Skip header
@@ -59,7 +42,7 @@ st.title("🌀 Winding Form (Connected)")
 
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
-# Create/Connect tabs
+# Sheet references
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
 wind_program_sheet = get_or_create_tab(spreadsheet, TAB_WIND_PROGRAM, [
     "Wind Program ID", "Program Name", "Number of bundles / wind", "Number of fibers / ribbon",
@@ -77,38 +60,19 @@ spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
     "SpoolPerWind PK", "MFG DB Wind ID (FK)", "Coated Spool ID", "Length Used", "Notes"
 ])
 
-# Fetch Dropdown Data with Caching
-@st.cache_data(ttl=300)
-def load_module_ids():
-    try:
-        module_records = module_sheet.get_all_records()
-        return [str(row.get('Module ID', '')).strip() for row in module_records if row.get('Module ID')]
-    except Exception as e:
-        st.error(f"⚠️ Could not load Module IDs: {e}")
-        return []
+# Fetch dropdown values
+module_ids = [row['Module ID'] for row in module_sheet.get_all_records() if row.get('Module ID')]
+wind_program_ids = [row['Wind Program ID'] for row in wind_program_sheet.get_all_records() if row.get('Wind Program ID')]
 
-@st.cache_data(ttl=300)
-def load_wind_program_ids():
-    try:
-        wind_program_records = wind_program_sheet.get_all_records()
-        return [str(row.get('Wind Program ID', '')).strip() for row in wind_program_records if row.get('Wind Program ID')]
-    except Exception as e:
-        st.error(f"⚠️ Could not load Wind Program IDs: {e}")
-        return []
-
-module_ids = load_module_ids()
-wind_program_ids = load_wind_program_ids()
-
-# Form
+# ----------------- FORM -----------------
 with st.form("winding_form"):
     st.subheader("🔷 Wound Module Entry")
-
     wound_module_id = get_last_id(wound_module_sheet, "WMOD")
     st.markdown(f"**Auto-generated Wound Module ID:** `{wound_module_id}`")
-
-    module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids) if module_ids else st.text_input("Module ID (manually)", "")
-    wind_program_fk = st.selectbox("Wind Program ID (from Wind Program Tbl)", wind_program_ids) if wind_program_ids else st.text_input("Wind Program ID (manually)", "")
-
+    
+    module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids)
+    wind_program_fk = st.selectbox("Wind Program ID (from Wind Program Tbl)", wind_program_ids)
+    
     operator_initials = st.text_input("Operator Initials")
     notes_wound = st.text_area("Wound Module Notes")
     mfg_db_wind = st.text_input("MFG DB Wind ID")
@@ -116,28 +80,26 @@ with st.form("winding_form"):
     mfg_db_mod = st.number_input("MFG DB Mod ID", step=1)
 
     st.subheader("🔷 Wrap Per Module Entry")
-
     wrap_per_module_pk = get_last_id(wrap_per_module_sheet, "WRAP")
     st.markdown(f"**Auto-generated Wrap Per Module PK:** `{wrap_per_module_pk}`")
-
-    wrap_module_fk = st.selectbox("Module ID (Wrap)", module_ids) if module_ids else st.text_input("Module ID (Wrap Manual)", "")
+    
+    wrap_module_fk = st.selectbox("Module ID (Wrap)", module_ids)
     wrap_after_layer = st.number_input("Wrap After Layer #", step=1)
     type_of_wrap = st.text_input("Type of Wrap")
     wrap_notes = st.text_area("Wrap Notes")
 
     st.subheader("🔷 Spools Per Wind Entry")
-
     spool_per_wind_pk = get_last_id(spools_per_wind_sheet, "SPOOL")
     st.markdown(f"**Auto-generated Spool Per Wind PK:** `{spool_per_wind_pk}`")
 
-    mfg_db_wind_fk = st.text_input("MFG DB Wind ID (FK)")
+    mfg_db_wind_fk = st.selectbox("MFG DB Wind ID (FK)", module_ids)
     coated_spool_id = st.text_input("Coated Spool ID")
     length_used = st.number_input("Length Used", format="%.2f")
     spool_notes = st.text_area("Spool Notes")
 
     submit_button = st.form_submit_button("🚀 Submit All Entries")
 
-# Save Entries
+# Save to Google Sheet
 if submit_button:
     try:
         wound_module_sheet.append_row([
