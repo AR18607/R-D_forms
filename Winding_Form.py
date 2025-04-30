@@ -25,25 +25,31 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
         st.warning(f"⚠️ Worksheet '{tab_name}' already exists. Skipping creation.")
-        return worksheet  # ⬅️ IMPORTANT: return early if found
     except gspread.exceptions.WorksheetNotFound:
         try:
             worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
             worksheet.insert_row(headers, 1)
             st.success(f"✅ Created worksheet: '{tab_name}'")
-            return worksheet
         except gspread.exceptions.APIError as e:
             st.error(f"❌ Failed to create worksheet '{tab_name}': {e}")
-            return None  # ⬅️ Avoid further crashing
+            return None
+    return worksheet
 
 
-def get_last_id(worksheet, id_prefix):
-    records = worksheet.col_values(1)[1:]  # Skip header
-    if not records:
-        return f"{id_prefix}-001"
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
-    next_num = max(nums) + 1
-    return f"{id_prefix}-{str(next_num).zfill(3)}"
+def get_last_id(worksheet, prefix):
+    if worksheet is None:
+        st.error("❌ Worksheet is None. Cannot retrieve last ID.")
+        return None
+    try:
+        records = worksheet.col_values(1)[1:]  # Skip header
+        if not records:
+            return f"{prefix}-001"
+        last_id = records[-1]
+        last_num = int(last_id.split("-")[1])
+        return f"{prefix}-{last_num + 1:03d}"
+    except Exception as e:
+        st.error(f"❌ Error retrieving last ID: {e}")
+        return None
 
 # ----------------- MAIN APP -----------------
 st.title("🌀 Winding Form (Connected)")
