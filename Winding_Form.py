@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 import json
+import time
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ----------------- CONFIG -----------------
@@ -16,18 +17,12 @@ TAB_WRAP_PER_MODULE = "Wrap Per Module Tbl"
 TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 
 # ----------------- CONNECT GOOGLE SHEETS -----------------
+@st.cache_resource
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    try:
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
-        client = gspread.authorize(creds)
-        return client.open(sheet_name)
-    except gspread.exceptions.APIError as e:
-        st.error(f"APIError: {e}")
-        return None
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
-        return None
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
+    client = gspread.authorize(creds)
+    return client.open(sheet_name)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
@@ -49,8 +44,6 @@ def get_last_id(worksheet, id_prefix):
 st.title("🌀 Winding Form (Connected)")
 
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
-if not spreadsheet:
-    st.stop()
 
 # Create/Connect tabs
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
@@ -70,20 +63,27 @@ spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
     "SpoolPerWind PK", "MFG DB Wind ID (FK)", "Coated Spool ID", "Length Used", "Notes"
 ])
 
-# Fetch Dropdown Data
-try:
-    module_records = module_sheet.get_all_records()
-    module_ids = [str(row.get('Module ID', '')).strip() for row in module_records if row.get('Module ID')]
-except Exception as e:
-    st.error(f"⚠️ Could not load Module IDs: {e}")
-    module_ids = []
+# Fetch Dropdown Data with Caching
+@st.cache_data(ttl=300)
+def load_module_ids():
+    try:
+        module_records = module_sheet.get_all_records()
+        return [str(row.get('Module ID', '')).strip() for row in module_records if row.get('Module ID')]
+    except Exception as e:
+        st.error(f"⚠️ Could not load Module IDs: {e}")
+        return []
 
-try:
-    wind_program_records = wind_program_sheet.get_all_records()
-    wind_program_ids = [str(row.get('Wind Program ID', '')).strip() for row in wind_program_records if row.get('Wind Program ID')]
-except Exception as e:
-    st.error(f"⚠️ Could not load Wind Program IDs: {e}")
-    wind_program_ids = []
+@st.cache_data(ttl=300)
+def load_wind_program_ids():
+    try:
+        wind_program_records = wind_program_sheet.get_all_records()
+        return [str(row.get('Wind Program ID', '')).strip() for row in wind_program_records if row.get('Wind Program ID')]
+    except Exception as e:
+        st.error(f"⚠️ Could not load Wind Program IDs: {e}")
+        return []
+
+module_ids = load_module_ids()
+wind_program_ids = load_wind_program_ids()
 
 # Form
 with st.form("winding_form"):
