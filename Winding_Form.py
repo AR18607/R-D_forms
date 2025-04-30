@@ -24,13 +24,33 @@ def connect_google_sheet(sheet_name):
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
-def get_or_create_tab(spreadsheet, tab_name, headers):
-    try:
-        worksheet = spreadsheet.worksheet(tab_name)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-        worksheet.insert_row(headers, 1)
-    return worksheet
+def get_or_create_tab(spreadsheet, tab_name, headers, max_retries=5):
+    delay = 1
+    for attempt in range(max_retries):
+        try:
+            worksheet = spreadsheet.worksheet(tab_name)
+            return worksheet
+        except gspread.exceptions.WorksheetNotFound:
+            try:
+                worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+                worksheet.insert_row(headers, 1)
+                return worksheet
+            except gspread.exceptions.APIError as e:
+                if e.response.status_code == 429:
+                    st.warning(f"Quota hit while adding worksheet '{tab_name}', retrying in {delay}s...")
+                    time.sleep(delay)
+                    delay *= 2
+                else:
+                    raise
+        except gspread.exceptions.APIError as e:
+            if e.response.status_code == 429:
+                st.warning(f"Quota hit while accessing worksheet '{tab_name}', retrying in {delay}s...")
+                time.sleep(delay)
+                delay *= 2
+            else:
+                raise
+    raise RuntimeError(f"❌ Maximum retries exceeded for accessing '{tab_name}'. Please try again later.")
+
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]  # Skip header
