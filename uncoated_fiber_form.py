@@ -2,16 +2,17 @@ import streamlit as st
 import pandas as pd
 import gspread
 from datetime import datetime
-from google.oauth2 import service_account
 import json
+from google.oauth2 import service_account
 
-# --- Load credentials from Streamlit secrets ---
-service_account_info = st.secrets["gcp_service_account"]
+# Load credentials from Streamlit secrets
+service_account_info = json.loads(st.secrets["gcp_service_account"])
 credentials = service_account.Credentials.from_service_account_info(
     service_account_info,
     scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 )
 client = gspread.authorize(credentials)
+
 
 # --- Google Sheet URLs ---
 MAIN_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1uPdUWiiwMdJCYJaxZ5TneFa9h6tbSrs327BVLT5GVPY'
