@@ -1,165 +1,110 @@
 import streamlit as st
-import pandas as pd
 import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-import json
-from google.oauth2 import service_account
 
+# ---------------------------
+# Google Sheets Setup
+# ---------------------------
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
 
-# Load credentials from Streamlit secrets
-service_account_info = st.secrets["gcp_service_account"]
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
+# Replace with your actual Google Sheet name
+SPREADSHEET_NAME = "R&D Data Form"
+spreadsheet = client.open(SPREADSHEET_NAME)
+
+# ---------------------------
+# Helper Function to Get or Create Worksheet
+# ---------------------------
+def get_or_create_worksheet(sheet, title, headers):
+    try:
+        worksheet = sheet.worksheet(title)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = sheet.add_worksheet(title=title, rows="1000", cols="50")
+        worksheet.append_row(headers)
+    return worksheet
+
+# ---------------------------
+# Define Headers for Each Worksheet
+# ---------------------------
+uncoated_fiber_headers = [
+    "Batch_Fiber_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
+    "Outside_Diameter_Avg", "Outside_Diameter_StDev", "Reported_Concentricity", "Batch_Length",
+    "Shipment_Date", "Tracking_Number", "Fiber_Source", "Average_t_OD", "Minimum_t_OD",
+    "Minimum_Wall_Thickness", "Average_Wall_Thickness", "N2_Permeance", "Collapse_Pressure",
+    "Kink_Test_2_95", "Kink_Test_2_36", "Order_On_Bobbin", "Number_Of_Blue_Splices", "Notes"
 ]
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info,
-    scopes=SCOPES
-)
-client = gspread.authorize(credentials)
 
+uncoated_spool_headers = ["UncoatedSpool_ID", "Type", "C_Length"]
 
-# --- Google Sheet URLs ---
-MAIN_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1uPdUWiiwMdJCYJaxZ5TneFa9h6tbSrs327BVLT5GVPY'
-SYENSQO_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1y1pX5ZursJllWZCK-SFt-FTsDSrwjYObmdaA50eH0U8'
+as_received_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes"]
 
-# --- Worksheet Names ---
-UNCOATED_FIBER_SHEET = 'Uncoated_Fiber_Data_Tbl'
+combined_spools_headers = ["Combined_SpoolsPK", "UncoatedSpool_ID", "Received_Spool_PK"]
 
-# --- Load Worksheets ---
-main_sheet = client.open_by_url(MAIN_SHEET_URL)
-syensqo_sheet = client.open_by_url(SYENSQO_SHEET_URL)
-syensqo_ws = syensqo_sheet.sheet1  # Assuming data is in the first sheet
+ardent_qc_headers = [
+    "Ardent_QC_ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "Ardent_QC_Inside_Diameter",
+    "Ardent_QC_Outside_Diameter", "Measured_Concentricity", "Wall_Thickness", "Operator_Initials",
+    "Notes", "Date_Time", "Inside_Circularity", "Outside_Circularity"
+]
 
-# --- Load Syensqo Data ---
-syensqo_data = syensqo_ws.get_all_records()
-syensqo_df = pd.DataFrame(syensqo_data)
+# ---------------------------
+# Initialize Worksheets
+# ---------------------------
+uncoated_fiber_ws = get_or_create_worksheet(spreadsheet, "Uncoated_Fiber_Data_Tbl", uncoated_fiber_headers)
+uncoated_spool_ws = get_or_create_worksheet(spreadsheet, "UnCoatedSpool_ID_Tbl", uncoated_spool_headers)
+as_received_ws = get_or_create_worksheet(spreadsheet, "As_Received_UnCoatedSpools_Tbl", as_received_headers)
+combined_spools_ws = get_or_create_worksheet(spreadsheet, "Combined_Spools_Tbl", combined_spools_headers)
+ardent_qc_ws = get_or_create_worksheet(spreadsheet, "Ardent_Fiber_Dimension_QC_Tbl", ardent_qc_headers)
 
-# --- Streamlit Form ---
-st.title("Uncoated Fiber Data Entry Form")
+# ---------------------------
+# Streamlit Form
+# ---------------------------
+st.title("Uncoated Fiber Form")
 
 with st.form("uncoated_fiber_form"):
-    supplier_batch_id = st.text_input("Supplier Batch ID")
-    fiber_source = st.selectbox("Fiber Source", ["Syensqo", "EMI", "Polymem", "Other"])
-    shipment_date = st.date_input("Shipment Date", datetime.today())
-    tracking_number = st.text_input("Tracking Number")
-    notes = st.text_area("Notes")
+    st.subheader("Uncoated Fiber Data")
 
-    # Autofill for Syensqo
-    if fiber_source == "Syensqo":
-        matching_rows = syensqo_df[syensqo_df['Supplier Batch ID'] == supplier_batch_id]
-        if not matching_rows.empty:
-            row = matching_rows.iloc[0]
-            inside_diameter_avg = row.get('Inside Diameter (um) avg', '')
-            inside_diameter_stdev = row.get('Inside Diameter (um) StDev', '')
-            outside_diameter_avg = row.get('Outside Diameter (um) Avg', '')
-            outside_diameter_stdev = row.get('Outside Diameter (um) StDev', '')
-            reported_concentricity = row.get('Reported Concentricity (%)', '')
-            batch_length = row.get('Batch Length (m)', '')
-            average_t_od = row.get('Average t/OD', '')
-            minimum_t_od = row.get('Minimum t/OD', '')
-            minimum_wall_thickness = row.get('Minimum wall thickness (um)', '')
-            average_wall_thickness = row.get('Average wall thickness (um)', '')
-            n2_permeance = row.get('N2 permeance (GPU)', '')
-            collapse_pressure = row.get('Collapse Pressure (psi)', '')
-            kink_test_2_95 = row.get('Kink test 2.95 (mm)', '')
-            kink_test_2_36 = row.get('Kink test 2.36 (mm)', '')
-            order_on_bobbin = row.get('Order on bobbin (outside = 1)', '')
-            number_of_blue_splices = row.get('Number of blue splices', '')
-        else:
-            st.warning("No matching Syensqo data found for the provided Supplier Batch ID.")
-            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", min_value=0)
-            inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", min_value=0)
-            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", min_value=0)
-            outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", min_value=0)
-            reported_concentricity = st.number_input("Reported Concentricity (%)", min_value=0)
-            batch_length = st.number_input("Batch Length (m)", min_value=0)
-            average_t_od = st.number_input("Average t/OD", min_value=0.0, format="%.2f")
-            minimum_t_od = st.number_input("Minimum t/OD", min_value=0.0, format="%.2f")
-            minimum_wall_thickness = st.number_input("Minimum Wall Thickness (um)", min_value=0)
-            average_wall_thickness = st.number_input("Average Wall Thickness (um)", min_value=0)
-            n2_permeance = st.number_input("N2 Permeance (GPU)", min_value=0)
-            collapse_pressure = st.number_input("Collapse Pressure (psi)", min_value=0)
-            kink_test_2_95 = st.number_input("Kink Test 2.95 (mm)", min_value=0.0, format="%.2f")
-            kink_test_2_36 = st.number_input("Kink Test 2.36 (mm)", min_value=0.0, format="%.2f")
-            order_on_bobbin = st.number_input("Order on Bobbin", min_value=0)
-            number_of_blue_splices = st.number_input("Number of Blue Splices", min_value=0)
-    else:
-        inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", min_value=0)
-        inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", min_value=0)
-        outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", min_value=0)
-        outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", min_value=0)
-        reported_concentricity = st.number_input("Reported Concentricity (%)", min_value=0)
-        batch_length = st.number_input("Batch Length (m)", min_value=0)
-        average_t_od = st.number_input("Average t/OD", min_value=0.0, format="%.2f")
-        minimum_t_od = st.number_input("Minimum t/OD", min_value=0.0, format="%.2f")
-        minimum_wall_thickness = st.number_input("Minimum Wall Thickness (um)", min_value=0)
-        average_wall_thickness = st.number_input("Average Wall Thickness (um)", min_value=0)
-        n2_permeance = st.number_input("N2 Permeance (GPU)", min_value=0)
-        collapse_pressure = st.number_input("Collapse Pressure (psi)", min_value=0)
-        kink_test_2_95 = st.number_input("Kink Test 2.95 (mm)", min_value=0.0, format="%.2f")
-        kink_test_2_36 = st.number_input("Kink Test 2.36 (mm)", min_value=0.0, format="%.2f")
-        order_on_bobbin = st.number_input("Order on Bobbin", min_value=0)
-        number_of_blue_splices = st.number_input("Number of Blue Splices", min_value=0)
+    supplier_batch_id = st.text_input("Supplier Batch ID")
+    inside_diameter_avg = st.number_input("Inside Diameter (um) Avg", min_value=0)
+    inside_diameter_stdev = st.number_input("Inside Diameter (um) StDev", min_value=0)
+    outside_diameter_avg = st.number_input("Outside Diameter (um) Avg", min_value=0)
+    outside_diameter_stdev = st.number_input("Outside Diameter (um) StDev", min_value=0)
+    reported_concentricity = st.number_input("Reported Concentricity (%)", min_value=0)
+    batch_length = st.number_input("Batch Length (m)", min_value=0)
+    shipment_date = st.date_input("Shipment Date")
+    tracking_number = st.text_input("Tracking Number")
+    fiber_source = st.selectbox("Fiber Source", ["EMI", "Syensqo", "Polymem", "Other"])
+    average_t_od = st.number_input("Average t/OD", min_value=0.0, format="%.2f")
+    minimum_t_od = st.number_input("Minimum t/OD", min_value=0.0, format="%.2f")
+    minimum_wall_thickness = st.number_input("Minimum Wall Thickness (um)", min_value=0)
+    average_wall_thickness = st.number_input("Average Wall Thickness (um)", min_value=0)
+    n2_permeance = st.number_input("N2 Permeance (GPU)", min_value=0)
+    collapse_pressure = st.number_input("Collapse Pressure (psi)", min_value=0)
+    kink_test_2_95 = st.number_input("Kink Test 2.95 (mm)", min_value=0.0, format="%.2f")
+    kink_test_2_36 = st.number_input("Kink Test 2.36 (mm)", min_value=0.0, format="%.2f")
+    order_on_bobbin = st.number_input("Order on Bobbin (outside = 1)", min_value=0)
+    number_of_blue_splices = st.number_input("Number of Blue Splices", min_value=0)
+    notes = st.text_area("Notes")
 
     submitted = st.form_submit_button("Submit")
 
     if submitted:
-        # Prepare data row
-        data_row = [
-            supplier_batch_id,
-            inside_diameter_avg,
-            inside_diameter_stdev,
-            outside_diameter_avg,
-            outside_diameter_stdev,
-            reported_concentricity,
-            batch_length,
-            shipment_date.strftime("%Y-%m-%d"),
-            tracking_number,
-            fiber_source,
-            average_t_od,
-            minimum_t_od,
-            minimum_wall_thickness,
-            average_wall_thickness,
-            n2_permeance,
-            collapse_pressure,
-            kink_test_2_95,
-            kink_test_2_36,
-            order_on_bobbin,
-            number_of_blue_splices,
-            notes
+        # Generate a new Batch_Fiber_ID
+        existing_ids = uncoated_fiber_ws.col_values(1)[1:]  # Exclude header
+        if existing_ids:
+            new_id = max([int(i) for i in existing_ids if i.isdigit()]) + 1
+        else:
+            new_id = 1
+
+        new_row = [
+            new_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
+            outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
+            shipment_date.strftime("%Y-%m-%d"), tracking_number, fiber_source, average_t_od,
+            minimum_t_od, minimum_wall_thickness, average_wall_thickness, n2_permeance,
+            collapse_pressure, kink_test_2_95, kink_test_2_36, order_on_bobbin,
+            number_of_blue_splices, notes
         ]
 
-        # Access or create worksheet
-        try:
-            worksheet = main_sheet.worksheet(UNCOATED_FIBER_SHEET)
-        except gspread.exceptions.WorksheetNotFound:
-            worksheet = main_sheet.add_worksheet(title=UNCOATED_FIBER_SHEET, rows="1000", cols="20")
-            headers = [
-                "Supplier Batch ID",
-                "Inside Diameter Avg (um)",
-                "Inside Diameter StDev (um)",
-                "Outside Diameter Avg (um)",
-                "Outside Diameter StDev (um)",
-                "Reported Concentricity (%)",
-                "Batch Length (m)",
-                "Shipment Date",
-                "Tracking Number",
-                "Fiber Source",
-                "Average t/OD",
-                "Minimum t/OD",
-                "Minimum Wall Thickness (um)",
-                "Average Wall Thickness (um)",
-                "N2 Permeance (GPU)",
-                "Collapse Pressure (psi)",
-                "Kink Test 2.95 (mm)",
-                "Kink Test 2.36 (mm)",
-                "Order on Bobbin",
-                "Number of Blue Splices",
-                "Notes"
-            ]
-            worksheet.append_row(headers)
-
-        # Append data row
-        worksheet.append_row(data_row)
-        st.success("Data submitted successfully!")
+        uncoated_fiber_ws.append_row(new_row)
+        st.success(f"Data submitted successfully with Batch_Fiber_ID: {new_id}")
