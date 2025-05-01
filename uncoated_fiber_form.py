@@ -59,6 +59,9 @@ with st.form("Uncoated Fiber Data Form"):
     average_wall_thickness = st.number_input("Average Wall Thickness (um)", min_value=0)
     n2_permeance = st.number_input("N2 Permeance (GPU)", min_value=0)
     collapse_pressure = st.number_input("Collapse Pressure (psi)", min_value=0)
+    st.write("You entered:", collapse_pressure)  # Safe to use here
+
+
     kink_test_2_95 = st.number_input("Kink Test 2.95 (mm)", min_value=0.0)
     kink_test_2_36 = st.number_input("Kink Test 2.36 (mm)", min_value=0.0)
     order_on_bobbin = st.number_input("Order on Bobbin", min_value=0)
