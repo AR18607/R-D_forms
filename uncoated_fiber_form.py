@@ -1,21 +1,25 @@
 import streamlit as st
 import gspread
-
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 import json
-from google.oauth2.service_account import Credentials
 
-# Load credentials from Streamlit secrets
-creds_info = json.loads(st.secrets["gcp_service_account"])
+# ------------------ Google Sheets Auth from Streamlit Secret ------------------
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = Credentials.from_service_account_info(creds_info, scopes=scope)
+creds_dict = json.loads(st.secrets["gcp_service_account"])
+creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+gc = gspread.authorize(creds)
 
-
-
-
-# Replace with your actual Google Sheet name
+# ------------------ Setup ------------------
 SPREADSHEET_NAME = "R&D Data Form"
-spreadsheet = Credentials.open(SPREADSHEET_NAME)
+TAB_NAME = "Uncoated Fiber Data Tbl"
+HEADERS = [
+    "Batch Fiber ID", "Supplier batch ID", "Inside Diameter (um) avg", "Inside Diameter (um) StDev",
+    "Outside Diameter (um) Avg", "Outside Diameter (um) StDev", "Reported Concentricity (%)", "Batch Length (m)",
+    "Shipment Date", "Tracking number", "Fiber Source", "Average t/OD", "Minimum t/OD", "Minimum wall thickness (um)",
+    "Average wall thickness (um)", "N2 permeance (GPU)", "Collapse Pressure (psi)", "Kink test 2.95 (mm)",
+    "Kink test 2.36 (mm)", "Order on bobbin (outside = 1)", "Number of blue splices", "Notes"
+]
 
 # ---------------------------
 # Helper Function to Get or Create Worksheet
