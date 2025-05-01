@@ -4,9 +4,21 @@ import gspread
 import json
 from oauth2client.service_account import ServiceAccountCredentials
 
-# ----------------- CONFIG -----------------
-GOOGLE_SHEET_NAME = "R&D Data Form"
-GOOGLE_CREDENTIALS = dict(st.secrets["gcp_service_account"])
+
+
+# Define the scope
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+# Load credentials directly from st.secrets
+GOOGLE_CREDENTIALS = st.secrets["gcp_service_account"]
+
+# Authorize the client
+creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
+client = gspread.authorize(creds)
+
+# Open the spreadsheet
+spreadsheet = client.open("R&D Data Form")  # Ensure this name matches your Google Sheet title&#8203;:contentReference[oaicite:18]{index=18}
+
 
 
 
