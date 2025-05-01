@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import json
 
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
@@ -18,8 +17,7 @@ TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 # ----------------- CONNECT GOOGLE SHEETS -----------------
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        json.loads(st.secrets["gcp_service_account"]), scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
@@ -32,7 +30,7 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
     return worksheet
 
 def get_last_id(worksheet, id_prefix):
-    records = worksheet.col_values(1)[1:]  # Skip header
+    records = worksheet.col_values(1)[1:]
     if not records:
         return f"{id_prefix}-001"
     nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
@@ -41,7 +39,7 @@ def get_last_id(worksheet, id_prefix):
 
 def fetch_column_values(worksheet, col_index=1):
     try:
-        values = worksheet.col_values(col_index)[1:]  # Skip header
+        values = worksheet.col_values(col_index)[1:]
         return [v for v in values if v]
     except Exception:
         return []
@@ -111,7 +109,6 @@ with st.form("winding_form"):
 
     submit_button = st.form_submit_button("🚀 Submit All Entries")
 
-# Save Entries
 if submit_button:
     try:
         wound_module_sheet.append_row([
