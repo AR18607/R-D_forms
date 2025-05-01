@@ -33,8 +33,8 @@ def get_next_id(worksheet, id_column):
 
 # ------------------ Load Reference Data ------------------ #
 # Load Solution IDs
-solution_sheet = get_or_create_worksheet(spreadsheet, "Solution ID Tbl", ["Solution_ID"])
-solution_ids = [record["Solution_ID"] for record in solution_sheet.get_all_records()]
+solution_sheet = get_or_create_worksheet(spreadsheet, "Solution ID Tbl", ["Solution ID"])
+solution_ids = [record["Solution ID"] for record in solution_sheet.get_all_records()]
 
 # Load Batch Fiber IDs
 ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", ["Batch_Fiber_ID"])
@@ -48,7 +48,7 @@ uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_al
 st.header("Pilot Coating Process Entry")
 
 pcp_headers = [
-    "PCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
+    "PCoating_ID", "Solution ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
     "Load_Cell_Slope", "Number_of_Fibers", "Coating_Speed", "Tower_1_Set_Point",
     "Tower_1_Entry_Temperature", "Tower_2_Set_Point", "Tower_2_Entry_Temperature",
     "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"
@@ -89,7 +89,7 @@ with st.form("Pilot Coating Process Form"):
 st.header("Dip Coating Process Entry")
 
 dcp_headers = [
-    "DCoating_ID", "Solution_ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "Date", "Box_Temperature",
+    "DCoating_ID", "Solution ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "Date", "Box_Temperature",
     "Box_RH", "N2_Flow", "Number_of_Fibers", "Coating_Speed", "Annealing_Time",
     "Annealing_Temperature", "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature",
     "Ambient_RH", "Notes"
@@ -150,7 +150,7 @@ with st.form("Coater Tension Form"):
 st.header("Coating Solution Mass Entry")
 
 csm_headers = [
-    "SolutionMass_ID", "Solution_ID", "Date_Time", "DCoating_ID", "PCoating_ID",
+    "SolutionMass_ID", "Solution ID", "Date_Time", "DCoating_ID", "PCoating_ID",
     "Solution_Mass", "Operators_Initials", "Notes"
 ]
 csm_sheet = get_or_create_worksheet(spreadsheet, "Coating Solution Mass Tbl", csm_headers)
