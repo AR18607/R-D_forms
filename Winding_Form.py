@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import json
 
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
@@ -17,7 +18,8 @@ TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 # ----------------- CONNECT GOOGLE SHEETS -----------------
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(
+        json.loads(st.secrets["gcp_service_account"]), scope)
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
