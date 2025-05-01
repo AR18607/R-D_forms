@@ -27,15 +27,17 @@ def connect_google_sheet(sheet_name):
         st.stop()
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
-    try:
+    # Normalize tab names to avoid casing or spacing mismatches
+    existing_titles = [ws.title.strip().lower() for ws in spreadsheet.worksheets()]
+    if tab_name.strip().lower() in existing_titles:
         worksheet = spreadsheet.worksheet(tab_name)
-        existing_data = worksheet.get_all_values()
-        if not existing_data:  # Sheet exists but is empty
+        if not worksheet.get_all_values():
             worksheet.insert_row(headers, 1)
-    except gspread.exceptions.WorksheetNotFound:
+    else:
         worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
         worksheet.insert_row(headers, 1)
     return worksheet
+
 
 
 def get_last_id(worksheet, id_prefix):
