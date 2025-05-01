@@ -48,7 +48,7 @@ def fetch_column_values(worksheet, col_index=1):
 # ----------------- MAIN APP -----------------
 st.title("🌀 Winding Form (Connected)")
 
-spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+
 
 # Create/Connect tabs
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
