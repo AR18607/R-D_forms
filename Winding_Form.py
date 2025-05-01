@@ -35,11 +35,12 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]  # Skip header
-    if not records:
+    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix) and '-' in r]
+    if not nums:
         return f"{id_prefix}-001"
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
     next_num = max(nums) + 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
+
 
 def fetch_column_values(worksheet, col_index=1):
     try:
