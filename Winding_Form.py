@@ -113,6 +113,39 @@ with st.form("winding_form"):
 
     submit_button = st.form_submit_button("🚀 Submit All Entries")
 
+    # ----------------- Wind Program Form -----------------
+st.subheader("🌬️ Wind Program Entry")
+
+with st.form("wind_program_form"):
+    wind_program_id = get_last_id(wind_program_sheet, "WP")
+    st.markdown(f"**Auto-generated Wind Program ID:** `{wind_program_id}`")
+
+    program_name = st.text_input("Program Name")
+    bundles = st.number_input("Number of Bundles / Wind", min_value=0, step=1)
+    fibers_per_ribbon = st.number_input("Number of Fibers / Ribbon", min_value=0, step=1)
+    spacing = st.number_input("Space Between Ribbons", min_value=0.0, step=0.1)
+    wind_angle = st.number_input("Wind Angle (deg)", min_value=0, step=1)
+    active_length = st.number_input("Active Fiber Length (inch)", min_value=0.0)
+    total_length = st.number_input("Total Fiber Length (inch)", min_value=0.0)
+    active_area = st.number_input("Active Area / Fiber", min_value=0.0)
+    layers = st.number_input("Number of Layers", min_value=0, step=1)
+    loops_per_layer = st.number_input("Number of Loops / Layer", min_value=0, step=1)
+    area_layer = st.number_input("C - Active Area / Layer", min_value=0.0)
+    notes = st.text_area("Notes")
+
+    wind_submit = st.form_submit_button("➕ Submit Wind Program")
+
+if wind_submit:
+    try:
+        wind_program_sheet.append_row([
+            wind_program_id, program_name, bundles, fibers_per_ribbon, spacing, wind_angle,
+            active_length, total_length, active_area, layers, loops_per_layer, area_layer, notes
+        ])
+        st.success(f"✅ Wind Program `{wind_program_id}` saved successfully!")
+    except Exception as e:
+        st.error(f"❌ Failed to save Wind Program: {e}")
+
+
 # Save Entries
 if submit_button:
     try:
