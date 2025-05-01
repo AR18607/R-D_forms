@@ -17,7 +17,9 @@ def connect_google_sheet(sheet_name):
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
-spreadsheet = connect_google_sheet("R&D Data Form")
+spreadsheet_url = 'https://docs.google.com/spreadsheets/d/your_spreadsheet_id/edit#gid=0'
+spreadsheet = client.open_by_url(spreadsheet_url)  # Correct
+
 
 
 # Helper: Create or fetch worksheet
