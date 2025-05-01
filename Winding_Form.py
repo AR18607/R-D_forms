@@ -23,23 +23,22 @@ def connect_google_sheet(sheet_name):
     return client.open(sheet_name)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
-    for sheet in spreadsheet.worksheets():
-        if sheet.title.strip().lower() == tab_name.strip().lower():
-            return sheet  # Found matching sheet
-
-    # If not found, create one
-    worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-    worksheet.insert_row(headers, 1)
+    try:
+        worksheet = spreadsheet.worksheet(tab_name)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+        worksheet.insert_row(headers, 1)
     return worksheet
 
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]  # Skip header
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix) and '-' in r]
+    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
     if not nums:
         return f"{id_prefix}-001"
     next_num = max(nums) + 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
+
 
 
 def fetch_column_values(worksheet, col_index=1):
