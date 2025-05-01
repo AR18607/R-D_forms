@@ -135,15 +135,6 @@ with st.form("wind_program_form"):
 
     wind_submit = st.form_submit_button("➕ Submit Wind Program")
 
-if wind_submit:
-    try:
-        wind_program_sheet.append_row([
-            wind_program_id, program_name, bundles, fibers_per_ribbon, spacing, wind_angle,
-            active_length, total_length, active_area, layers, loops_per_layer, area_layer, notes
-        ])
-        st.success(f"✅ Wind Program `{wind_program_id}` saved successfully!")
-    except Exception as e:
-        st.error(f"❌ Failed to save Wind Program: {e}")
 
 
 # Save Entries
