@@ -29,14 +29,14 @@ def connect_google_sheet(sheet_name):
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
-    except WorksheetNotFound:
-        try:
-            worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+        existing_data = worksheet.get_all_values()
+        if not existing_data:  # Sheet exists but is empty
             worksheet.insert_row(headers, 1)
-        except APIError as e:
-            st.error(f"APIError while adding worksheet '{tab_name}': {e}")
-            st.stop()
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+        worksheet.insert_row(headers, 1)
     return worksheet
+
 
 def get_last_id(worksheet, id_prefix):
     try:
