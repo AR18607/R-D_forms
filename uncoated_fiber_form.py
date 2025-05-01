@@ -15,7 +15,7 @@ creds = Credentials.from_service_account_info(creds_info, scopes=scope)
 
 # Replace with your actual Google Sheet name
 SPREADSHEET_NAME = "R&D Data Form"
-spreadsheet = client.open(SPREADSHEET_NAME)
+spreadsheet = Credentials.open(SPREADSHEET_NAME)
 
 # ---------------------------
 # Helper Function to Get or Create Worksheet
