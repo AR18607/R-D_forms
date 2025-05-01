@@ -1,6 +1,6 @@
 import streamlit as st
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+
 from datetime import datetime
 import json
 from google.oauth2.service_account import Credentials
