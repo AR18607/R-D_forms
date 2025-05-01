@@ -4,27 +4,9 @@ import gspread
 import json
 from oauth2client.service_account import ServiceAccountCredentials
 
-
-
-# Define the scope
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
-# Load credentials directly from st.secrets
+# ----------------- CONFIG -----------------
+GOOGLE_SHEET_NAME = "R&D Data Form"
 GOOGLE_CREDENTIALS = st.secrets["gcp_service_account"]
-
-
-
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    st.secrets["gcp_service_account"],
-    ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-)
-
-
-# Open the spreadsheet
-spreadsheet = client.open("R&D Data Form")  # Ensure this name matches your Google Sheet title&#8203;:contentReference[oaicite:18]{index=18}
-
-
-
 
 # Sheet tabs
 TAB_MODULE = "Module Tbl"
@@ -57,7 +39,6 @@ def get_last_id(worksheet, id_prefix):
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
 def fetch_column_values(worksheet, col_index=1):
-    """Fetch non-header column values safely"""
     try:
         values = worksheet.col_values(col_index)[1:]  # Skip header
         return [v for v in values if v]
@@ -98,15 +79,8 @@ with st.form("winding_form"):
     wound_module_id = get_last_id(wound_module_sheet, "WMOD")
     st.markdown(f"**Auto-generated Wound Module ID:** `{wound_module_id}`")
 
-    if module_ids:
-        module_fk = st.selectbox("Module ID (from Module Tbl)", module_ids)
-    else:
-        module_fk = st.text_input("Module ID (manually)", "")
-
-    if wind_program_ids:
-        wind_program_fk = st.selectbox("Wind Program ID (from Wind Program Tbl)", wind_program_ids)
-    else:
-        wind_program_fk = st.text_input("Wind Program ID (manually)", "")
+    module_fk = st.selectbox("Module ID", module_ids) if module_ids else st.text_input("Module ID (Manual)")
+    wind_program_fk = st.selectbox("Wind Program ID", wind_program_ids) if wind_program_ids else st.text_input("Wind Program ID (Manual)")
 
     operator_initials = st.text_input("Operator Initials")
     notes_wound = st.text_area("Wound Module Notes")
@@ -119,7 +93,7 @@ with st.form("winding_form"):
     wrap_per_module_pk = get_last_id(wrap_per_module_sheet, "WRAP")
     st.markdown(f"**Auto-generated Wrap Per Module PK:** `{wrap_per_module_pk}`")
 
-    wrap_module_fk = st.selectbox("Module ID (Wrap)", module_ids) if module_ids else st.text_input("Module ID (Wrap Manual)", "")
+    wrap_module_fk = st.selectbox("Module ID (Wrap)", module_ids) if module_ids else st.text_input("Module ID (Wrap Manual)")
     wrap_after_layer = st.number_input("Wrap After Layer #", step=1)
     type_of_wrap = st.text_input("Type of Wrap")
     wrap_notes = st.text_area("Wrap Notes")
@@ -129,9 +103,9 @@ with st.form("winding_form"):
     spool_per_wind_pk = get_last_id(spools_per_wind_sheet, "SPOOL")
     st.markdown(f"**Auto-generated Spool Per Wind PK:** `{spool_per_wind_pk}`")
 
-    mfg_db_wind_fk = st.selectbox("MFG DB Wind ID (FK)", module_ids) if module_ids else st.text_input("MFG DB Wind ID (Manual)", "")
+    mfg_db_wind_fk = st.text_input("MFG DB Wind ID (FK)")
     coated_spool_id = st.text_input("Coated Spool ID")
-    length_used = st.number_input("Length Used", format="%.2f")
+    length_used = st.number_input("Length Used (m)", format="%.2f")
     spool_notes = st.text_area("Spool Notes")
 
     submit_button = st.form_submit_button("🚀 Submit All Entries")
