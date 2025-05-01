@@ -1,8 +1,6 @@
 import streamlit as st
-import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from gspread.exceptions import APIError, WorksheetNotFound, SpreadsheetNotFound
 
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
@@ -20,44 +18,29 @@ def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
-    try:
-        return client.open(sheet_name)
-    except SpreadsheetNotFound:
-        st.error(f"Spreadsheet '{sheet_name}' not found. Please ensure the name is correct and the service account has access.")
-        st.stop()
+    return client.open(sheet_name)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
-    # Normalize tab names to avoid casing or spacing mismatches
-    existing_titles = [ws.title.strip().lower() for ws in spreadsheet.worksheets()]
-    if tab_name.strip().lower() in existing_titles:
+    try:
         worksheet = spreadsheet.worksheet(tab_name)
-        if not worksheet.get_all_values():
-            worksheet.insert_row(headers, 1)
-    else:
+    except gspread.exceptions.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
         worksheet.insert_row(headers, 1)
     return worksheet
 
-
-
 def get_last_id(worksheet, id_prefix):
-    try:
-        records = worksheet.col_values(1)[1:]  # Skip header
-        if not records:
-            return f"{id_prefix}-001"
-        nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
-        next_num = max(nums) + 1
-        return f"{id_prefix}-{str(next_num).zfill(3)}"
-    except Exception as e:
-        st.error(f"Error retrieving last ID from worksheet: {e}")
-        st.stop()
+    records = worksheet.col_values(1)[1:]  # Skip header
+    if not records:
+        return f"{id_prefix}-001"
+    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
+    next_num = max(nums) + 1
+    return f"{id_prefix}-{str(next_num).zfill(3)}"
 
 def fetch_column_values(worksheet, col_index=1):
     try:
         values = worksheet.col_values(col_index)[1:]  # Skip header
         return [v for v in values if v]
-    except Exception as e:
-        st.error(f"Error fetching column values: {e}")
+    except Exception:
         return []
 
 # ----------------- MAIN APP -----------------
@@ -139,7 +122,5 @@ if submit_button:
             spool_per_wind_pk, mfg_db_wind_fk, coated_spool_id, length_used, spool_notes
         ])
         st.success("✅ Data successfully saved in Wound, Wrap, and Spool tables!")
-    except APIError as e:
-        st.error(f"❌ APIError: {e}")
     except Exception as e:
-        st.error(f"❌ An unexpected error occurred: {e}")
+        st.error(f"❌ Error saving data: {e}")
