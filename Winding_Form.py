@@ -6,8 +6,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
+GOOGLE_CREDENTIALS = dict(st.secrets["gcp_service_account"])
 
-GOOGLE_CREDENTIALS = st.secrets["gcp_service_account"]
 
 
 # Sheet tabs
