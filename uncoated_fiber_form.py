@@ -2,13 +2,16 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import json
+from google.oauth2.service_account import Credentials
 
-# ---------------------------
-# Google Sheets Setup
-# ---------------------------
+# Load credentials from Streamlit secrets
+creds_info = json.loads(st.secrets["gcp_service_account"])
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
+creds = Credentials.from_service_account_info(creds_info, scopes=scope)
+
+
+
 
 # Replace with your actual Google Sheet name
 SPREADSHEET_NAME = "R&D Data Form"
