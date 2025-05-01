@@ -1,140 +1,136 @@
+import json
 import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
-# Google Sheets connection setup
-def create_google_sheet_connection():
-    scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-    client = gspread.authorize(creds)
-    return client
+# Google Sheets API setup
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    json.loads(st.secrets["gcp_service_account"]), scope)
+client = gspread.authorize(creds)
+spreadsheet = client.open("R&D Data Form")
 
-# Function to check if a sheet exists and create if not
-def get_or_create_tab(spreadsheet, tab_name, headers):
+# Helper: Create or fetch worksheet
+def get_or_create_worksheet(sheet, title, headers):
     try:
-        worksheet = spreadsheet.worksheet(tab_name)
-        st.warning(f"⚠️ Worksheet '{tab_name}' already exists. Skipping creation.")
+        worksheet = sheet.worksheet(title)
     except gspread.exceptions.WorksheetNotFound:
-        try:
-            worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-            worksheet.insert_row(headers, 1)
-            st.success(f"✅ Created worksheet: '{tab_name}'")
-        except gspread.exceptions.APIError as e:
-            st.error(f"❌ Failed to create worksheet '{tab_name}': {e}")
-            return None
+        worksheet = sheet.add_worksheet(title=title, rows="1000", cols="50")
+        worksheet.append_row(headers)
     return worksheet
 
-# Function to get the last ID from the worksheet
-def get_last_id(worksheet, prefix):
-    try:
-        records = worksheet.col_values(1)[1:]  # Skip header
-        nums = [int(record.replace(prefix + "-", "")) for record in records if record.startswith(prefix)]
-        next_num = max(nums) + 1 if nums else 1
-        return f"{prefix}-{next_num:03d}"
-    except Exception as e:
-        st.error(f"❌ Error fetching last ID: {e}")
-        return f"{prefix}-001"
+# Helper: Generate auto-incrementing ID
+def get_next_id(worksheet, id_column):
+    records = worksheet.get_all_records()
+    if records:
+        last_id = max([int(record[id_column]) for record in records if str(record[id_column]).isdigit()])
+        return last_id + 1
+    else:
+        return 1
 
-# Create Google Sheet connection
-client = create_google_sheet_connection()
+# -- Reference sheets for dropdowns
+module_sheet = spreadsheet.worksheet("Module Tbl")
+module_ids = [record["Module_ID"] for record in module_sheet.get_all_records()]
 
-# Open spreadsheet
-spreadsheet = client.open_by_url("your_spreadsheet_url_here")
+coated_spool_sheet = spreadsheet.worksheet("Coated Spool Tbl")
+coated_spool_ids = [record["CoatedSpool_ID"] for record in coated_spool_sheet.get_all_records()]
 
-# Define tab names and their headers
-TAB_WOUND_MODULE = "Wound Module Tbl"
-TAB_WRAP_PER_MODULE = "Wrap Per Module Tbl"
-TAB_SPOOL_PER_WIND = "Spools Per Wind Tbl"
-TAB_WIND_PROGRAM = "Wind Program Tbl"
+wind_program_sheet = spreadsheet.worksheet("Wind Program Tbl")
+wind_program_ids = [record["Wind_Program_ID"] for record in wind_program_sheet.get_all_records()]
 
-TAB_HEADERS = {
-    TAB_WOUND_MODULE: ["Wound Module ID", "Module ID", "Wind Program ID", "Operator Initials", "Wound Module Notes", "MFG DB Wind ID", "MFG DB Potting ID", "MFG DB Mod ID"],
-    TAB_WRAP_PER_MODULE: ["Wrap Per Module PK", "Module ID", "Wrap After Layer #", "Type of Wrap", "Notes"],
-    TAB_SPOOL_PER_WIND: ["SpoolPerWind PK", "MFG DB Wind ID", "Coated Spool ID", "Length Used", "Notes"],
-    TAB_WIND_PROGRAM: ["Wind Program ID", "Program Name", "Number of Bundles / Wind", "Number of Fibers / Ribbon", "Space Between Ribbons", "Wind Angle (deg)", "Active Fiber Length (inch)", "Total Fiber Length (inch)", "Active Area / Fiber", "Number of Layers", "Number of Loops / Layer", "Active Area / Layer", "Notes"]
-}
+# -------------------- Wind Program Tbl --------------------
+st.header("Wind Program Entry")
 
-# Create or fetch the necessary worksheets
-wound_module_sheet = get_or_create_tab(spreadsheet, TAB_WOUND_MODULE, TAB_HEADERS[TAB_WOUND_MODULE])
-wrap_per_module_sheet = get_or_create_tab(spreadsheet, TAB_WRAP_PER_MODULE, TAB_HEADERS[TAB_WRAP_PER_MODULE])
-spool_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOL_PER_WIND, TAB_HEADERS[TAB_SPOOL_PER_WIND])
-wind_program_sheet = get_or_create_tab(spreadsheet, TAB_WIND_PROGRAM, TAB_HEADERS[TAB_WIND_PROGRAM])
+wind_headers = [
+    "Wind_Program_ID", "Program_Name", "Number_of_Bundles", "Number_of_Fibers_Per_Ribbon",
+    "Space_Between_Ribbons", "Wind_Angle", "Active_Fiber_Length", "Total_Fiber_Length",
+    "Active_Area_Fiber", "Number_of_Layers", "Number_of_Loops_Per_Layer", "Active_Area_Layer", "Notes"
+]
+wind_sheet = get_or_create_worksheet(spreadsheet, "Wind Program Tbl", wind_headers)
 
-# Get the last used IDs for auto-generation
-wound_module_id = get_last_id(wound_module_sheet, "WMOD")
-wrap_per_module_pk = get_last_id(wrap_per_module_sheet, "WRAP")
-spool_per_wind_pk = get_last_id(spool_per_wind_sheet, "SPOOL")
-wind_program_id = get_last_id(wind_program_sheet, "WP")
+with st.form("Wind Program Form"):
+    program_name = st.text_input("Program Name")
+    num_bundles = st.number_input("Number of Bundles / Wind", min_value=0)
+    num_fibers = st.number_input("Number of Fibers / Ribbon", min_value=0)
+    spacing = st.number_input("Space Between Ribbons", min_value=0.0)
+    wind_angle = st.number_input("Wind Angle (deg)", min_value=0.0)
+    active_len = st.number_input("Active Fiber Length (inch)", min_value=0.0)
+    total_len = st.number_input("Total Fiber Length (inch)", min_value=0.0)
+    active_area = st.number_input("Active Area / Fiber", min_value=0.0)
+    layers = st.number_input("Number of Layers", min_value=0)
+    loops = st.number_input("Number of Loops / Layer", min_value=0)
+    area_layer = st.number_input("C - Active Area / Layer", min_value=0.0)
+    notes = st.text_area("Notes")
+    
+    submitted = st.form_submit_button("Submit")
+    if submitted:
+        wind_id = get_next_id(wind_sheet, "Wind_Program_ID")
+        wind_sheet.append_row([
+            wind_id, program_name, num_bundles, num_fibers, spacing, wind_angle,
+            active_len, total_len, active_area, layers, loops, area_layer, notes
+        ])
+        st.success(f"Wind Program Entry with ID {wind_id} submitted successfully!")
 
-# Streamlit form for Wound Module Entry
-with st.form("wound_module_form"):
-    st.subheader("🔷 Wound Module Entry")
-    wound_module_id_input = st.text_input("Auto-generated Wound Module ID", wound_module_id, disabled=True)
-    module_id = st.selectbox("Module ID (from Module Tbl)", ["MOD-001", "MOD-002", "MOD-003"])  # Replace with dynamic fetch
-    wind_program_id_input = st.selectbox("Wind Program ID (from Wind Program Tbl)", ["WP-001", "WP-002", "WP-003"])  # Replace with dynamic fetch
-    operator_initials = st.text_input("Operator Initials")
-    wound_module_notes = st.text_area("Wound Module Notes")
-    mfg_db_wind_id = st.text_input("MFG DB Wind ID")
-    mfg_db_potting_id = st.text_input("MFG DB Potting ID")
-    mfg_db_mod_id = st.number_input("MFG DB Mod ID", min_value=1)
+# -------------------- Wound Module Tbl --------------------
+st.header("Wound Module Entry")
 
-    submit_wound_module = st.form_submit_button("Submit Wound Module Entry")
+wm_headers = [
+    "Wound_Module_ID", "Module_ID", "Wind_Program_ID", "Operator_Initials", "Notes",
+    "MFG_DB_Wind_ID", "MFG_DB_Potting_ID", "MFG_DB_Mod_ID"
+]
+wm_sheet = get_or_create_worksheet(spreadsheet, "Wound Module Tbl", wm_headers)
 
-if submit_wound_module:
-    wound_module_data = [
-        wound_module_id_input,
-        module_id,
-        wind_program_id_input,
-        operator_initials,
-        wound_module_notes,
-        mfg_db_wind_id,
-        mfg_db_potting_id,
-        mfg_db_mod_id
-    ]
-    # Insert data into Wound Module Tbl (pseudo code - insert data into the sheet)
-    st.success(f"✅ Wound Module Entry for {wound_module_id_input} successfully submitted!")
+with st.form("Wound Module Form"):
+    selected_module_id = st.selectbox("Module ID", module_ids)
+    selected_wind_prog_id = st.selectbox("Wind Program ID", wind_program_ids)
+    operator = st.text_input("Operator Initials")
+    notes = st.text_area("Notes")
+    mfg_wind_id = st.text_input("MFG DB Wind ID")
+    mfg_potting_id = st.text_input("MFG DB Potting ID")
+    mfg_mod_id = st.number_input("MFG DB Mod ID", min_value=0)
+    
+    submitted = st.form_submit_button("Submit")
+    if submitted:
+        wound_mod_id = get_next_id(wm_sheet, "Wound_Module_ID")
+        wm_sheet.append_row([
+            wound_mod_id, selected_module_id, selected_wind_prog_id, operator, notes,
+            mfg_wind_id, mfg_potting_id, mfg_mod_id
+        ])
+        st.success(f"Wound Module Entry with ID {wound_mod_id} submitted successfully!")
 
-# Form for Wrap Per Module Entry (using similar structure)
-with st.form("wrap_per_module_form"):
-    st.subheader("🔷 Wrap Per Module Entry")
-    wrap_per_module_pk_input = st.text_input("Auto-generated Wrap Per Module PK", wrap_per_module_pk, disabled=True)
-    module_id_wrap = st.selectbox("Module ID (Wrap)", ["MOD-001", "MOD-002", "MOD-003"])  # Replace with dynamic fetch
+# -------------------- Wrap per Module Tbl --------------------
+st.header("Wrap per Module Entry")
+
+wrap_headers = ["WrapPerModule_PK", "Module_ID", "Wrap_After_Layer", "Type_of_Wrap", "Notes"]
+wrap_sheet = get_or_create_worksheet(spreadsheet, "Wrap per Module Tbl", wrap_headers)
+
+with st.form("Wrap per Module Form"):
+    selected_module_id = st.selectbox("Module ID (Wrap)", module_ids)
     wrap_after_layer = st.number_input("Wrap After Layer #", min_value=0)
-    type_of_wrap = st.selectbox("Type of Wrap", ["Type A", "Type B", "Type C"])
-    wrap_notes = st.text_area("Wrap Notes")
+    wrap_type = st.text_input("Type of Wrap")
+    notes = st.text_area("Notes")
 
-    submit_wrap_per_module = st.form_submit_button("Submit Wrap Per Module Entry")
+    submitted = st.form_submit_button("Submit")
+    if submitted:
+        wrap_pk = get_next_id(wrap_sheet, "WrapPerModule_PK")
+        wrap_sheet.append_row([wrap_pk, selected_module_id, wrap_after_layer, wrap_type, notes])
+        st.success(f"Wrap Per Module Entry with ID {wrap_pk} submitted successfully!")
 
-if submit_wrap_per_module:
-    wrap_per_module_data = [
-        wrap_per_module_pk_input,
-        module_id_wrap,
-        wrap_after_layer,
-        type_of_wrap,
-        wrap_notes
-    ]
-    # Insert data into Wrap Per Module Tbl (pseudo code - insert data into the sheet)
-    st.success(f"✅ Wrap Per Module Entry for {wrap_per_module_pk_input} successfully submitted!")
+# -------------------- Spools per Wind Tbl --------------------
+st.header("Spools per Wind Entry")
 
-# Form for Spools Per Wind Entry
-with st.form("spool_per_wind_form"):
-    st.subheader("🔷 Spools Per Wind Entry")
-    spool_per_wind_pk_input = st.text_input("Auto-generated Spool Per Wind PK", spool_per_wind_pk, disabled=True)
-    mfg_db_wind_id_input = st.text_input("MFG DB Wind ID")
-    coated_spool_id = st.text_input("Coated Spool ID")
-    length_used = st.number_input("Length Used", min_value=0.0, format="%.2f")
-    spool_notes = st.text_area("Spool Notes")
+spw_headers = ["SpoolPerWind_PK", "MFG_DB_Wind_ID", "Coated_Spool_ID", "Length_Used", "Notes"]
+spw_sheet = get_or_create_worksheet(spreadsheet, "Spools per Wind Tbl", spw_headers)
 
-    submit_spool_per_wind = st.form_submit_button("Submit Spools Per Wind Entry")
+with st.form("Spools per Wind Form"):
+    mfg_wind_id = st.text_input("MFG DB Wind ID")
+    selected_coated_spool = st.selectbox("Coated Spool ID", coated_spool_ids)
+    length_used = st.number_input("Length Used", min_value=0.0)
+    notes = st.text_area("Notes")
 
-if submit_spool_per_wind:
-    spool_per_wind_data = [
-        spool_per_wind_pk_input,
-        mfg_db_wind_id_input,
-        coated_spool_id,
-        length_used,
-        spool_notes
-    ]
-    # Insert data into Spools Per Wind Tbl (pseudo code - insert data into the sheet)
-    st.success(f"✅ Spools Per Wind Entry for {spool_per_wind_pk_input} successfully submitted!")
-
+    submitted = st.form_submit_button("Submit")
+    if submitted:
+        spw_pk = get_next_id(spw_sheet, "SpoolPerWind_PK")
+        spw_sheet.append_row([spw_pk, mfg_wind_id, selected_coated_spool, length_used, notes])
+        st.success(f"Spools per Wind Entry with ID {spw_pk} submitted successfully!")
