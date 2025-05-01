@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import json
+from gspread.exceptions import APIError, WorksheetNotFound, SpreadsheetNotFound
+
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
 GOOGLE_CREDENTIALS = st.secrets["gcp_service_account"]
@@ -17,38 +18,50 @@ TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 # ----------------- CONNECT GOOGLE SHEETS -----------------
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        json.loads(st.secrets["gcp_service_account"]), scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
-    return client.open(sheet_name)
+    try:
+        return client.open(sheet_name)
+    except SpreadsheetNotFound:
+        st.error(f"Spreadsheet '{sheet_name}' not found. Please ensure the name is correct and the service account has access.")
+        st.stop()
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-        worksheet.insert_row(headers, 1)
+    except WorksheetNotFound:
+        try:
+            worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+            worksheet.insert_row(headers, 1)
+        except APIError as e:
+            st.error(f"APIError while adding worksheet '{tab_name}': {e}")
+            st.stop()
     return worksheet
 
 def get_last_id(worksheet, id_prefix):
-    records = worksheet.col_values(1)[1:]
-    if not records:
-        return f"{id_prefix}-001"
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
-    next_num = max(nums) + 1
-    return f"{id_prefix}-{str(next_num).zfill(3)}"
+    try:
+        records = worksheet.col_values(1)[1:]  # Skip header
+        if not records:
+            return f"{id_prefix}-001"
+        nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
+        next_num = max(nums) + 1
+        return f"{id_prefix}-{str(next_num).zfill(3)}"
+    except Exception as e:
+        st.error(f"Error retrieving last ID from worksheet: {e}")
+        st.stop()
 
 def fetch_column_values(worksheet, col_index=1):
     try:
-        values = worksheet.col_values(col_index)[1:]
+        values = worksheet.col_values(col_index)[1:]  # Skip header
         return [v for v in values if v]
-    except Exception:
+    except Exception as e:
+        st.error(f"Error fetching column values: {e}")
         return []
 
 # ----------------- MAIN APP -----------------
 st.title("🌀 Winding Form (Connected)")
 
-
+spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
 # Create/Connect tabs
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
@@ -110,6 +123,7 @@ with st.form("winding_form"):
 
     submit_button = st.form_submit_button("🚀 Submit All Entries")
 
+# Save Entries
 if submit_button:
     try:
         wound_module_sheet.append_row([
@@ -123,5 +137,7 @@ if submit_button:
             spool_per_wind_pk, mfg_db_wind_fk, coated_spool_id, length_used, spool_notes
         ])
         st.success("✅ Data successfully saved in Wound, Wrap, and Spool tables!")
+    except APIError as e:
+        st.error(f"❌ APIError: {e}")
     except Exception as e:
-        st.error(f"❌ Error saving data: {e}")
+        st.error(f"❌ An unexpected error occurred: {e}")
