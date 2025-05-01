@@ -9,7 +9,16 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 creds = ServiceAccountCredentials.from_json_keyfile_dict(
     json.loads(st.secrets["gcp_service_account"]), scope)
 client = gspread.authorize(creds)
-spreadsheet = client.open("R&D Data Form")
+def connect_google_sheet(sheet_name):
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    import json
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(
+        json.loads(st.secrets["gcp_service_account"]), scope)
+    client = gspread.authorize(creds)
+    return client.open(sheet_name)
+
+spreadsheet = connect_google_sheet("R&D Data Form")
+
 
 # Helper: Create or fetch worksheet
 def get_or_create_worksheet(sheet, title, headers):
