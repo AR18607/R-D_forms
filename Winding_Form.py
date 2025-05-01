@@ -40,7 +40,7 @@ def get_next_id(worksheet, id_column):
 
 # -- Reference sheets for dropdowns
 module_sheet = spreadsheet.worksheet("Module Tbl")
-module_ids = [record["Module_ID"] for record in module_sheet.get_all_records()]
+module_ids = [record["Module ID"] for record in module_sheet.get_all_records()]
 
 coated_spool_sheet = spreadsheet.worksheet("Coated Spool Tbl")
 coated_spool_ids = [record["CoatedSpool_ID"] for record in coated_spool_sheet.get_all_records()]
