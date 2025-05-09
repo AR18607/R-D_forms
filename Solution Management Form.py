@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 
 # ------------------ CONFIG ------------------
@@ -18,7 +18,7 @@ TAB_COMBINED_SOLUTION = "Combined Solution Tbl"
 
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(GOOGLE_CREDENTIALS), scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
@@ -38,21 +38,29 @@ def get_last_id(worksheet, id_prefix):
     next_num = max(nums) + 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
-def fetch_row_by_value(worksheet, column_index, value):
-    records = worksheet.get_all_records()
-    for record in records:
-        if record[list(record.keys())[column_index - 1]] == value:
-            return record
-    return None
+def fetch_column_values(worksheet, col_index=1):
+    try:
+        values = worksheet.col_values(col_index)[1:]  # Skip header
+        return [v for v in values if v]
+    except Exception:
+        return []
 
-# ------------------ STREAMLIT FORM ------------------
+def fetch_row_by_value(worksheet, search_value, col_index=1):
+    try:
+        cell = worksheet.find(search_value)
+        row = worksheet.row_values(cell.row)
+        return row
+    except:
+        return None
+
+# ------------------ MAIN APP ------------------
 
 st.title("🧪 Solution Management Form")
 
-# Connect
+# Connect to Google Sheet
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
-# Setup Tabs
+# Setup Worksheets
 solution_sheet = get_or_create_tab(spreadsheet, TAB_SOLUTION_ID, ["Solution ID", "Type", "Expired", "Consumed"])
 prep_sheet = get_or_create_tab(spreadsheet, TAB_SOLUTION_PREP, [
     "Solution Prep ID", "Solution ID (FK)", "Desired Solution Concentration", "Desired Final Volume",
@@ -65,15 +73,15 @@ combined_sheet = get_or_create_tab(spreadsheet, TAB_COMBINED_SOLUTION, [
     "Solution Mass B", "Date", "Initials", "Notes", "C-Label for jar"
 ])
 
-# Fetch Existing Solution IDs and Prep IDs
-existing_solution_ids = solution_sheet.col_values(1)[1:]
-existing_prep_ids = prep_sheet.col_values(1)[1:]
+# Fetch Existing IDs
+existing_solution_ids = fetch_column_values(solution_sheet)
+existing_prep_ids = fetch_column_values(prep_sheet)
 
-# ------------------ Solution ID Entry ------------------
+# ------------------ SOLUTION ID FORM ------------------
 st.subheader("🔹 Solution ID Entry")
 with st.form("solution_id_form"):
-    solution_id = get_last_id(solution_sheet, "SOL")
-    st.markdown(f"**Auto-generated Solution ID:** `{solution_id}`")
+    new_solution_id = get_last_id(solution_sheet, "SOL")
+    st.markdown(f"**Auto-generated Solution ID:** `{new_solution_id}`")
     solution_type = st.selectbox("Type", ['New', 'Combined'])
     expired = st.selectbox("Expired?", ['Yes', 'No'])
     consumed = st.selectbox("Consumed?", ['Yes', 'No'])
@@ -81,13 +89,13 @@ with st.form("solution_id_form"):
 
 if submit_solution_id:
     try:
-        solution_sheet.append_row([solution_id, solution_type, expired, consumed])
-        st.success(f"✅ Solution ID `{solution_id}` saved successfully!")
-        existing_solution_ids.append(solution_id)  # Update the list with the new ID
+        solution_sheet.append_row([new_solution_id, solution_type, expired, consumed])
+        st.success(f"✅ Solution ID `{new_solution_id}` added successfully.")
+        existing_solution_ids.append(new_solution_id)
     except Exception as e:
         st.error(f"❌ Error while saving Solution ID: {e}")
 
-# ------------------ Solution Prep Data Entry ------------------
+# ------------------ SOLUTION PREP FORM ------------------
 st.subheader("🔹 Solution Prep Data Entry")
 with st.form("solution_prep_form"):
     prep_id = get_last_id(prep_sheet, "PREP")
@@ -95,36 +103,44 @@ with st.form("solution_prep_form"):
     solution_fk = st.selectbox("Select Solution ID (FK)", existing_solution_ids)
 
     # Check if the selected Solution ID has existing prep data
-    existing_prep_data = fetch_row_by_value(prep_sheet, 2, solution_fk)
+    existing_prep_data = None
+    for row in prep_sheet.get_all_records():
+        if row["Solution ID (FK)"] == solution_fk:
+            existing_prep_data = row
+            break
 
-    desired_conc = st.number_input("Desired Solution Concentration (%)", format="%.2f",
-                                   value=float(existing_prep_data["Desired Solution Concentration"]) if existing_prep_data else 0.0)
-    final_volume = st.number_input("Desired Final Volume", format="%.1f",
-                                   value=float(existing_prep_data["Desired Final Volume"]) if existing_prep_data else 0.0)
-    solvent = st.selectbox("Solvent", ['IPA', 'EtOH', 'Heptane', 'Novec 7300'],
-                           index=['IPA', 'EtOH', 'Heptane', 'Novec 7300'].index(existing_prep_data["Solvent"]) if existing_prep_data else 0)
-    solvent_lot = st.text_input("Solvent Lot Number",
-                                value=existing_prep_data["Solvent Lot Number"] if existing_prep_data else "")
-    solvent_weight = st.number_input("Solvent Weight Measured (g)", format="%.2f",
-                                     value=float(existing_prep_data["Solvent Weight Measured (g)"]) if existing_prep_data else 0.0)
-    polymer = st.selectbox("Polymer", ['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'],
-                           index=['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'].index(existing_prep_data["Polymer"]) if existing_prep_data else 0)
-    polymer_start_conc = st.number_input("Polymer Starting Concentration (%)", format="%.2f",
-                                         value=float(existing_prep_data["Polymer starting concentration"]) if existing_prep_data else 0.0)
-    polymer_lot = st.text_input("Polymer Lot Number",
-                                value=existing_prep_data["Polymer Lot Number"] if existing_prep_data else "")
-    polymer_weight = st.number_input("Polymer Weight Measured (g)", format="%.2f",
-                                     value=float(existing_prep_data["Polymer Weight Measured (g)"]) if existing_prep_data else 0.0)
-    prep_date = st.date_input("Preparation Date",
-                              value=datetime.strptime(existing_prep_data["Prep Date"], "%Y-%m-%d") if existing_prep_data else datetime.today())
-    initials = st.text_input("Operator Initials",
-                             value=existing_prep_data["Initials"] if existing_prep_data else "")
-    notes = st.text_area("Notes",
-                         value=existing_prep_data["Notes"] if existing_prep_data else "")
-    c_sol_conc = st.number_input("C-Solution Concentration", format="%.2f",
-                                 value=float(existing_prep_data["C-Solution Concentration"]) if existing_prep_data else 0.0)
-    c_label_jar = st.text_input("C-Label for Jar",
-                                value=existing_prep_data["C-Label for jar"] if existing_prep_data else "")
+    if existing_prep_data:
+        st.warning("Existing prep data found. Fields are pre-filled for editing.")
+        desired_conc = st.number_input("Desired Solution Concentration (%)", value=float(existing_prep_data["Desired Solution Concentration"]), format="%.2f")
+        final_volume = st.number_input("Desired Final Volume", value=float(existing_prep_data["Desired Final Volume"]), format="%.1f")
+        solvent = st.selectbox("Solvent", ['IPA', 'EtOH', 'Heptane', 'Novec 7300'], index=['IPA', 'EtOH', 'Heptane', 'Novec 7300'].index(existing_prep_data["Solvent"]))
+        solvent_lot = st.text_input("Solvent Lot Number", value=existing_prep_data["Solvent Lot Number"])
+        solvent_weight = st.number_input("Solvent Weight Measured (g)", value=float(existing_prep_data["Solvent Weight Measured (g)"]), format="%.2f")
+        polymer = st.selectbox("Polymer", ['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'], index=['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'].index(existing_prep_data["Polymer"]))
+        polymer_start_conc = st.number_input("Polymer Starting Concentration (%)", value=float(existing_prep_data["Polymer starting concentration"]), format="%.2f")
+        polymer_lot = st.text_input("Polymer Lot Number", value=existing_prep_data["Polymer Lot Number"])
+        polymer_weight = st.number_input("Polymer Weight Measured (g)", value=float(existing_prep_data["Polymer Weight Measured (g)"]), format="%.2f")
+        prep_date = st.date_input("Preparation Date", value=datetime.strptime(existing_prep_data["Prep Date"], "%Y-%m-%d").date())
+        initials = st.text_input("Operator Initials", value=existing_prep_data["Initials"])
+        notes = st.text_area("Notes", value=existing_prep_data["Notes"])
+        c_sol_conc = st.number_input("C-Solution Concentration", value=float(existing_prep_data["C-Solution Concentration"]), format="%.2f")
+        c_label_jar = st.text_input("C-Label for Jar", value=existing_prep_data["C-Label for jar"])
+    else:
+        desired_conc = st.number_input("Desired Solution Concentration (%)", format="%.2f")
+        final_volume = st.number_input("Desired Final Volume", format="%.1f")
+        solvent = st.selectbox("Solvent", ['IPA', 'EtOH', 'Heptane', 'Novec 7300'])
+        solvent_lot = st.text_input("Solvent Lot Number")
+        solvent_weight = st.number_input("Solvent Weight Measured (g)", format="%.2f")
+        polymer = st.selectbox("Polymer", ['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'])
+        polymer_start_conc = st.number_input("Polymer Starting Concentration (%)", format="%.2f")
+        polymer_lot = st.text_input("Polymer Lot Number")
+        polymer_weight = st.number_input("Polymer Weight Measured (g)", format="%.2f")
+        prep_date = st.date_input("Preparation Date")
+        initials = st.text_input("Operator Initials")
+        notes = st.text_area("Notes")
+        c_sol_conc = st.number_input("C-Solution Concentration", format="%.2f")
+        c_label_jar = st.text_input("C-Label for Jar")
+
     submit_prep = st.form_submit_button("Submit Solution Prep Data")
 
 if submit_prep:
@@ -134,16 +150,16 @@ if submit_prep:
             solvent_weight, polymer, polymer_start_conc, polymer_lot, polymer_weight,
             str(prep_date), initials, notes, c_sol_conc, c_label_jar
         ])
-        st.success(f"✅ Solution Prep Data for `{solution_fk}` saved successfully!")
-        existing_prep_ids.append(prep_id)  # Update the list with the new Prep ID
+        st.success(f"✅ Solution Prep ID `{prep_id}` added successfully.")
+        existing_prep_ids.append(prep_id)
     except Exception as e:
         st.error(f"❌ Error while saving Solution Prep Data: {e}")
 
-# ------------------ Combined Solution Entry ------------------
+# ------------------ COMBINED SOLUTION FORM ------------------
 st.subheader("🔹 Combined Solution Entry")
 with st.form("combined_solution_form"):
     combined_id = get_last_id(combined_sheet, "COMB")
-    st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
+    st.markdown(f"**Auto-generated Combined Solution ID:** `{combined_id}`")
     solution_id_a = st.selectbox("Select Solution ID A", existing_solution_ids, key="sol_a")
     solution_id_b = st.selectbox("Select Solution ID B", existing_solution_ids, key="sol_b")
     solution_mass_a = st.number_input("Solution Mass A (g)", format="%.2f")
@@ -152,35 +168,19 @@ with st.form("combined_solution_form"):
     combined_initials = st.text_input("Combined Initials")
     combined_notes = st.text_area("Combined Notes")
     combined_label_jar = st.text_input("C-Label for Jar (Combined)")
-    submit_combined = st.form_submit_button("Submit Combined Solution Data")
+
+    submit_combined = st.form_submit_button("Submit Combined Solution")
 
 if submit_combined:
     try:
         combined_sheet.append_row([
             combined_id, solution_id_a, solution_id_b, solution_mass_a,
-            solution_mass_b, str(combined_date), combined_initials, combined_notes, combined_label_jar
+            solution_mass_b, str(combined_date), combined_initials,
+            combined_notes, combined_label_jar
         ])
-        st.success(f"✅ Combined Solution `{combined_id}` saved successfully!")
+        st.success(f"✅ Combined Solution ID `{combined_id}` saved successfully.")
     except Exception as e:
         st.error(f"❌ Error while saving Combined Solution Data: {e}")
 
 
-# ------------------ 7-DAY REVIEW FUNCTIONALITY ------------------
-
-st.subheader("📅 Review Entries from the Past 7 Days")
-
-# Solution Prep Data
-st.markdown("**Solution Prep Data Entries:**")
-recent_prep_entries = fetch_recent_entries(prep_sheet, "Prep Date")
-if recent_prep_entries:
-    st.dataframe(pd.DataFrame(recent_prep_entries))
-else:
-    st.write("No entries found in the past 7 days.")
-
-# Combined Solution Data
-st.markdown("**Combined Solution Entries:**")
-recent_combined_entries = fetch_recent_entries(combined_sheet, "Date")
-if recent_combined_entries:
-    st.dataframe(pd.DataFrame(recent_combined_entries))
-else:
-    st.write("No entries found in the past 7 days.")
+ 
