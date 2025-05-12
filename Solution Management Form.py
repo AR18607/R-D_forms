@@ -144,4 +144,3 @@ if st.button("View Last 7 Days Entries"):
     st.write("**Recent Prep Entries:**", recent_prep_entries)
     st.write("**Recent Combined Entries:**", recent_combined_entries)
 
-Let me know if you'd like any more adjustments! 🚀
