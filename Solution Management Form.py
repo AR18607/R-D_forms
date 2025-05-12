@@ -93,7 +93,7 @@ selected_solution_fk = st.selectbox("Select Solution ID for Prep Entry", options
 prep_entries = prep_sheet.get_all_records()  # List of dictionaries keyed by header name
 existing_record = None
 for record in prep_entries:
-    if record["Solution ID (FK)"] == selected_solution_fk:
+    if record.get("Solution ID (FK)", "") == selected_solution_fk:
         existing_record = record
         break
 
@@ -103,39 +103,39 @@ else:
     st.info("No existing prep entry found; please enter new details.")
 
 with st.form("prep_data_form"):
-    # Use existing values if found; otherwise, set to defaults
+    # Use .get() to safely retrieve values, providing defaults where needed.
     if existing_record:
-        prep_id = existing_record["Solution Prep ID"]
+        prep_id = existing_record.get("Solution Prep ID", get_last_id(prep_sheet, "PREP"))
         try:
-            default_desired_conc = float(existing_record["Desired Concentration"])
+            default_desired_conc = float(existing_record.get("Desired Concentration", 0.0))
         except:
             default_desired_conc = 0.0
         try:
-            default_final_volume = float(existing_record["Final Volume"])
+            default_final_volume = float(existing_record.get("Final Volume", 0.0))
         except:
             default_final_volume = 0.0
-        default_solvent = existing_record["Solvent"] if existing_record["Solvent"] else "IPA"
-        default_solvent_lot = existing_record["Solvent Lot"] if existing_record["Solvent Lot"] else ""
+        default_solvent = existing_record.get("Solvent", "IPA")
+        default_solvent_lot = existing_record.get("Solvent Lot", "")
         try:
-            default_solvent_weight = float(existing_record["Solvent Weight"])
+            default_solvent_weight = float(existing_record.get("Solvent Weight", 0.0))
         except:
             default_solvent_weight = 0.0
-        default_polymer = existing_record["Polymer"] if existing_record["Polymer"] else "CMS-72"
+        default_polymer = existing_record.get("Polymer", "CMS-72")
         try:
-            default_polymer_conc = float(existing_record["Polymer Concentration"])
+            default_polymer_conc = float(existing_record.get("Polymer Concentration", 0.0))
         except:
             default_polymer_conc = 0.0
-        default_polymer_lot = existing_record["Polymer Lot"] if existing_record["Polymer Lot"] else ""
+        default_polymer_lot = existing_record.get("Polymer Lot", "")
         try:
-            default_polymer_weight = float(existing_record["Polymer Weight"])
+            default_polymer_weight = float(existing_record.get("Polymer Weight", 0.0))
         except:
             default_polymer_weight = 0.0
         try:
-            default_prep_date = datetime.strptime(existing_record["Prep Date"], "%Y-%m-%d").date()
+            default_prep_date = datetime.strptime(existing_record.get("Prep Date", datetime.today().strftime("%Y-%m-%d")), "%Y-%m-%d").date()
         except:
             default_prep_date = datetime.today().date()
-        default_initials = existing_record["Initials"] if existing_record["Initials"] else ""
-        default_notes = existing_record["Notes"] if existing_record["Notes"] else ""
+        default_initials = existing_record.get("Initials", "")
+        default_notes = existing_record.get("Notes", "")
     else:
         prep_id = get_last_id(prep_sheet, "PREP")
         default_desired_conc = 0.0
