@@ -21,8 +21,7 @@ COMBINED_HEADERS = [
     "Solution Mass A", "Solution Mass B", "Date", "Initials", "Notes"
 ]
 
-# ------------------ UTILITY FUNCTION ------------------
-
+# ------------------ UTILITY FUNCTIONS ------------------
 def safe_get(record, key, default=""):
     """
     Return value from a record for a key by matching case‐insensitively and ignoring extra spaces.
@@ -33,20 +32,27 @@ def safe_get(record, key, default=""):
                 return v
     return default
 
-def parse_date(date_str):
+def parse_date(date_val):
     """
-    Try to convert a string to a datetime object.
+    Attempt to convert a date value to a datetime object.  
+    If the value is already a datetime instance, return it directly.
+    If it's a string, try converting assuming the format is YYYY-MM-DD.
     """
-    try:
-        return datetime.strptime(date_str, "%Y-%m-%d")
-    except Exception as e:
+    if isinstance(date_val, datetime):
+        return date_val
+    elif isinstance(date_val, str):
+        try:
+            return datetime.strptime(date_val, "%Y-%m-%d")
+        except Exception as e:
+            return None
+    else:
         return None
 
 # ------------------ GOOGLE SHEET CONNECTION ------------------
-
 def connect_google_sheet(sheet_key):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(
+        json.loads(st.secrets["gcp_service_account"]), scope)
     client = gspread.authorize(creds)
     return client.open_by_key(sheet_key)
 
@@ -67,7 +73,6 @@ def get_last_id(worksheet, id_prefix):
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
 # ------------------ GOOGLE SHEET SETUP ------------------
-
 spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
 
 solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
@@ -77,7 +82,6 @@ combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINE
 existing_solution_ids = solution_sheet.col_values(1)[1:]
 
 # ------------------ SOLUTION ID FORM ------------------
-
 with st.form("solution_id_form"):
     st.subheader("🔹 Solution ID Entry")
     solution_id = get_last_id(solution_sheet, "SOL")
@@ -92,12 +96,11 @@ if submit_solution:
     st.success("✅ Solution ID saved!")
 
 # ------------------ SOLUTION PREP DATA ENTRY ------------------
-
 st.subheader("🔹 Solution Prep Data Entry")
-# Let the user select a Solution ID (from the solution_sheet) as foreign key
+# Let the user select a Solution ID (foreign key) from the solution sheet.
 selected_solution_fk = st.selectbox("Select Solution ID for Prep Entry", options=existing_solution_ids, key="prep_solution_fk")
 
-# Retrieve existing prep entries for lookup
+# Retrieve existing prep entries for lookup.
 prep_entries = prep_sheet.get_all_records()  # List of dictionaries keyed by header names
 existing_record = None
 for record in prep_entries:
@@ -111,7 +114,6 @@ else:
     st.info("No existing prep entry found; please enter new details.")
 
 with st.form("prep_data_form"):
-    # If a record exists, prefill values; otherwise, use defaults.
     if existing_record:
         prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id(prep_sheet, "PREP"))
         try:
@@ -190,7 +192,7 @@ with st.form("prep_data_form"):
     initials = st.text_input("Initials", value=default_initials)
     notes = st.text_area("Notes", value=default_notes)
     
-    # Two additional fields:
+    # Additional fields:
     c_sol_conc = st.number_input("C-Solution Concentration", value=default_c_sol_conc, format="%.2f")
     c_label_jar = st.text_input("C-Label for jar", value=default_c_label_jar)
     
@@ -216,7 +218,6 @@ if submit_prep:
         c_label_jar
     ]
     if existing_record:
-        # Locate the row for the selected solution id and update that row.
         cell = prep_sheet.find(selected_solution_fk)
         row_number = cell.row
         prep_sheet.update(f"A{row_number}:P{row_number}", [data])
@@ -226,7 +227,6 @@ if submit_prep:
         st.success("✅ Prep Data submitted!")
 
 # ------------------ COMBINED SOLUTION ENTRY ------------------
-
 with st.form("combined_solution_form"):
     st.subheader("🔹 Combined Solution Entry")
     combined_id = get_last_id(combined_sheet, "COMB")
@@ -253,43 +253,41 @@ if submit_combined:
     ])
     st.success("✅ Combined Solution saved!")
 
-# ------------------ PREVIEW SECTIONS ------------------
+# ------------------ 7 DAYS DATA PREVIEW (AT THE BOTTOM) ------------------
+st.markdown("## 7 Days Data Preview")
 
-with st.expander("Preview: Solution ID Table (All Records)"):
-    solution_records = solution_sheet.get_all_records()
-    if solution_records:
-        st.write(pd.DataFrame(solution_records))
-    else:
-        st.write("No records exist.")
+# Preview for Solution ID Table (all records, as there is no date field)
+st.markdown("### Solution ID Table (All Records)")
+solution_records = solution_sheet.get_all_records()
+if solution_records:
+    st.write(pd.DataFrame(solution_records))
+else:
+    st.write("No records exist.")
 
-with st.expander("Preview: Last 7 Days - Solution Prep Data"):
-    prep_records = prep_sheet.get_all_records()
-    if prep_records:
-        recent_prep = []
-        for rec in prep_records:
-            pd_date_str = rec.get("Prep Date", "")
-            parsed = parse_date(pd_date_str)
-            if parsed and parsed >= (datetime.today() - timedelta(days=7)):
-                recent_prep.append(rec)
-        if recent_prep:
-            st.write(pd.DataFrame(recent_prep))
-        else:
-            st.write("No prep records in the last 7 days.")
-    else:
-        st.write("No prep records exist.")
+# Preview for last 7 days of Solution Prep Data
+st.markdown("### Last 7 Days - Solution Prep Data")
+prep_records = prep_sheet.get_all_records()
+recent_prep = []
+for rec in prep_records:
+    pd_date_str = rec.get("Prep Date", "")
+    parsed = parse_date(pd_date_str)
+    if parsed and parsed >= (datetime.today() - timedelta(days=7)):
+        recent_prep.append(rec)
+if recent_prep:
+    st.write(pd.DataFrame(recent_prep))
+else:
+    st.write("No prep records in the last 7 days.")
 
-with st.expander("Preview: Last 7 Days - Combined Solution Data"):
-    combined_records = combined_sheet.get_all_records()
-    if combined_records:
-        recent_combined = []
-        for rec in combined_records:
-            c_date_str = rec.get("Date", "")
-            parsed = parse_date(c_date_str)
-            if parsed and parsed >= (datetime.today() - timedelta(days=7)):
-                recent_combined.append(rec)
-        if recent_combined:
-            st.write(pd.DataFrame(recent_combined))
-        else:
-            st.write("No combined solution records in the last 7 days.")
-    else:
-        st.write("No combined solution records exist.")
+# Preview for last 7 days of Combined Solution Data
+st.markdown("### Last 7 Days - Combined Solution Data")
+combined_records = combined_sheet.get_all_records()
+recent_combined = []
+for rec in combined_records:
+    c_date_str = rec.get("Date", "")
+    parsed = parse_date(c_date_str)
+    if parsed and parsed >= (datetime.today() - timedelta(days=7)):
+        recent_combined.append(rec)
+if recent_combined:
+    st.write(pd.DataFrame(recent_combined))
+else:
+    st.write("No combined solution records in the last 7 days.")
