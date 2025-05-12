@@ -5,22 +5,41 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 from datetime import datetime, timedelta
 
-# ------------------ CONFIG ------------------
-GOOGLE_SHEET_NAME = "R&D Data Form"
+# ------------------ CONFIGURATION ------------------
+SPREADSHEET_KEY = "1uPdUWiiwMdJCYJaxZ5TneFa9h6tbSrs327BVLT5GVPY"
 
-# Table Tab Names
-TAB_SOLUTION_ID = "Solution ID Tbl"
-TAB_SOLUTION_PREP = "Solution Prep Data Tbl"
-TAB_COMBINED_SOLUTION = "Combined Solution Tbl"
+# Headers for the tables
+SOLUTION_ID_HEADERS = ["Solution ID", "Type", "Expired", "Consumed"]
+PREP_HEADERS = [
+    "Solution Prep ID", "Solution ID (FK)", "Desired Solution Concentration", "Desired Final Volume", 
+    "Solvent", "Solvent Lot Number", "Solvent Weight Measured (g)", "Polymer", 
+    "Polymer starting concentration", "Polymer Lot Number", "Polymer Weight Measured (g)", 
+    "Prep Date", "Initials", "Notes", "C-Solution Concentration", "C-Label for jar"
+]
+COMBINED_HEADERS = [
+    "Combined Solution ID", "Solution ID A", "Solution ID B",
+    "Solution Mass A", "Solution Mass B", "Date", "Initials", "Notes"
+]
 
-# ------------------ CONNECTION FUNCTIONS ------------------
+# ------------------ UTILITY FUNCTION ------------------
 
-def connect_google_sheet(sheet_name):
+def safe_get(record, key, default=""):
+    """
+    Return value from record for a key by matching case-insensitively and ignoring extra spaces.
+    """
+    if isinstance(record, dict):
+        for k, v in record.items():
+            if k.strip().lower() == key.strip().lower():
+                return v
+    return default
+
+# ------------------ GOOGLE SHEET CONNECTION ------------------
+
+def connect_google_sheet(sheet_key):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        json.loads(st.secrets["gcp_service_account"]), scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
     client = gspread.authorize(creds)
-    return client.open(sheet_name)
+    return client.open_by_key(sheet_key)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
@@ -40,31 +59,11 @@ def get_last_id(worksheet, id_prefix):
 
 # ------------------ GOOGLE SHEET SETUP ------------------
 
-spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
 
-solution_sheet = get_or_create_tab(
-    spreadsheet, 
-    TAB_SOLUTION_ID, 
-    ["Solution ID", "Type", "Expired", "Consumed"]
-)
-
-prep_sheet = get_or_create_tab(
-    spreadsheet, 
-    TAB_SOLUTION_PREP, [
-        "Solution Prep ID", "Solution ID (FK)", "Desired Concentration", "Final Volume",
-        "Solvent", "Solvent Lot", "Solvent Weight", "Polymer",
-        "Polymer Concentration", "Polymer Lot", "Polymer Weight",
-        "Prep Date", "Initials", "Notes"
-    ]
-)
-
-combined_sheet = get_or_create_tab(
-    spreadsheet, 
-    TAB_COMBINED_SOLUTION, [
-        "Combined Solution ID", "Solution ID A", "Solution ID B",
-        "Solution Mass A", "Solution Mass B", "Date", "Initials", "Notes"
-    ]
-)
+solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
+prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
+combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
 
 existing_solution_ids = solution_sheet.col_values(1)[1:]
 
@@ -86,11 +85,11 @@ if submit_solution:
 # ------------------ SOLUTION PREP DATA ENTRY ------------------
 
 st.subheader("🔹 Solution Prep Data Entry")
-# Let the user select a solution (from the solution sheet) as foreign key
+# Let the user select a Solution ID (from solution_sheet) as foreign key
 selected_solution_fk = st.selectbox("Select Solution ID for Prep Entry", options=existing_solution_ids, key="prep_solution_fk")
 
-# Retrieve all prep entries for lookup
-prep_entries = prep_sheet.get_all_records()  # List of dictionaries keyed by header name
+# Retrieve existing prep entries for lookup
+prep_entries = prep_sheet.get_all_records()  # list of dicts keyed by header
 existing_record = None
 for record in prep_entries:
     if record.get("Solution ID (FK)", "") == selected_solution_fk:
@@ -98,44 +97,49 @@ for record in prep_entries:
         break
 
 if existing_record:
-    st.info("Existing prep entry found for the selected Solution ID. Fields are prefilled for update.")
+    st.info("Existing prep entry found for the selected Solution ID. The fields are prefilled for an update.")
 else:
     st.info("No existing prep entry found; please enter new details.")
 
 with st.form("prep_data_form"):
-    # Use .get() to safely retrieve values, providing defaults where needed.
+    # If a record exists, prefill values; otherwise, use defaults.
     if existing_record:
-        prep_id = existing_record.get("Solution Prep ID", get_last_id(prep_sheet, "PREP"))
+        prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id(prep_sheet, "PREP"))
         try:
-            default_desired_conc = float(existing_record.get("Desired Concentration", 0.0))
+            default_desired_conc = float(safe_get(existing_record, "Desired Solution Concentration", 0.0))
         except:
             default_desired_conc = 0.0
         try:
-            default_final_volume = float(existing_record.get("Final Volume", 0.0))
+            default_final_volume = float(safe_get(existing_record, "Desired Final Volume", 0.0))
         except:
             default_final_volume = 0.0
-        default_solvent = existing_record.get("Solvent", "IPA")
-        default_solvent_lot = existing_record.get("Solvent Lot", "")
+        default_solvent = safe_get(existing_record, "Solvent", "IPA")
+        default_solvent_lot = safe_get(existing_record, "Solvent Lot Number", "")
         try:
-            default_solvent_weight = float(existing_record.get("Solvent Weight", 0.0))
+            default_solvent_weight = float(safe_get(existing_record, "Solvent Weight Measured (g)", 0.0))
         except:
             default_solvent_weight = 0.0
-        default_polymer = existing_record.get("Polymer", "CMS-72")
+        default_polymer = safe_get(existing_record, "Polymer", "CMS-72")
         try:
-            default_polymer_conc = float(existing_record.get("Polymer Concentration", 0.0))
+            default_polymer_conc = float(safe_get(existing_record, "Polymer starting concentration", 0.0))
         except:
             default_polymer_conc = 0.0
-        default_polymer_lot = existing_record.get("Polymer Lot", "")
+        default_polymer_lot = safe_get(existing_record, "Polymer Lot Number", "")
         try:
-            default_polymer_weight = float(existing_record.get("Polymer Weight", 0.0))
+            default_polymer_weight = float(safe_get(existing_record, "Polymer Weight Measured (g)", 0.0))
         except:
             default_polymer_weight = 0.0
         try:
-            default_prep_date = datetime.strptime(existing_record.get("Prep Date", datetime.today().strftime("%Y-%m-%d")), "%Y-%m-%d").date()
+            default_prep_date = datetime.strptime(safe_get(existing_record, "Prep Date", datetime.today().strftime("%Y-%m-%d")), "%Y-%m-%d").date()
         except:
             default_prep_date = datetime.today().date()
-        default_initials = existing_record.get("Initials", "")
-        default_notes = existing_record.get("Notes", "")
+        default_initials = safe_get(existing_record, "Initials", "")
+        default_notes = safe_get(existing_record, "Notes", "")
+        try:
+            default_c_sol_conc = float(safe_get(existing_record, "C-Solution Concentration", 0.0))
+        except:
+            default_c_sol_conc = 0.0
+        default_c_label_jar = safe_get(existing_record, "C-Label for jar", "")
     else:
         prep_id = get_last_id(prep_sheet, "PREP")
         default_desired_conc = 0.0
@@ -150,35 +154,40 @@ with st.form("prep_data_form"):
         default_prep_date = datetime.today().date()
         default_initials = ""
         default_notes = ""
+        default_c_sol_conc = 0.0
+        default_c_label_jar = ""
     
     st.markdown(f"**Prep ID:** `{prep_id}`")
-    desired_conc = st.number_input("Desired Concentration (%)", value=default_desired_conc, format="%.2f")
-    final_volume = st.number_input("Final Volume", value=default_final_volume, format="%.1f")
+    desired_conc = st.number_input("Desired Solution Concentration (%)", value=default_desired_conc, format="%.2f")
+    final_volume = st.number_input("Desired Final Volume", value=default_final_volume, format="%.1f")
     solvent = st.selectbox(
         "Solvent",
         ['IPA', 'EtOH', 'Heptane', 'Novec 7300'],
         index=(['IPA', 'EtOH', 'Heptane', 'Novec 7300'].index(default_solvent)
                if default_solvent in ['IPA', 'EtOH', 'Heptane', 'Novec 7300'] else 0)
     )
-    solvent_lot = st.text_input("Solvent Lot", value=default_solvent_lot)
-    solvent_weight = st.number_input("Solvent Weight (g)", value=default_solvent_weight, format="%.2f")
+    solvent_lot = st.text_input("Solvent Lot Number", value=default_solvent_lot)
+    solvent_weight = st.number_input("Solvent Weight Measured (g)", value=default_solvent_weight, format="%.2f")
     polymer = st.selectbox(
         "Polymer",
         ['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'],
         index=(['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'].index(default_polymer)
                if default_polymer in ['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'] else 0)
     )
-    polymer_conc = st.number_input("Polymer Concentration (%)", value=default_polymer_conc, format="%.2f")
-    polymer_lot = st.text_input("Polymer Lot", value=default_polymer_lot)
-    polymer_weight = st.number_input("Polymer Weight (g)", value=default_polymer_weight, format="%.2f")
-    prep_date = st.date_input("Preparation Date", value=default_prep_date)
-    initials = st.text_input("Operator Initials", value=default_initials)
+    polymer_conc = st.number_input("Polymer starting concentration (%)", value=default_polymer_conc, format="%.2f")
+    polymer_lot = st.text_input("Polymer Lot Number", value=default_polymer_lot)
+    polymer_weight = st.number_input("Polymer Weight Measured (g)", value=default_polymer_weight, format="%.2f")
+    prep_date = st.date_input("Prep Date", value=default_prep_date)
+    initials = st.text_input("Initials", value=default_initials)
     notes = st.text_area("Notes", value=default_notes)
+    
+    # Two additional fields per header definition:
+    c_sol_conc = st.number_input("C-Solution Concentration", value=default_c_sol_conc, format="%.2f")
+    c_label_jar = st.text_input("C-Label for jar", value=default_c_label_jar)
     
     submit_prep = st.form_submit_button("Update Prep Entry" if existing_record else "Submit Prep Entry")
 
 if submit_prep:
-    # Data list to be saved/updated in the prep sheet (order must match the headers)
     data = [
         prep_id,
         selected_solution_fk,
@@ -193,13 +202,15 @@ if submit_prep:
         polymer_weight,
         str(prep_date),
         initials,
-        notes
+        notes,
+        c_sol_conc,
+        c_label_jar
     ]
     if existing_record:
-        # Locate the row for the selected solution id and update that row
+        # Locate the row for the selected solution id and update that row.
         cell = prep_sheet.find(selected_solution_fk)
         row_number = cell.row
-        prep_sheet.update(f"A{row_number}:N{row_number}", [data])
+        prep_sheet.update(f"A{row_number}:P{row_number}", [data])
         st.success("✅ Prep Data updated!")
     else:
         prep_sheet.append_row(data)
