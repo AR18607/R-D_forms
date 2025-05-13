@@ -1,14 +1,12 @@
 import streamlit as st
 import gspread
-import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 import json
-from datetime import datetime, timedelta
-
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
-SHEET_KEY = "1uPdUWiiwMdJCYJaxZ5TneFa9h6tbSrs327BVLT5GVPY"
+
 GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
+
 
 # Sheet tabs
 TAB_MODULE = "Module Tbl"
@@ -18,24 +16,13 @@ TAB_WRAP_PER_MODULE = "Wrap Per Module Tbl"
 TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 
 # ----------------- CONNECT GOOGLE SHEETS -----------------
-def connect_google_sheet(sheet_key):
+def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
-    
-    try:
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(sheet_key)
-        st.write(f"✅ Successfully connected to: {sheet_key}")
-        return sheet
-    except gspread.exceptions.APIError as e:
-        st.error(f"❌ API Error: {e}")
-        return None  # Return None if connection fails
+    client = gspread.authorize(creds)
+    return client.open(sheet_name)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
-    if spreadsheet is None:
-        st.error("❌ Failed to connect to Google Sheets.")
-        return None
-    
     try:
         worksheet = spreadsheet.worksheet(tab_name)
     except gspread.exceptions.WorksheetNotFound:
@@ -43,51 +30,92 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-def get_last_id(worksheet, id_prefix):
-    records = worksheet.col_values(1)[1:] if worksheet else []
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
-    return f"{id_prefix}-{str(max(nums) + 1).zfill(3)}" if nums else f"{id_prefix}-001"
 
-@st.cache_data(ttl=60)  # Cache fetched data for 60 seconds to reduce API calls
-def fetch_sheet_data(worksheet):
+def get_last_id(worksheet, id_prefix):
+    records = worksheet.col_values(1)[1:]  # Skip header
+    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
+    if not nums:
+        return f"{id_prefix}-001"
+    next_num = max(nums) + 1
+    return f"{id_prefix}-{str(next_num).zfill(3)}"
+
+
+
+def fetch_column_values(worksheet, col_index=1):
     try:
-        data = worksheet.get_all_values()
-        return pd.DataFrame(data[1:], columns=data[0]) if data else pd.DataFrame()
-    except Exception as e:
-        st.error(f"❌ Error fetching sheet data: {e}")
-        return pd.DataFrame()
+        values = worksheet.col_values(col_index)[1:]  # Skip header
+        return [v for v in values if v]
+    except Exception:
+        return []
 
 # ----------------- MAIN APP -----------------
-st.title("🌀 Winding Form")
+st.title("🌀 Winding Form (Connected)")
 
-spreadsheet = connect_google_sheet(SHEET_KEY)
-if spreadsheet:
-    # Create/Connect tabs
-    module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
-    wind_program_sheet = get_or_create_tab(spreadsheet, TAB_WIND_PROGRAM, [
-        "Wind Program ID", "Program Name", "Number of bundles / wind", "Number of fibers / ribbon",
-        "Space between ribbons", "Wind Angle (deg)", "Active fiber length (inch)", "Total fiber length (inch)",
-        "Active Area / fiber", "Number of layers", "Number of loops / layer", "C - Active area / layer", "Notes", "Date_Time"
-    ])
-    wound_module_sheet = get_or_create_tab(spreadsheet, TAB_WOUND_MODULE, [
-        "Wound Module ID", "Module ID (FK)", "Wind Program ID (FK)", "Operator Initials", "Notes",
-        "MFG DB Wind ID", "MFG DB Potting ID", "MFG DB Mod ID", "Date_Time"
-    ])
-    wrap_per_module_sheet = get_or_create_tab(spreadsheet, TAB_WRAP_PER_MODULE, [
-        "WrapPerModule PK", "Module ID (FK)", "Wrap After Layer #", "Type of Wrap", "Notes", "Date_Time"
-    ])
-    spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
-        "SpoolPerWind PK", "MFG DB Wind ID (FK)", "Coated Spool ID", "Length Used", "Notes", "Date_Time"
-    ])
+spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
-    # Fetch Data (Cached)
-    wind_data = fetch_sheet_data(wind_program_sheet)
-    wound_data = fetch_sheet_data(wound_module_sheet)
-    wrap_data = fetch_sheet_data(wrap_per_module_sheet)
-    spool_data = fetch_sheet_data(spools_per_wind_sheet)
+# Create/Connect tabs
+module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
+wind_program_sheet = get_or_create_tab(spreadsheet, TAB_WIND_PROGRAM, [
+    "Wind Program ID", "Program Name", "Number of bundles / wind", "Number of fibers / ribbon",
+    "Space between ribbons", "Wind Angle (deg)", "Active fiber length (inch)", "Total fiber length (inch)",
+    "Active Area / fiber", "Number of layers", "Number of loops / layer", "C - Active area / layer", "Notes"
+])
+wound_module_sheet = get_or_create_tab(spreadsheet, TAB_WOUND_MODULE, [
+    "Wound Module ID", "Module ID (FK)", "Wind Program ID (FK)", "Operator Initials", "Notes",
+    "MFG DB Wind ID", "MFG DB Potting ID", "MFG DB Mod ID"
+])
+wrap_per_module_sheet = get_or_create_tab(spreadsheet, TAB_WRAP_PER_MODULE, [
+    "WrapPerModule PK", "Module ID (FK)", "Wrap After Layer #", "Type of Wrap", "Notes"
+])
+spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
+    "SpoolPerWind PK", "MFG DB Wind ID (FK)", "Coated Spool ID", "Length Used", "Notes"
+])
 
-# ----------------- WIND PROGRAM FORM -----------------
+# Fetch Dropdown Data
+module_ids = fetch_column_values(module_sheet)
+wind_program_ids = fetch_column_values(wind_program_sheet)
+
+# Form
+with st.form("winding_form"):
+    st.subheader("🔷 Wound Module Entry")
+
+    wound_module_id = get_last_id(wound_module_sheet, "WMOD")
+    st.markdown(f"**Auto-generated Wound Module ID:** `{wound_module_id}`")
+
+    module_fk = st.selectbox("Module ID", module_ids) if module_ids else st.text_input("Module ID (Manual)")
+    wind_program_fk = st.selectbox("Wind Program ID", wind_program_ids) if wind_program_ids else st.text_input("Wind Program ID (Manual)")
+
+    operator_initials = st.text_input("Operator Initials")
+    notes_wound = st.text_area("Wound Module Notes")
+    mfg_db_wind = st.text_input("MFG DB Wind ID")
+    mfg_db_potting = st.text_input("MFG DB Potting ID")
+    mfg_db_mod = st.number_input("MFG DB Mod ID", step=1)
+
+    st.subheader("🔷 Wrap Per Module Entry")
+
+    wrap_per_module_pk = get_last_id(wrap_per_module_sheet, "WRAP")
+    st.markdown(f"**Auto-generated Wrap Per Module PK:** `{wrap_per_module_pk}`")
+
+    wrap_module_fk = st.selectbox("Module ID (Wrap)", module_ids) if module_ids else st.text_input("Module ID (Wrap Manual)")
+    wrap_after_layer = st.number_input("Wrap After Layer #", step=1)
+    type_of_wrap = st.text_input("Type of Wrap")
+    wrap_notes = st.text_area("Wrap Notes")
+
+    st.subheader("🔷 Spools Per Wind Entry")
+
+    spool_per_wind_pk = get_last_id(spools_per_wind_sheet, "SPOOL")
+    st.markdown(f"**Auto-generated Spool Per Wind PK:** `{spool_per_wind_pk}`")
+
+    mfg_db_wind_fk = st.text_input("MFG DB Wind ID (FK)")
+    coated_spool_id = st.text_input("Coated Spool ID")
+    length_used = st.number_input("Length Used (m)", format="%.2f")
+    spool_notes = st.text_area("Spool Notes")
+
+    submit_button = st.form_submit_button("🚀 Submit All Entries")
+
+    # ----------------- Wind Program Form -----------------
 st.subheader("🌬️ Wind Program Entry")
+
 with st.form("wind_program_form"):
     wind_program_id = get_last_id(wind_program_sheet, "WP")
     st.markdown(f"**Auto-generated Wind Program ID:** `{wind_program_id}`")
@@ -106,43 +134,24 @@ with st.form("wind_program_form"):
     notes = st.text_area("Notes")
 
     wind_submit = st.form_submit_button("➕ Submit Wind Program")
-    if wind_submit:
-        wind_program_sheet.append_row([
-            wind_program_id, program_name, bundles, fibers_per_ribbon, spacing, wind_angle,
-            active_length, total_length, active_area, layers, loops_per_layer, area_layer, notes, str(datetime.today())
+
+
+
+# Save Entries
+if submit_button:
+    try:
+        wound_module_sheet.append_row([
+            wound_module_id, module_fk, wind_program_fk, operator_initials, notes_wound,
+            mfg_db_wind, mfg_db_potting, mfg_db_mod
         ])
-        st.success(f"✅ Wind Program {wind_program_id} saved successfully!")
+        wrap_per_module_sheet.append_row([
+            wrap_per_module_pk, wrap_module_fk, wrap_after_layer, type_of_wrap, wrap_notes
+        ])
+        spools_per_wind_sheet.append_row([
+            spool_per_wind_pk, mfg_db_wind_fk, coated_spool_id, length_used, spool_notes
+        ])
+        st.success("✅ Data successfully saved in Wound, Wrap, and Spool tables!")
+    except Exception as e:
+        st.error(f"❌ Error saving data: {e}")
 
-# ----------------- 7-DAYS DATA PREVIEW -----------------
-st.subheader("📅 Records (Last 7 Days)")
 
-def filter_last_7_days(df, date_col):
-    """Filters DataFrame based on Date column, keeping only last 7 days."""
-    if df.empty or date_col not in df.columns:
-        return pd.DataFrame()
-    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    return df[df[date_col] >= datetime.today() - timedelta(days=7)]
-
-try:
-    if not wind_data.empty:
-        st.subheader("🌬️ Wind Program Table (Last 7 Days)")
-        filtered_wind = filter_last_7_days(wind_data, "Date_Time")
-        st.write(filtered_wind if not filtered_wind.empty else "No Wind Program records in the last 7 days.")
-
-    if not wound_data.empty:
-        st.subheader("🌀 Wound Module Table (Last 7 Days)")
-        filtered_wound = filter_last_7_days(wound_data, "Date_Time")
-        st.write(filtered_wound if not filtered_wound.empty else "No Wound Module records in the last 7 days.")
-
-    if not wrap_data.empty:
-        st.subheader("🛡 Wrap Per Module Table (Last 7 Days)")
-        filtered_wrap = filter_last_7_days(wrap_data, "Date_Time")
-        st.write(filtered_wrap if not filtered_wrap.empty else "No Wrap records in the last 7 days.")
-
-    if not spool_data.empty:
-        st.subheader("🎞 Spools Per Wind Table (Last 7 Days)")
-        filtered_spool = filter_last_7_days(spool_data, "Date_Time")
-        st.write(filtered_spool if not filtered_spool.empty else "No Spool records in the last 7 days.")
-
-except Exception as e:
-    st.error(f"❌ Error loading recent data: {e}")
