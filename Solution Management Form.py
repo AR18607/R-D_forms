@@ -312,16 +312,6 @@ else:
     st.write("### Raw Combined Data")
     st.write(pd.DataFrame(combined_all))
     
-    # Output raw details for debugging.
-    st.markdown("#### Debug Details for Each Combined Record")
-    for idx, rec in enumerate(combined_all):
-        st.write(f"Record #{idx+1}:")
-        st.write("  Keys:", list(rec.keys()))
-        c_date_raw = rec.get("Date", "").strip()
-        st.write("  Raw 'Date' value:", repr(c_date_raw))
-        # Try parsing the date using our function.
-        parsed_date = parse_date(c_date_raw)
-        st.write("  Parsed 'Date' value:", parsed_date)
     
     # If the user chooses to show only last 7 days, apply filtering.
     if not show_all:
