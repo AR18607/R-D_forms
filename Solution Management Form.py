@@ -253,23 +253,7 @@ if submit_combined:
     ])
     st.success("✅ Combined Solution saved!")
 
-def parse_date(date_val):
-    """
-    Attempt to convert a date value to a datetime object.
-    If it's already a datetime instance, return it directly.
-    If it is a string, try converting using common formats.
-    """
-    if isinstance(date_val, datetime):
-        return date_val
-    elif isinstance(date_val, str):
-        # Remove extra spaces if any.
-        date_val = date_val.strip()
-        for fmt in ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"]:
-            try:
-                return datetime.strptime(date_val, fmt)
-            except Exception:
-                pass
-    return None
+
 
 # ------------------ 7 DAYS DATA PREVIEW (AT THE BOTTOM) ------------------
 st.markdown("## 7 Days Data Preview")
