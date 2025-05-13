@@ -16,12 +16,20 @@ TAB_WOUND_MODULE = "Wound Module Tbl"
 TAB_WRAP_PER_MODULE = "Wrap Per Module Tbl"
 TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 
-# ----------------- CONNECT GOOGLE SHEETS -----------------
+
+
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
     client = gspread.authorize(creds)
-    return client.open(sheet_name)
+    
+    try:
+        sheet = client.open(sheet_name)
+        print(f"✅ Successfully connected to: {sheet_name}")
+        return sheet
+    except gspread.exceptions.APIError as e:
+        print(f"❌ API Error: {e}")
+
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
