@@ -1,12 +1,13 @@
 import streamlit as st
 import gspread
+import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 import json
+from datetime import datetime, timedelta
+
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
-
 GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
-
 
 # Sheet tabs
 TAB_MODULE = "Module Tbl"
@@ -30,7 +31,6 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]  # Skip header
     nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
@@ -38,8 +38,6 @@ def get_last_id(worksheet, id_prefix):
         return f"{id_prefix}-001"
     next_num = max(nums) + 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
-
-
 
 def fetch_column_values(worksheet, col_index=1):
     try:
@@ -49,7 +47,7 @@ def fetch_column_values(worksheet, col_index=1):
         return []
 
 # ----------------- MAIN APP -----------------
-st.title("🌀 Winding Form (Connected)")
+st.title("🌀 Winding Form")
 
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
@@ -58,64 +56,25 @@ module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module 
 wind_program_sheet = get_or_create_tab(spreadsheet, TAB_WIND_PROGRAM, [
     "Wind Program ID", "Program Name", "Number of bundles / wind", "Number of fibers / ribbon",
     "Space between ribbons", "Wind Angle (deg)", "Active fiber length (inch)", "Total fiber length (inch)",
-    "Active Area / fiber", "Number of layers", "Number of loops / layer", "C - Active area / layer", "Notes"
+    "Active Area / fiber", "Number of layers", "Number of loops / layer", "C - Active area / layer", "Notes", "Date_Time"
 ])
 wound_module_sheet = get_or_create_tab(spreadsheet, TAB_WOUND_MODULE, [
     "Wound Module ID", "Module ID (FK)", "Wind Program ID (FK)", "Operator Initials", "Notes",
-    "MFG DB Wind ID", "MFG DB Potting ID", "MFG DB Mod ID"
+    "MFG DB Wind ID", "MFG DB Potting ID", "MFG DB Mod ID", "Date_Time"
 ])
 wrap_per_module_sheet = get_or_create_tab(spreadsheet, TAB_WRAP_PER_MODULE, [
-    "WrapPerModule PK", "Module ID (FK)", "Wrap After Layer #", "Type of Wrap", "Notes"
+    "WrapPerModule PK", "Module ID (FK)", "Wrap After Layer #", "Type of Wrap", "Notes", "Date_Time"
 ])
 spools_per_wind_sheet = get_or_create_tab(spreadsheet, TAB_SPOOLS_PER_WIND, [
-    "SpoolPerWind PK", "MFG DB Wind ID (FK)", "Coated Spool ID", "Length Used", "Notes"
+    "SpoolPerWind PK", "MFG DB Wind ID (FK)", "Coated Spool ID", "Length Used", "Notes", "Date_Time"
 ])
 
 # Fetch Dropdown Data
 module_ids = fetch_column_values(module_sheet)
 wind_program_ids = fetch_column_values(wind_program_sheet)
 
-# Form
-with st.form("winding_form"):
-    st.subheader("🔷 Wound Module Entry")
-
-    wound_module_id = get_last_id(wound_module_sheet, "WMOD")
-    st.markdown(f"**Auto-generated Wound Module ID:** `{wound_module_id}`")
-
-    module_fk = st.selectbox("Module ID", module_ids) if module_ids else st.text_input("Module ID (Manual)")
-    wind_program_fk = st.selectbox("Wind Program ID", wind_program_ids) if wind_program_ids else st.text_input("Wind Program ID (Manual)")
-
-    operator_initials = st.text_input("Operator Initials")
-    notes_wound = st.text_area("Wound Module Notes")
-    mfg_db_wind = st.text_input("MFG DB Wind ID")
-    mfg_db_potting = st.text_input("MFG DB Potting ID")
-    mfg_db_mod = st.number_input("MFG DB Mod ID", step=1)
-
-    st.subheader("🔷 Wrap Per Module Entry")
-
-    wrap_per_module_pk = get_last_id(wrap_per_module_sheet, "WRAP")
-    st.markdown(f"**Auto-generated Wrap Per Module PK:** `{wrap_per_module_pk}`")
-
-    wrap_module_fk = st.selectbox("Module ID (Wrap)", module_ids) if module_ids else st.text_input("Module ID (Wrap Manual)")
-    wrap_after_layer = st.number_input("Wrap After Layer #", step=1)
-    type_of_wrap = st.text_input("Type of Wrap")
-    wrap_notes = st.text_area("Wrap Notes")
-
-    st.subheader("🔷 Spools Per Wind Entry")
-
-    spool_per_wind_pk = get_last_id(spools_per_wind_sheet, "SPOOL")
-    st.markdown(f"**Auto-generated Spool Per Wind PK:** `{spool_per_wind_pk}`")
-
-    mfg_db_wind_fk = st.text_input("MFG DB Wind ID (FK)")
-    coated_spool_id = st.text_input("Coated Spool ID")
-    length_used = st.number_input("Length Used (m)", format="%.2f")
-    spool_notes = st.text_area("Spool Notes")
-
-    submit_button = st.form_submit_button("🚀 Submit All Entries")
-
-    # ----------------- Wind Program Form -----------------
+# ----------------- WIND PROGRAM FORM -----------------
 st.subheader("🌬️ Wind Program Entry")
-
 with st.form("wind_program_form"):
     wind_program_id = get_last_id(wind_program_sheet, "WP")
     st.markdown(f"**Auto-generated Wind Program ID:** `{wind_program_id}`")
@@ -134,22 +93,55 @@ with st.form("wind_program_form"):
     notes = st.text_area("Notes")
 
     wind_submit = st.form_submit_button("➕ Submit Wind Program")
-
-
-
-# Save Entries
-if submit_button:
-    try:
-        wound_module_sheet.append_row([
-            wound_module_id, module_fk, wind_program_fk, operator_initials, notes_wound,
-            mfg_db_wind, mfg_db_potting, mfg_db_mod
+    if wind_submit:
+        wind_program_sheet.append_row([
+            wind_program_id, program_name, bundles, fibers_per_ribbon, spacing, wind_angle,
+            active_length, total_length, active_area, layers, loops_per_layer, area_layer, notes, str(datetime.today())
         ])
-        wrap_per_module_sheet.append_row([
-            wrap_per_module_pk, wrap_module_fk, wrap_after_layer, type_of_wrap, wrap_notes
-        ])
-        spools_per_wind_sheet.append_row([
-            spool_per_wind_pk, mfg_db_wind_fk, coated_spool_id, length_used, spool_notes
-        ])
-        st.success("✅ Data successfully saved in Wound, Wrap, and Spool tables!")
-    except Exception as e:
-        st.error(f"❌ Error saving data: {e}")
+        st.success(f"✅ Wind Program {wind_program_id} saved successfully!")
+
+# ----------------- 7-DAYS DATA PREVIEW -----------------
+st.subheader("📅 Records (Last 7 Days)")
+
+def filter_last_7_days(records, date_key):
+    """Filters records based on Date column, keeping only last 7 days."""
+    today = datetime.today()
+    filtered_records = []
+    for record in records:
+        date_str = record.get(date_key, "").strip()
+        try:
+            parsed_date = datetime.strptime(date_str, "%Y-%m-%d")
+            if parsed_date.date() >= (today - timedelta(days=7)).date():
+                filtered_records.append(record)
+        except ValueError:
+            pass  # Skip records with invalid dates
+    return filtered_records
+
+try:
+    wind_data = pd.DataFrame(wind_program_sheet.get_all_records())
+    wound_data = pd.DataFrame(wound_module_sheet.get_all_records())
+    wrap_data = pd.DataFrame(wrap_per_module_sheet.get_all_records())
+    spool_data = pd.DataFrame(spools_per_wind_sheet.get_all_records())
+
+    if not wind_data.empty:
+        st.subheader("🌬️ Wind Program Table (Last 7 Days)")
+        filtered_wind = filter_last_7_days(wind_data.to_dict(orient="records"), "Date_Time")
+        st.write(pd.DataFrame(filtered_wind) if filtered_wind else "No Wind Program records in the last 7 days.")
+
+    if not wound_data.empty:
+        st.subheader("🌀 Wound Module Table (Last 7 Days)")
+        filtered_wound = filter_last_7_days(wound_data.to_dict(orient="records"), "Date_Time")
+        st.write(pd.DataFrame(filtered_wound) if filtered_wound else "No Wound Module records in the last 7 days.")
+
+    if not wrap_data.empty:
+        st.subheader("🛡 Wrap Per Module Table (Last 7 Days)")
+        filtered_wrap = filter_last_7_days(wrap_data.to_dict(orient="records"), "Date_Time")
+        st.write(pd.DataFrame(filtered_wrap) if filtered_wrap else "No Wrap records in the last 7 days.")
+
+    if not spool_data.empty:
+        st.subheader("🎞 Spools Per Wind Table (Last 7 Days)")
+        filtered_spool = filter_last_7_days(spool_data.to_dict(orient="records"), "Date_Time")
+        st.write(pd.DataFrame(filtered_spool) if filtered_spool else "No Spool records in the last 7 days.")
+
+except Exception as e:
+    st.error(f"❌ Error loading recent data: {e}")
