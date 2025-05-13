@@ -177,8 +177,6 @@ with st.form("Ardent Fiber Dimension QC Form"):
         ])
         st.success(f"Ardent Fiber QC Entry with ID {ardent_qc_id} submitted successfully!")
 
-import pandas as pd
-from datetime import datetime, timedelta
 
 # ------------------ 7-DAYS DATA PREVIEW FOR ALL TABLES ------------------
 st.markdown("## Last 7 Days Data Preview")
