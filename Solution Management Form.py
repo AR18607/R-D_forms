@@ -252,7 +252,7 @@ if submit_combined:
         combined_notes
     ])
     st.success("✅ Combined Solution saved!")
-    
+
 def parse_date(date_val):
     """
     Attempt to convert a date value to a datetime object.
@@ -297,21 +297,45 @@ if recent_prep:
 else:
     st.write("No prep records in the last 7 days.")
 
-# Preview for last 7 days of Combined Solution Data with debugging
-st.markdown("### Last 7 Days - Combined Solution Data")
-combined_records = combined_sheet.get_all_records()
-recent_combined = []
-# Debug: Print raw records
-st.write("Raw Combined Sheet Data:", combined_records)
-for rec in combined_records:
-    # Print out keys and the date value for debugging.
-    st.write("Record keys:", list(rec.keys()))
-    c_date_str = rec.get("Date", "").strip()
-    parsed = parse_date(c_date_str)
-    st.write(f"Combined Date raw: '{c_date_str}', parsed: {parsed}")  # Debug output
-    if parsed and parsed >= (datetime.today() - timedelta(days=7)):
-        recent_combined.append(rec)
-if recent_combined:
-    st.write(pd.DataFrame(recent_combined))
+# ------------------ COMBINED SOLUTION DATA PREVIEW WITH TOGGLE ------------------
+st.markdown("## Combined Solution Data Preview")
+
+# Add a checkbox to toggle filtering on/off.
+show_all = st.checkbox("Show all Combined Solution records (unfiltered)", value=True)
+
+# Get all records from Combined Solution sheet.
+combined_all = combined_sheet.get_all_records()
+
+if not combined_all:
+    st.write("No records found in Combined Solution Data.")
 else:
-    st.write("No combined solution records in the last 7 days.")
+    st.write("### Raw Combined Data")
+    st.write(pd.DataFrame(combined_all))
+    
+    # Output raw details for debugging.
+    st.markdown("#### Debug Details for Each Combined Record")
+    for idx, rec in enumerate(combined_all):
+        st.write(f"Record #{idx+1}:")
+        st.write("  Keys:", list(rec.keys()))
+        c_date_raw = rec.get("Date", "").strip()
+        st.write("  Raw 'Date' value:", repr(c_date_raw))
+        # Try parsing the date using our function.
+        parsed_date = parse_date(c_date_raw)
+        st.write("  Parsed 'Date' value:", parsed_date)
+    
+    # If the user chooses to show only last 7 days, apply filtering.
+    if not show_all:
+        today = datetime.today()
+        recent_combined = []
+        for rec in combined_all:
+            c_date_raw = rec.get("Date", "").strip()
+            parsed_date = parse_date(c_date_raw)
+            if parsed_date and parsed_date.date() >= (today - timedelta(days=7)).date():
+                recent_combined.append(rec)
+        st.markdown("### Last 7 Days - Combined Solution Data (Filtered)")
+        if recent_combined:
+            st.write(pd.DataFrame(recent_combined))
+        else:
+            st.write("No combined solution records in the last 7 days after filtering.")
+    else:
+        st.markdown("### Showing All Combined Solution Records (No date filtering applied)")
