@@ -17,19 +17,19 @@ TAB_WRAP_PER_MODULE = "Wrap Per Module Tbl"
 TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
 
 
-
-def connect_google_sheet(sheet_name):
+# ----------------- CONNECT GOOGLE SHEETS -----------------
+def connect_google_sheet(sheet_key):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
-    client = gspread.authorize(creds)
     
     try:
-        sheet = client.open(sheet_name)
-        print(f"✅ Successfully connected to: {sheet_name}")
+        client = gspread.authorize(creds)  # Define 'client' here
+        sheet = client.open_by_key(sheet_key)  # Use the sheet key instead of name
+        st.write(f"✅ Successfully connected to: {sheet_key}")
         return sheet
     except gspread.exceptions.APIError as e:
-        print(f"❌ API Error: {e}")
-
+        st.error(f"❌ API Error: {e}")
+        return None  # Return None if connection fails
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
@@ -57,7 +57,10 @@ def fetch_column_values(worksheet, col_index=1):
 # ----------------- MAIN APP -----------------
 st.title("🌀 Winding Form")
 
-spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+SHEET_KEY = "1uPdUWiiwMdJCYJaxZ5TneFa9h6tbSrs327BVLT5GVPY"
+spreadsheet = connect_google_sheet(SHEET_KEY)
+
+
 
 # Create/Connect tabs
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
