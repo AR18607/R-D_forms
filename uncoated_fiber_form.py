@@ -3,6 +3,8 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import pandas as pd
+from datetime import datetime, timedelta
 
 # Set up Google Sheets API credentials
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -174,3 +176,61 @@ with st.form("Ardent Fiber Dimension QC Form"):
             inside_circularity, outside_circularity
         ])
         st.success(f"Ardent Fiber QC Entry with ID {ardent_qc_id} submitted successfully!")
+
+import pandas as pd
+from datetime import datetime, timedelta
+
+# ------------------ 7-DAYS DATA PREVIEW FOR ALL TABLES ------------------
+st.markdown("## Last 7 Days Data Preview")
+
+def parse_date(date_str):
+    """Converts date string to a datetime object, handling multiple formats."""
+    formats = ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"]
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str.strip(), fmt)
+        except ValueError:
+            continue
+    return None  # Return None if parsing fails
+
+def filter_last_7_days(records, date_key):
+    """Filters records where `date_key` is within the last 7 days."""
+    filtered_records = []
+    today = datetime.today()
+    for record in records:
+        date_str = record.get(date_key, "").strip()
+        parsed_date = parse_date(date_str)
+        if parsed_date and parsed_date.date() >= (today - timedelta(days=7)).date():
+            filtered_records.append(record)
+    return filtered_records
+
+# ------------------ Uncoated Fiber Data Tbl ------------------ #
+st.markdown("### Uncoated Fiber Data (Last 7 Days)")
+ufd_records = ufd_sheet.get_all_records()
+filtered_ufd = filter_last_7_days(ufd_records, "Date_Time")
+st.write(pd.DataFrame(filtered_ufd) if filtered_ufd else "No records in the last 7 days.")
+
+# ------------------ UnCoatedSpool ID Tbl ------------------ #
+st.markdown("### UnCoatedSpool ID (Last 7 Days)")
+usid_records = usid_sheet.get_all_records()
+filtered_usid = filter_last_7_days(usid_records, "Date_Time")
+st.write(pd.DataFrame(filtered_usid) if filtered_usid else "No records in the last 7 days.")
+
+# ------------------ As Received UnCoatedSpools Tbl ------------------ #
+st.markdown("### As Received UnCoatedSpools (Last 7 Days)")
+ar_records = ar_sheet.get_all_records()
+filtered_ar = filter_last_7_days(ar_records, "Date_Time")
+st.write(pd.DataFrame(filtered_ar) if filtered_ar else "No records in the last 7 days.")
+
+# ------------------ Combined Spools Tbl ------------------ #
+st.markdown("### Combined Spools (Last 7 Days)")
+cs_records = cs_sheet.get_all_records()
+filtered_cs = filter_last_7_days(cs_records, "Date_Time")
+st.write(pd.DataFrame(filtered_cs) if filtered_cs else "No records in the last 7 days.")
+
+# ------------------ Ardent Fiber Dimension QC Tbl ------------------ #
+st.markdown("### Ardent Fiber Dimension QC (Last 7 Days)")
+qc_records = qc_sheet.get_all_records()
+filtered_qc = filter_last_7_days(qc_records, "Date_Time")
+st.write(pd.DataFrame(filtered_qc) if filtered_qc else "No records in the last 7 days.")
+
