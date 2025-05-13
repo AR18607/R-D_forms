@@ -252,6 +252,24 @@ if submit_combined:
         combined_notes
     ])
     st.success("✅ Combined Solution saved!")
+    
+def parse_date(date_val):
+    """
+    Attempt to convert a date value to a datetime object.
+    If it's already a datetime instance, return it directly.
+    If it is a string, try converting using common formats.
+    """
+    if isinstance(date_val, datetime):
+        return date_val
+    elif isinstance(date_val, str):
+        # Remove extra spaces if any.
+        date_val = date_val.strip()
+        for fmt in ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"]:
+            try:
+                return datetime.strptime(date_val, fmt)
+            except Exception:
+                pass
+    return None
 
 # ------------------ 7 DAYS DATA PREVIEW (AT THE BOTTOM) ------------------
 st.markdown("## 7 Days Data Preview")
@@ -269,8 +287,9 @@ st.markdown("### Last 7 Days - Solution Prep Data")
 prep_records = prep_sheet.get_all_records()
 recent_prep = []
 for rec in prep_records:
-    pd_date_str = rec.get("Prep Date", "")
+    pd_date_str = rec.get("Prep Date", "").strip()
     parsed = parse_date(pd_date_str)
+    st.write(f"Prep Date raw: '{pd_date_str}', parsed: {parsed}")  # Debug output
     if parsed and parsed >= (datetime.today() - timedelta(days=7)):
         recent_prep.append(rec)
 if recent_prep:
@@ -278,13 +297,18 @@ if recent_prep:
 else:
     st.write("No prep records in the last 7 days.")
 
-# Preview for last 7 days of Combined Solution Data
+# Preview for last 7 days of Combined Solution Data with debugging
 st.markdown("### Last 7 Days - Combined Solution Data")
 combined_records = combined_sheet.get_all_records()
 recent_combined = []
+# Debug: Print raw records
+st.write("Raw Combined Sheet Data:", combined_records)
 for rec in combined_records:
-    c_date_str = rec.get("Date", "")
+    # Print out keys and the date value for debugging.
+    st.write("Record keys:", list(rec.keys()))
+    c_date_str = rec.get("Date", "").strip()
     parsed = parse_date(c_date_str)
+    st.write(f"Combined Date raw: '{c_date_str}', parsed: {parsed}")  # Debug output
     if parsed and parsed >= (datetime.today() - timedelta(days=7)):
         recent_combined.append(rec)
 if recent_combined:
