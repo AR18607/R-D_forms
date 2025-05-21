@@ -68,27 +68,30 @@ qc_sheet = get_or_create_tab(spreadsheet, TAB_SOLUTION_QC, [
 # Fetch existing Solution IDs
 existing_solution_ids = get_existing_solution_ids(spreadsheet)
 
-with st.form("solution_qc_form"):
+with st.form("solution_qc_form", clear_on_submit=False):
     st.subheader("📄 Enter Solution QC Data")
 
     qc_id = get_last_qc_id(qc_sheet)
     st.markdown(f"**Auto-generated QC ID:** `{qc_id}`")
 
-    if existing_solution_ids:
-        solution_id_fk = st.selectbox("Select Solution ID (FK)", existing_solution_ids)
-    else:
-        solution_id_fk = st.text_input("Solution ID (FK)", placeholder="Enter manually")
+    col1, col2 = st.columns(2)
 
-    test_date = st.date_input("Test Date")
-    dish_tare_mass = st.number_input("Dish Tare Mass (g)", format="%.2f")
-    initial_solution_mass = st.number_input("Initial Solution Mass (g)", format="%.2f")
-    final_dish_mass = st.number_input("Final Dish Mass (g)", format="%.2f")
-    operator_initials = st.text_input("Operator Initials")
-    notes = st.text_area("Notes")
-    qc_date = st.date_input("QC Date")
-    c_percent_solids = st.number_input("C-Percent Solids (%)", format="%.2f")
+    with col1:
+        solution_id_fk = st.selectbox("Select Solution ID (FK)", existing_solution_ids) if existing_solution_ids else st.text_input("Solution ID (FK)")
+        test_date = st.date_input("Test Date")
+        dish_tare_mass = st.number_input("Dish Tare Mass (g)", format="%.2f")
+        initial_solution_mass = st.number_input("Initial Solution Mass (g)", format="%.2f")
 
-    submit_button = st.form_submit_button("🚀 Submit")
+    with col2:
+        final_dish_mass = st.number_input("Final Dish Mass (g)", format="%.2f")
+        operator_initials = st.text_input("Operator Initials")
+        notes = st.text_area("Notes")
+        qc_date = st.date_input("QC Date")
+        c_percent_solids = st.number_input("C-Percent Solids (%)", format="%.2f")
+
+    st.divider()
+    submit_button = st.form_submit_button("🚀 Submit Solution QC Record")
+
 
 # ------------------ SAVE DATA ------------------
 
