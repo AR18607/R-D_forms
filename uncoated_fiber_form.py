@@ -43,7 +43,7 @@ ufd_headers = [
     "Outside_Diameter_Avg", "Outside_Diameter_StDev", "Reported_Concentricity", "Batch_Length",
     "Shipment_Date", "Tracking_Number", "Fiber_Source", "Average_t_OD", "Minimum_t_OD",
     "Minimum_Wall_Thickness", "Average_Wall_Thickness", "N2_Permeance", "Collapse_Pressure",
-    "Kink_Test_2_95", "Kink_Test_2_36", "Order_On_Bobbin", "Number_Of_Blue_Splices", "Notes"
+    "Kink_Test_2_95", "Kink_Test_2_36", "Order_On_Bobbin", "Number_Of_Blue_Splices","Date_Time", "Notes"
 ]
 
 ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", ufd_headers)
@@ -83,14 +83,14 @@ with st.form("Uncoated Fiber Data Form"):
             shipment_date.strftime("%Y-%m-%d"), tracking_number, fiber_source, average_t_od,
             minimum_t_od, minimum_wall_thickness, average_wall_thickness, n2_permeance,
             collapse_pressure, kink_test_2_95, kink_test_2_36, order_on_bobbin,
-            number_of_blue_splices, notes
+            number_of_blue_splices, notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ])
         st.success(f"Uncoated Fiber Data with ID {batch_fiber_id} submitted successfully!")
 
 # ------------------ UnCoatedSpool ID Tbl ------------------ #
 st.header("UnCoatedSpool ID Entry")
 
-usid_headers = ["UncoatedSpool_ID", "Type", "C_Length"]
+usid_headers = ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"]
 usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", usid_headers)
 
 with st.form("UnCoatedSpool ID Form"):
@@ -100,13 +100,13 @@ with st.form("UnCoatedSpool ID Form"):
     submitted = st.form_submit_button("Submit")
     if submitted:
         uncoated_spool_id = get_next_id(usid_sheet, "UncoatedSpool_ID")
-        usid_sheet.append_row([uncoated_spool_id, spool_type, c_length])
+        usid_sheet.append_row([uncoated_spool_id, spool_type, c_length , datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
         st.success(f"UnCoatedSpool ID {uncoated_spool_id} submitted successfully!")
 
 # ------------------ As Received UnCoatedSpools Tbl ------------------ #
 st.header("As Received UnCoatedSpools Entry")
 
-ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes"]
+ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes", "Date_Time"]
 ar_sheet = get_or_create_worksheet(spreadsheet, "As Received UnCoatedSpools Tbl", ar_headers)
 
 # Fetch existing UncoatedSpool_IDs and Batch_Fiber_IDs for dropdowns
@@ -121,13 +121,13 @@ with st.form("As Received UnCoatedSpools Form"):
     submitted = st.form_submit_button("Submit")
     if submitted:
         received_spool_pk = get_next_id(ar_sheet, "Received_Spool_PK")
-        ar_sheet.append_row([received_spool_pk, selected_uncoated_spool_id, selected_batch_fiber_id, notes])
+        ar_sheet.append_row([received_spool_pk, selected_uncoated_spool_id, selected_batch_fiber_id, notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
         st.success(f"As Received UnCoatedSpool with PK {received_spool_pk} submitted successfully!")
 
 # ------------------ Combined Spools Tbl ------------------ #
 st.header("Combined Spools Entry")
 
-cs_headers = ["Combined_SpoolsPK", "UncoatedSpool_ID", "Received_Spool_PK"]
+cs_headers = ["Combined_SpoolsPK", "UncoatedSpool_ID", "Received_Spool_PK", "Date_Time"]
 cs_sheet = get_or_create_worksheet(spreadsheet, "Combined Spools Tbl", cs_headers)
 
 # Fetch existing Received_Spool_PKs for dropdown
@@ -140,7 +140,7 @@ with st.form("Combined Spools Form"):
     submitted = st.form_submit_button("Submit")
     if submitted:
         combined_spools_pk = get_next_id(cs_sheet, "Combined_SpoolsPK")
-        cs_sheet.append_row([combined_spools_pk, selected_uncoated_spool_id, selected_received_spool_pk])
+        cs_sheet.append_row([combined_spools_pk, selected_uncoated_spool_id, selected_received_spool_pk, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
         st.success(f"Combined Spool with PK {combined_spools_pk} submitted successfully!")
 
 # ------------------ Ardent Fiber Dimension QC Tbl ------------------ #
