@@ -162,50 +162,48 @@ if submit_combined:
 
 st.divider()
 
-# ------------------ 7 DAYS DATA PREVIEW (ALL TABLES) ------------------
-st.markdown("## 📅 Last 7 Days Data Preview (All Tables)")
+# ------------------ 7-DAY FILTERED VIEW USING PREP DATE ------------------
+st.markdown("## 📅 Last 7 Days Data Preview (Based on Prep Date)")
 
-# --- Solution ID Table (only if it has a 'Created Date' column) ---
-st.markdown("### 📘 Solution ID Table (Last 7 Days Only)")
-solution_records = solution_sheet.get_all_records()
-recent_solution = []
-
-for rec in solution_records:
-    parsed = parse_date(rec.get("Created Date", "").strip())
-    if parsed and parsed >= datetime.today() - timedelta(days=7):
-        recent_solution.append(rec)
-
-if recent_solution:
-    st.dataframe(pd.DataFrame(recent_solution))
-else:
-    st.write("No Solution ID records in the last 7 days.")
-
-# --- Solution Prep Data (last 7 days) ---
-st.markdown("### 🧪 Solution Prep Data (Last 7 Days Only)")
+# Step 1: Build reference dictionary from Solution Prep Data Tbl
 prep_records = prep_sheet.get_all_records()
-recent_prep = []
+recent_solution_ids = set()
+recent_prep_ids = []
+today = datetime.today()
 
 for rec in prep_records:
     parsed = parse_date(rec.get("Prep Date", "").strip())
-    if parsed and parsed >= datetime.today() - timedelta(days=7):
-        recent_prep.append(rec)
+    if parsed and parsed >= today - timedelta(days=7):
+        recent_prep_ids.append(rec)
+        recent_solution_ids.add(rec.get("Solution ID (FK)", "").strip())
 
-if recent_prep:
-    st.dataframe(pd.DataFrame(recent_prep))
+# Step 2: Solution ID Table - show only those with IDs in recent_prep_ids
+st.markdown("### 📘 Solution ID Table (Filtered by Recent Prep)")
+solution_records = solution_sheet.get_all_records()
+filtered_solution_ids = [rec for rec in solution_records if rec.get("Solution ID", "").strip() in recent_solution_ids]
+
+if filtered_solution_ids:
+    st.dataframe(pd.DataFrame(filtered_solution_ids))
+else:
+    st.write("No recent Solution ID records based on prep activity.")
+
+# Step 3: Solution Prep Data Table - directly show recent entries
+st.markdown("### 🧪 Solution Prep Data (Last 7 Days Only)")
+if recent_prep_ids:
+    st.dataframe(pd.DataFrame(recent_prep_ids))
 else:
     st.write("No Solution Prep records in the last 7 days.")
 
-# --- Combined Solution Data (last 7 days) ---
-st.markdown("### 🧪 Combined Solution Data (Last 7 Days Only)")
+# Step 4: Combined Solution Table - filter if A or B used recently
+st.markdown("### 🧪 Combined Solution Data (Using Recently Prepped IDs)")
 combined_records = combined_sheet.get_all_records()
-recent_combined = []
-
-for rec in combined_records:
-    parsed = parse_date(rec.get("Date", "").strip())
-    if parsed and parsed >= datetime.today() - timedelta(days=7):
-        recent_combined.append(rec)
+recent_combined = [
+    rec for rec in combined_records
+    if rec.get("Solution ID A", "").strip() in recent_solution_ids or
+       rec.get("Solution ID B", "").strip() in recent_solution_ids
+]
 
 if recent_combined:
     st.dataframe(pd.DataFrame(recent_combined))
 else:
-    st.write("No Combined Solution records in the last 7 days.")
+    st.write("No Combined Solution records linked to recent prep entries.")
