@@ -33,11 +33,13 @@ def parse_date(date_val):
     if isinstance(date_val, datetime):
         return date_val
     elif isinstance(date_val, str):
-        try:
-            return datetime.strptime(date_val, "%Y-%m-%d")
-        except:
-            return None
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(date_val.strip(), fmt)
+            except:
+                continue
     return None
+
 
 def connect_google_sheet(sheet_key):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -160,26 +162,31 @@ if submit_combined:
 
 st.divider()
 
-# ------------------ 7 DAYS DATA PREVIEW (ONLY LAST 7 DAYS) ------------------
-st.markdown("## 📅 Last 7 Days Data Preview")
+# ------------------ 7 DAYS DATA PREVIEW (ALL TABLES) ------------------
+st.markdown("## 📅 Last 7 Days Data Preview (All Tables)")
 
-# Preview for Solution ID Table (all records, as there is no date field)
-st.markdown("### 📋 Solution ID Table (All Records)")
+# --- Solution ID Table (only if it has a 'Created Date' column) ---
+st.markdown("### 📘 Solution ID Table (Last 7 Days Only)")
 solution_records = solution_sheet.get_all_records()
-if solution_records:
-    st.write(pd.DataFrame(solution_records))
-else:
-    st.write("No Solution ID records found.")
+recent_solution = []
 
-# Preview for last 7 days of Solution Prep Data
+for rec in solution_records:
+    parsed = parse_date(rec.get("Created Date", "").strip())
+    if parsed and parsed >= datetime.today() - timedelta(days=7):
+        recent_solution.append(rec)
+
+if recent_solution:
+    st.dataframe(pd.DataFrame(recent_solution))
+else:
+    st.write("No Solution ID records in the last 7 days.")
+
+# --- Solution Prep Data (last 7 days) ---
 st.markdown("### 🧪 Solution Prep Data (Last 7 Days Only)")
 prep_records = prep_sheet.get_all_records()
 recent_prep = []
 
 for rec in prep_records:
-    pd_date_str = rec.get("Prep Date", "").strip()
-    parsed = parse_date(pd_date_str)
-    st.write(f"Prep Date raw: '{pd_date_str}', parsed: {parsed}")  # Debug output
+    parsed = parse_date(rec.get("Prep Date", "").strip())
     if parsed and parsed >= datetime.today() - timedelta(days=7):
         recent_prep.append(rec)
 
@@ -188,16 +195,14 @@ if recent_prep:
 else:
     st.write("No Solution Prep records in the last 7 days.")
 
-# Preview for last 7 days of Combined Solution Data
+# --- Combined Solution Data (last 7 days) ---
 st.markdown("### 🧪 Combined Solution Data (Last 7 Days Only)")
-combined_all = combined_sheet.get_all_records()
+combined_records = combined_sheet.get_all_records()
 recent_combined = []
 
-for rec in combined_all:
-    c_date_raw = rec.get("Date", "").strip()
-    parsed_date = parse_date(c_date_raw)
-    st.write(f"Combined Date raw: '{c_date_raw}', parsed: {parsed_date}")  # Debug output
-    if parsed_date and parsed_date >= datetime.today() - timedelta(days=7):
+for rec in combined_records:
+    parsed = parse_date(rec.get("Date", "").strip())
+    if parsed and parsed >= datetime.today() - timedelta(days=7):
         recent_combined.append(rec)
 
 if recent_combined:
