@@ -16,8 +16,8 @@ GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
 TAB_MODULE = "Module Tbl"
 TAB_WIND_PROGRAM = "Wind Program Tbl"
 TAB_WOUND_MODULE = "Wound Module Tbl"
-TAB_WRAP_PER_MODULE = "Wrap Per Module Tbl"
-TAB_SPOOLS_PER_WIND = "Spools Per Wind Tbl"
+TAB_WRAP_PER_MODULE = "Wrap per Module Tbl"
+TAB_SPOOLS_PER_WIND = "Spools per Wind Tbl"
 
 # ----------------- UTILS -----------------
 def connect_google_sheet(sheet_name):
