@@ -195,19 +195,23 @@ def parse_date(date_str):
 def filter_last_7_days(records, date_key, debug_title):
     filtered_records = []
     today = datetime.today()
+
     st.markdown(f"#### 🔍 Debug: {debug_title} — Checking '{date_key}'")
-
     for record in records:
-        date_str = record.get(date_key, "")
-        parsed_date = parse_date(date_str)
+        date_str = record.get(date_key, "").strip()
+        if not date_str:
+            continue  # Skip empty entries entirely
 
+        parsed_date = parse_date(date_str)
         included = parsed_date.date() >= (today - timedelta(days=7)).date() if parsed_date else False
+
         st.write({"Raw": date_str, "Parsed": str(parsed_date), "Included": included})
 
         if included:
             filtered_records.append(record)
 
     return filtered_records
+
 
 def safe_preview(title, data):
     st.markdown(f"### {title}")
