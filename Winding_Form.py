@@ -26,13 +26,18 @@ def connect_google_sheet(sheet_name):
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
-def get_or_create_tab(spreadsheet, tab_name, headers):
+def get_or_create_tab(sheet, tab_name, headers):
     try:
-        worksheet = spreadsheet.worksheet(tab_name)
+        worksheet = sheet.worksheet(tab_name)
     except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-        worksheet.insert_row(headers, 1)
+        try:
+            worksheet = sheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+            worksheet.insert_row(headers, 1)
+        except gspread.exceptions.APIError as e:
+            st.error(f"❌ Failed to create worksheet `{tab_name}`: {e}")
+            raise
     return worksheet
+
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
