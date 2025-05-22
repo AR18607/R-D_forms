@@ -182,20 +182,17 @@ with st.form("Ardent Fiber Dimension QC Form"):
 st.markdown("## 📅 Last 7 Days Data Preview")
 
 def parse_date(date_str):
-    """Converts date string to a datetime object, handling multiple formats."""
     formats = ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"]
     for fmt in formats:
         try:
             return datetime.strptime(date_str.strip(), fmt)
         except ValueError:
             continue
-    return None  # Return None if parsing fails
+    return None
 
 def filter_last_7_days(records, date_key, debug_title):
-    """Filters records where `date_key` is within the last 7 days, with debug logging."""
     filtered_records = []
     today = datetime.today()
-
     st.markdown(f"#### 🔍 Debug: {debug_title} — Checking '{date_key}'")
     for record in records:
         date_str = record.get(date_key, "").strip()
@@ -205,38 +202,51 @@ def filter_last_7_days(records, date_key, debug_title):
             "Parsed": str(parsed_date),
             "Included": parsed_date.date() >= (today - timedelta(days=7)).date() if parsed_date else False
         })
-
         if parsed_date and parsed_date.date() >= (today - timedelta(days=7)).date():
             filtered_records.append(record)
-
     return filtered_records
 
-# ------------------ Uncoated Fiber Data Tbl ------------------ #
+# 🔎 Uncoated Fiber Data
 st.markdown("### 🧪 Uncoated Fiber Data (Last 7 Days)")
 ufd_records = ufd_sheet.get_all_records()
 filtered_ufd = filter_last_7_days(ufd_records, "Date_Time", "Uncoated Fiber Data")
-st.dataframe(pd.DataFrame(filtered_ufd) if filtered_ufd else "No records in the last 7 days.")
+if filtered_ufd:
+    st.dataframe(pd.DataFrame(filtered_ufd))
+else:
+    st.write("No records in the last 7 days.")
 
-# ------------------ UnCoatedSpool ID Tbl ------------------ #
+# 🔎 UnCoatedSpool ID
 st.markdown("### 🧵 UnCoatedSpool ID (Last 7 Days)")
 usid_records = usid_sheet.get_all_records()
 filtered_usid = filter_last_7_days(usid_records, "Date_Time", "UnCoatedSpool ID")
-st.dataframe(pd.DataFrame(filtered_usid) if filtered_usid else "No records in the last 7 days.")
+if filtered_usid:
+    st.dataframe(pd.DataFrame(filtered_usid))
+else:
+    st.write("No records in the last 7 days.")
 
-# ------------------ As Received UnCoatedSpools Tbl ------------------ #
+# 🔎 As Received UnCoatedSpools
 st.markdown("### 📦 As Received UnCoatedSpools (Last 7 Days)")
 ar_records = ar_sheet.get_all_records()
 filtered_ar = filter_last_7_days(ar_records, "Date_Time", "As Received UnCoatedSpools")
-st.dataframe(pd.DataFrame(filtered_ar) if filtered_ar else "No records in the last 7 days.")
+if filtered_ar:
+    st.dataframe(pd.DataFrame(filtered_ar))
+else:
+    st.write("No records in the last 7 days.")
 
-# ------------------ Combined Spools Tbl ------------------ #
+# 🔎 Combined Spools
 st.markdown("### 🔗 Combined Spools (Last 7 Days)")
 cs_records = cs_sheet.get_all_records()
 filtered_cs = filter_last_7_days(cs_records, "Date_Time", "Combined Spools")
-st.dataframe(pd.DataFrame(filtered_cs) if filtered_cs else "No records in the last 7 days.")
+if filtered_cs:
+    st.dataframe(pd.DataFrame(filtered_cs))
+else:
+    st.write("No records in the last 7 days.")
 
-# ------------------ Ardent Fiber Dimension QC Tbl ------------------ #
+# 🔎 Ardent Fiber Dimension QC
 st.markdown("### 🧪 Ardent Fiber Dimension QC (Last 7 Days)")
 qc_records = qc_sheet.get_all_records()
 filtered_qc = filter_last_7_days(qc_records, "Date_Time", "Ardent Fiber Dimension QC")
-st.dataframe(pd.DataFrame(filtered_qc) if filtered_qc else "No records in the last 7 days.")
+if filtered_qc:
+    st.dataframe(pd.DataFrame(filtered_qc))
+else:
+    st.write("No records in the last 7 days.")
