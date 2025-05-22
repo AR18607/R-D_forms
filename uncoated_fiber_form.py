@@ -182,61 +182,34 @@ st.markdown("## 📅 Last 7 Days Data Preview")
 
 def parse_date(date_str):
     formats = ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"]
-    date_str = date_str.strip()
-    if not date_str:
-        return None  # Don't force "1900-01-01"
     for fmt in formats:
         try:
-            return datetime.strptime(date_str, fmt)
+            return datetime.strptime(date_str.strip(), fmt)
         except Exception:
             continue
     return None
 
-def filter_last_7_days(records, date_key, debug_title):
-    filtered_records = []
+def filter_last_7_days(records, date_key):
     today = datetime.today()
-
-    st.markdown(f"#### 🔍 Debug: {debug_title} — Checking '{date_key}'")
+    filtered_records = []
     for record in records:
         date_str = record.get(date_key, "").strip()
-        if not date_str:
-            continue  # Skip empty entries entirely
-
-        parsed_date = parse_date(date_str)
-        included = parsed_date.date() >= (today - timedelta(days=7)).date() if parsed_date else False
-
-        st.write({"Raw": date_str, "Parsed": str(parsed_date), "Included": included})
-
-        if included:
+        parsed = parse_date(date_str)
+        if parsed and parsed.date() >= (today - timedelta(days=7)).date():
             filtered_records.append(record)
-
     return filtered_records
 
-
-def safe_preview(title, data):
+def safe_preview(title, records, date_col):
     st.markdown(f"### {title}")
-    if data and len(data) > 0:
-        st.dataframe(pd.DataFrame(data))
+    filtered = filter_last_7_days(records, date_col)
+    if filtered:
+        st.dataframe(pd.DataFrame(filtered))
     else:
         st.write("No records in the last 7 days.")
 
-# Preview Each Table Safely
-ufd_records = ufd_sheet.get_all_records()
-filtered_ufd = filter_last_7_days(ufd_records, "Date_Time", "Uncoated Fiber Data")
-safe_preview("🧪 Uncoated Fiber Data (Last 7 Days)", filtered_ufd)
-
-usid_records = usid_sheet.get_all_records()
-filtered_usid = filter_last_7_days(usid_records, "Date_Time", "UnCoatedSpool ID")
-safe_preview("🧵 UnCoatedSpool ID (Last 7 Days)", filtered_usid)
-
-ar_records = ar_sheet.get_all_records()
-filtered_ar = filter_last_7_days(ar_records, "Date_Time", "As Received UncoatedSpools")
-safe_preview("📦 As Received UnCoatedSpools (Last 7 Days)", filtered_ar)
-
-cs_records = cs_sheet.get_all_records()
-filtered_cs = filter_last_7_days(cs_records, "Date_Time", "Combined Spools")
-safe_preview("🔗 Combined Spools (Last 7 Days)", filtered_cs)
-
-qc_records = qc_sheet.get_all_records()
-filtered_qc = filter_last_7_days(qc_records, "Date_Time", "Ardent Fiber Dimension QC")
-safe_preview("🧪 Ardent Fiber Dimension QC (Last 7 Days)", filtered_qc)
+# Preview all tables
+safe_preview("🧪 Uncoated Fiber Data", ufd_sheet.get_all_records(), "Date_Time")
+safe_preview("🧵 UnCoatedSpool ID", usid_sheet.get_all_records(), "Date_Time")
+safe_preview("📦 As Received UncoatedSpools", ar_sheet.get_all_records(), "Date_Time")
+safe_preview("🔗 Combined Spools", cs_sheet.get_all_records(), "Date_Time")
+safe_preview("🧪 Ardent Fiber Dimension QC", qc_sheet.get_all_records(), "Date_Time")
