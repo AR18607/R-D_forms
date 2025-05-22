@@ -28,15 +28,20 @@ def connect_google_sheet(sheet_name):
 
 def get_or_create_tab(sheet, tab_name, headers):
     try:
-        worksheet = sheet.worksheet(tab_name)
+        worksheet = sheet.worksheet(tab_name.strip())  # strip spaces just in case
+        existing_headers = worksheet.row_values(1)
+        if existing_headers != headers:
+            worksheet.clear()
+            worksheet.insert_row(headers, 1)
     except gspread.exceptions.WorksheetNotFound:
         try:
-            worksheet = sheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+            worksheet = sheet.add_worksheet(title=tab_name.strip(), rows="1000", cols="50")
             worksheet.insert_row(headers, 1)
         except gspread.exceptions.APIError as e:
-            st.error(f"❌ Failed to create worksheet `{tab_name}`: {e}")
+            st.error(f"❌ Cannot create tab `{tab_name}`: It already exists or name is invalid.\n\n{e}")
             raise
     return worksheet
+
 
 
 def get_last_id(worksheet, id_prefix):
