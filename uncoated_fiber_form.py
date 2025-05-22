@@ -182,9 +182,12 @@ st.markdown("## 📅 Last 7 Days Data Preview")
 
 def parse_date(date_str):
     formats = ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"]
+    date_str = date_str.strip()
+    if not date_str:
+        return None  # Don't force "1900-01-01"
     for fmt in formats:
         try:
-            return datetime.strptime(date_str.strip(), fmt)
+            return datetime.strptime(date_str, fmt)
         except Exception:
             continue
     return None
@@ -192,16 +195,11 @@ def parse_date(date_str):
 def filter_last_7_days(records, date_key, debug_title):
     filtered_records = []
     today = datetime.today()
-
     st.markdown(f"#### 🔍 Debug: {debug_title} — Checking '{date_key}'")
-    for record in records:
-        date_str = record.get(date_key, "").strip()
-        parsed_date = parse_date(date_str)
 
-        # If missing, force a placeholder so DataFrame doesn't crash
-        if not date_str:
-            record[date_key] = "1900-01-01 00:00:00"  # Mark it obviously old
-            parsed_date = parse_date(record[date_key])
+    for record in records:
+        date_str = record.get(date_key, "")
+        parsed_date = parse_date(date_str)
 
         included = parsed_date.date() >= (today - timedelta(days=7)).date() if parsed_date else False
         st.write({"Raw": date_str, "Parsed": str(parsed_date), "Included": included})
@@ -228,7 +226,7 @@ filtered_usid = filter_last_7_days(usid_records, "Date_Time", "UnCoatedSpool ID"
 safe_preview("🧵 UnCoatedSpool ID (Last 7 Days)", filtered_usid)
 
 ar_records = ar_sheet.get_all_records()
-filtered_ar = filter_last_7_days(ar_records, "Date_Time", "As Received UnCoatedSpools")
+filtered_ar = filter_last_7_days(ar_records, "Date_Time", "As Received UncoatedSpools")
 safe_preview("📦 As Received UnCoatedSpools (Last 7 Days)", filtered_ar)
 
 cs_records = cs_sheet.get_all_records()
