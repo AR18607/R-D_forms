@@ -94,27 +94,47 @@ if submit_failure:
     ])
     st.success(f"✅ Failure Entry {failure_id} saved successfully!")
 
-# ------------------ LEAK TEST FORM ------------------
-st.subheader("🔹 Leak Test Table")
-with st.form("leak_form"):
-    leak_id = get_last_id(leak_sheet, "LEAK")
-    leak_module_fk = st.selectbox("Module ID (Leak)", existing_module_ids)
-    leak_end = st.selectbox("End", ["Plug", "Nozzle"])
-    leak_test_type = st.selectbox("Leak Test Type", ["Water", "N2"])
-    leak_location = st.selectbox("Leak Location", ["Fiber", "Potting"])
-    leak_num = st.number_input("Number of Leaks", min_value=0)
-    repaired = st.selectbox("Repaired?", ["Yes", "No"])
-    leak_operator = st.text_input("Leak Operator Initials")
-    leak_notes = st.text_area("Leak Notes")
-    leak_date = st.date_input("Leak Date/Time")
-    submit_leak = st.form_submit_button("💧 Submit Leak Test Entry")
+# ------------------ LEAK TEST FORM (SUPPORT MULTIPLE ENTRIES) ------------------
+st.subheader("🔹 Leak Test Table (Multi-Entry)")
 
-if submit_leak:
-    leak_sheet.append_row([
-        leak_id, leak_module_fk, leak_end, leak_test_type, leak_location,
-        leak_num, repaired, leak_operator, leak_notes, str(leak_date)
-    ])
-    st.success(f"✅ Leak Test {leak_id} saved successfully!")
+if "leak_points" not in st.session_state:
+    st.session_state["leak_points"] = []
+
+leak_id = get_last_id(leak_sheet, "LEAK")
+leak_module_fk = st.selectbox("Module ID (Leak)", existing_module_ids)
+leak_end = st.selectbox("End", ["Plug", "Nozzle"])
+leak_test_type = st.selectbox("Leak Test Type", ["Water", "N2"])
+leak_operator = st.text_input("Operator Initials")
+leak_notes = st.text_area("Notes")
+leak_date = st.date_input("Leak Date/Time", value=datetime.today())
+
+st.markdown("### ➕ Add Leak Points")
+
+with st.form("add_leak_point_form"):
+    leak_location = st.selectbox("Leak Location", ["Fiber", "Potting"], key="location_entry")
+    repaired = st.selectbox("Repaired?", ["Yes", "No"], key="repaired_entry")
+    add_point = st.form_submit_button("➕ Add Leak Point")
+
+if add_point:
+    st.session_state["leak_points"].append({
+        "Leak Location": leak_location,
+        "Repaired": repaired
+    })
+    st.success("Leak point added.")
+
+if st.session_state["leak_points"]:
+    st.markdown("### 📋 Pending Leak Points")
+    st.dataframe(pd.DataFrame(st.session_state["leak_points"]))
+
+if st.button("💧 Submit All Leak Points"):
+    for point in st.session_state["leak_points"]:
+        leak_sheet.append_row([
+            leak_id, leak_module_fk, leak_end, leak_test_type, point["Leak Location"],
+            1, point["Repaired"], leak_operator, leak_notes, leak_date.strftime("%Y-%m-%d")
+        ])
+    st.success(f"✅ {len(st.session_state['leak_points'])} Leak Points saved under Leak ID {leak_id}")
+    st.session_state["leak_points"] = []  # clear after submit
+
 
 # ------------------ 7-DAYS DATA PREVIEW ------------------
 st.subheader("📅 Records (Last 7 Days)")
