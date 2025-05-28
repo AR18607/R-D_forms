@@ -17,7 +17,7 @@ PREP_HEADERS = [
     "Prep Date", "Initials", "Notes", "C-Solution Concentration", "C-Label for jar"
 ]
 COMBINED_HEADERS = [
-    "Combined ID", "Solution ID A", "Solution ID B",
+    "Combined Solution ID", "Solution ID A", "Solution ID B",
     "Solution Mass A", "Solution Mass B", "Date", "Initials", "Notes"
 ]
 
@@ -33,13 +33,11 @@ def parse_date(date_val):
     if isinstance(date_val, datetime):
         return date_val
     elif isinstance(date_val, str):
-        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
-            try:
-                return datetime.strptime(date_val.strip(), fmt)
-            except:
-                continue
+        try:
+            return datetime.strptime(date_val, "%Y-%m-%d")
+        except:
+            return None
     return None
-
 
 def connect_google_sheet(sheet_key):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -65,15 +63,7 @@ def get_last_id(worksheet, id_prefix):
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
 # --- Setup ---
-client = connect_google_sheet(SPREADSHEET_KEY)
-try:
-    spreadsheet = client.open_by_key(SPREADSHEET_KEY)
-    st.success("✅ Successfully connected to the spreadsheet!")
-    st.write("Sheets available:", [s.title for s in spreadsheet.worksheets()])
-except Exception as e:
-    st.error(f"❌ Failed to open sheet. Error: {e}")
-    st.stop()
-
+spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
 solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
 prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
 combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
@@ -169,6 +159,8 @@ if submit_combined:
     st.success("✅ Combined Solution saved!")
 
 st.divider()
+
+
 
 # ------------------ 7-DAY FILTERED VIEW USING PREP DATE ------------------
 st.markdown("## 📅 Last 7 Days Data Preview (Based on Prep Date)")
