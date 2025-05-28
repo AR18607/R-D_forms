@@ -40,7 +40,6 @@ def parse_date(date_val):
                 continue
     return None
 
-
 def connect_google_sheet(sheet_key):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(
@@ -75,7 +74,7 @@ existing_solution_ids = solution_sheet.col_values(1)[1:]
 st.markdown("## 🔹 Solution ID Entry")
 with st.form("solution_id_form"):
     solution_id = get_last_id(solution_sheet, "SOL")
-    st.markdown(f"**Auto-generated Solution ID:** {solution_id}")
+    st.markdown(f"**Auto-generated Solution ID:** `{solution_id}`")
     solution_type = st.selectbox("Type", ['New', 'Combined'])
     expired = st.selectbox("Expired?", ['Yes', 'No'])
     consumed = st.selectbox("Consumed?", ['Yes', 'No'])
@@ -100,7 +99,7 @@ else:
 
 with st.form("prep_data_form"):
     prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id(prep_sheet, "PREP")) if existing_record else get_last_id(prep_sheet, "PREP")
-    st.markdown(f"**Prep ID:** {prep_id}")
+    st.markdown(f"**Prep ID:** `{prep_id}`")
 
     def get_float(key): return float(safe_get(existing_record, key, 0.0)) if existing_record else 0.0
 
@@ -142,7 +141,7 @@ st.divider()
 st.markdown("## 🔹 Combined Solution Entry")
 with st.form("combined_solution_form"):
     combined_id = get_last_id(combined_sheet, "COMB")
-    st.markdown(f"**Auto-generated Combined ID:** {combined_id}")
+    st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
     solution_id_a = st.selectbox("Solution ID A", options=existing_solution_ids, key="comb_a")
     solution_id_b = st.selectbox("Solution ID B", options=existing_solution_ids, key="comb_b")
     solution_mass_a = st.number_input("Solution Mass A (g)", format="%.2f")
@@ -161,7 +160,6 @@ if submit_combined:
     st.success("✅ Combined Solution saved!")
 
 st.divider()
-
 
 # ------------------ 7-DAY FILTERED VIEW USING PREP DATE ------------------
 st.markdown("## 📅 Last 7 Days Data Preview (Based on Prep Date)")
@@ -208,6 +206,3 @@ if recent_combined:
     st.dataframe(pd.DataFrame(recent_combined))
 else:
     st.write("No Combined Solution records linked to recent prep entries.")
-
-
-
