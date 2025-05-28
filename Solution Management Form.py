@@ -65,7 +65,15 @@ def get_last_id(worksheet, id_prefix):
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
 # --- Setup ---
-spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
+client = connect_google_sheet(SPREADSHEET_KEY)
+try:
+    spreadsheet = client.open_by_key(SPREADSHEET_KEY)
+    st.success("✅ Successfully connected to the spreadsheet!")
+    st.write("Sheets available:", [s.title for s in spreadsheet.worksheets()])
+except Exception as e:
+    st.error(f"❌ Failed to open sheet. Error: {e}")
+    st.stop()
+
 solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
 prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
 combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
