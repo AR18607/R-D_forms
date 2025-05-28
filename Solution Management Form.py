@@ -40,15 +40,6 @@ def parse_date(date_val):
                 continue
     return None
 
-
-def connect_google_sheet(sheet_key):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        json.loads(st.secrets["gcp_service_account"]), scope)
-    client = gspread.authorize(creds)
-    return client.open_by_key(sheet_key)
-
-# --- Updated: Connect to Google Sheet Safely with Error Logging ---
 def connect_google_sheet(sheet_key):
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -56,22 +47,25 @@ def connect_google_sheet(sheet_key):
             json.loads(st.secrets["gcp_service_account"]), scope)
         client = gspread.authorize(creds)
         st.success("✅ Google Sheets authentication successful.")
-
-        # Try opening the spreadsheet
         spreadsheet = client.open_by_key(sheet_key)
         st.success(f"✅ Successfully opened sheet: `{spreadsheet.title}`")
         return spreadsheet
-
     except gspread.exceptions.APIError as api_err:
         st.error("🚨 Gspread APIError while accessing Google Sheet.")
         st.code(str(api_err), language="text")
         raise
-
     except Exception as e:
-        st.error("❌ Unexpected error while authenticating or opening the sheet.")
+        st.error("❌ Unexpected error while connecting to Google Sheet.")
         st.code(str(e), language="text")
         raise
 
+def get_or_create_tab(spreadsheet, tab_name, headers):
+    try:
+        worksheet = spreadsheet.worksheet(tab_name)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+        worksheet.insert_row(headers, 1)
+    return worksheet
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
@@ -84,23 +78,14 @@ def get_last_id(worksheet, id_prefix):
 # --- Setup ---
 try:
     spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
-
-except Exception as setup_error:
-    st.error("❌ Setup failed. Please check the error details above.")
-    st.code(str(setup_error), language="text")
-    st.stop()
-
-
-    # Create or fetch worksheets
     solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
     prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
     combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
-
-    # Cache existing Solution IDs
     existing_solution_ids = solution_sheet.col_values(1)[1:]
-
 except Exception as setup_error:
-    st.stop()  # Halts the app if setup fails
+    st.error("❌ Setup failed. Check the error above.")
+    st.code(str(setup_error), language="text")
+    st.stop()
 
 # --- Solution ID Form ---
 st.markdown("## 🔹 Solution ID Entry")
@@ -193,11 +178,8 @@ if submit_combined:
 
 st.divider()
 
-
-# ------------------ 7-DAY FILTERED VIEW USING PREP DATE ------------------
+# --- 7-DAY FILTERED VIEW ---
 st.markdown("## 📅 Last 7 Days Data Preview (Based on Prep Date)")
-
-# Step 1: Build reference dictionary from Solution Prep Data Tbl
 prep_records = prep_sheet.get_all_records()
 recent_solution_ids = set()
 recent_prep_ids = []
@@ -209,24 +191,20 @@ for rec in prep_records:
         recent_prep_ids.append(rec)
         recent_solution_ids.add(rec.get("Solution ID (FK)", "").strip())
 
-# Step 2: Solution ID Table - show only those with IDs in recent_prep_ids
 st.markdown("### 📘 Solution ID Table (Filtered by Recent Prep)")
 solution_records = solution_sheet.get_all_records()
 filtered_solution_ids = [rec for rec in solution_records if rec.get("Solution ID", "").strip() in recent_solution_ids]
-
 if filtered_solution_ids:
     st.dataframe(pd.DataFrame(filtered_solution_ids))
 else:
     st.write("No recent Solution ID records based on prep activity.")
 
-# Step 3: Solution Prep Data Table - directly show recent entries
 st.markdown("### 🧪 Solution Prep Data (Last 7 Days Only)")
 if recent_prep_ids:
     st.dataframe(pd.DataFrame(recent_prep_ids))
 else:
     st.write("No Solution Prep records in the last 7 days.")
 
-# Step 4: Combined Solution Table - filter if A or B used recently
 st.markdown("### 🧪 Combined Solution Data (Using Recently Prepped IDs)")
 combined_records = combined_sheet.get_all_records()
 recent_combined = [
@@ -234,7 +212,6 @@ recent_combined = [
     if rec.get("Solution ID A", "").strip() in recent_solution_ids or
        rec.get("Solution ID B", "").strip() in recent_solution_ids
 ]
-
 if recent_combined:
     st.dataframe(pd.DataFrame(recent_combined))
 else:
