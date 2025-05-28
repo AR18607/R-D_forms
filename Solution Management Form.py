@@ -219,21 +219,21 @@ if submit_combined:
 # ------------------ 7-DAY FILTERED VIEW USING PREP DATE ------------------
 st.markdown("## 📅 Last 7 Days Data Preview (Based on Prep Date)")
 
-prep_records = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
+# Step 1: Build reference dictionary from Solution Prep Data Tbl
+prep_records = prep_sheet.get_all_records()
 recent_solution_ids = set()
 recent_prep_ids = []
 today = datetime.today()
 
 for rec in prep_records:
-    prep_date_str = rec.get("Prep Date", "").strip()
-    prep_date = datetime.strptime(prep_date_str, "%Y-%m-%d") if prep_date_str else None
-    if prep_date and prep_date >= today - timedelta(days=7):
+    parsed = parse_date(rec.get("Prep Date", "").strip())
+    if parsed and parsed >= today - timedelta(days=7):
         recent_prep_ids.append(rec)
         recent_solution_ids.add(rec.get("Solution ID (FK)", "").strip())
 
-# Solution ID Table
+# Step 2: Solution ID Table - show only those with IDs in recent_prep_ids
 st.markdown("### 📘 Solution ID Table (Filtered by Recent Prep)")
-solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
+solution_records = solution_sheet.get_all_records()
 filtered_solution_ids = [rec for rec in solution_records if rec.get("Solution ID", "").strip() in recent_solution_ids]
 
 if filtered_solution_ids:
@@ -241,16 +241,16 @@ if filtered_solution_ids:
 else:
     st.write("No recent Solution ID records based on prep activity.")
 
-# Solution Prep Data Table
+# Step 3: Solution Prep Data Table - directly show recent entries
 st.markdown("### 🧪 Solution Prep Data (Last 7 Days Only)")
 if recent_prep_ids:
     st.dataframe(pd.DataFrame(recent_prep_ids))
 else:
     st.write("No Solution Prep records in the last 7 days.")
 
-# Combined Solution Table
+# Step 4: Combined Solution Table - filter if A or B used recently
 st.markdown("### 🧪 Combined Solution Data (Using Recently Prepped IDs)")
-combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
+combined_records = combined_sheet.get_all_records()
 recent_combined = [
     rec for rec in combined_records
     if rec.get("Solution ID A", "").strip() in recent_solution_ids or
