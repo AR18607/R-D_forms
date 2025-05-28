@@ -84,6 +84,11 @@ solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_H
 prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
 combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
 
+# --- Form Title ---
+st.markdown("# 📄 **Solution Management Form**")
+st.markdown("Manage creation, preparation, and combination of solutions.")
+
+
 existing_solution_ids = cached_col_values(SPREADSHEET_KEY, "Solution ID Tbl")
 
 # --- Solution ID Form ---
