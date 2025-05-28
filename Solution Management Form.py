@@ -33,11 +33,13 @@ def parse_date(date_val):
     if isinstance(date_val, datetime):
         return date_val
     elif isinstance(date_val, str):
-        try:
-            return datetime.strptime(date_val, "%Y-%m-%d")
-        except:
-            return None
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(date_val.strip(), fmt)
+            except:
+                continue
     return None
+
 
 def connect_google_sheet(sheet_key):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -159,7 +161,6 @@ if submit_combined:
     st.success("✅ Combined Solution saved!")
 
 st.divider()
-
 
 
 # ------------------ 7-DAY FILTERED VIEW USING PREP DATE ------------------
