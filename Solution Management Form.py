@@ -17,7 +17,7 @@ PREP_HEADERS = [
     "Prep Date", "Initials", "Notes", "C-Solution Concentration", "C-Label for jar"
 ]
 COMBINED_HEADERS = [
-    "Combined Solution ID", "Solution ID A", "Solution ID B",
+    "Combined ID", "Solution ID A", "Solution ID B",
     "Solution Mass A", "Solution Mass B", "Date", "Initials", "Notes"
 ]
 
