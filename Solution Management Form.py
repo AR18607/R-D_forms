@@ -40,24 +40,13 @@ def parse_date(date_val):
                 continue
     return None
 
+
 def connect_google_sheet(sheet_key):
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(
-            json.loads(st.secrets["gcp_service_account"]), scope)
-        client = gspread.authorize(creds)
-        st.success("✅ Google Sheets authentication successful.")
-        spreadsheet = client.open_by_key(sheet_key)
-        st.success(f"✅ Successfully opened sheet: `{spreadsheet.title}`")
-        return spreadsheet
-    except gspread.exceptions.APIError as api_err:
-        st.error("🚨 Gspread APIError while accessing Google Sheet.")
-        st.code(str(api_err), language="text")
-        raise
-    except Exception as e:
-        st.error("❌ Unexpected error while connecting to Google Sheet.")
-        st.code(str(e), language="text")
-        raise
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(
+        json.loads(st.secrets["gcp_service_account"]), scope)
+    client = gspread.authorize(creds)
+    return client.open_by_key(sheet_key)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
@@ -76,22 +65,17 @@ def get_last_id(worksheet, id_prefix):
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
 # --- Setup ---
-try:
-    spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
-    solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
-    prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
-    combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
-    existing_solution_ids = solution_sheet.col_values(1)[1:]
-except Exception as setup_error:
-    st.error("❌ Setup failed. Check the error above.")
-    st.code(str(setup_error), language="text")
-    st.stop()
+spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
+solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
+prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
+combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
+existing_solution_ids = solution_sheet.col_values(1)[1:]
 
 # --- Solution ID Form ---
 st.markdown("## 🔹 Solution ID Entry")
 with st.form("solution_id_form"):
     solution_id = get_last_id(solution_sheet, "SOL")
-    st.markdown(f"**Auto-generated Solution ID:** `{solution_id}`")
+    st.markdown(f"**Auto-generated Solution ID:** {solution_id}")
     solution_type = st.selectbox("Type", ['New', 'Combined'])
     expired = st.selectbox("Expired?", ['Yes', 'No'])
     consumed = st.selectbox("Consumed?", ['Yes', 'No'])
@@ -116,7 +100,7 @@ else:
 
 with st.form("prep_data_form"):
     prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id(prep_sheet, "PREP")) if existing_record else get_last_id(prep_sheet, "PREP")
-    st.markdown(f"**Prep ID:** `{prep_id}`")
+    st.markdown(f"**Prep ID:** {prep_id}")
 
     def get_float(key): return float(safe_get(existing_record, key, 0.0)) if existing_record else 0.0
 
@@ -158,7 +142,7 @@ st.divider()
 st.markdown("## 🔹 Combined Solution Entry")
 with st.form("combined_solution_form"):
     combined_id = get_last_id(combined_sheet, "COMB")
-    st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
+    st.markdown(f"**Auto-generated Combined ID:** {combined_id}")
     solution_id_a = st.selectbox("Solution ID A", options=existing_solution_ids, key="comb_a")
     solution_id_b = st.selectbox("Solution ID B", options=existing_solution_ids, key="comb_b")
     solution_mass_a = st.number_input("Solution Mass A (g)", format="%.2f")
@@ -178,8 +162,11 @@ if submit_combined:
 
 st.divider()
 
-# --- 7-DAY FILTERED VIEW ---
+
+# ------------------ 7-DAY FILTERED VIEW USING PREP DATE ------------------
 st.markdown("## 📅 Last 7 Days Data Preview (Based on Prep Date)")
+
+# Step 1: Build reference dictionary from Solution Prep Data Tbl
 prep_records = prep_sheet.get_all_records()
 recent_solution_ids = set()
 recent_prep_ids = []
@@ -191,20 +178,24 @@ for rec in prep_records:
         recent_prep_ids.append(rec)
         recent_solution_ids.add(rec.get("Solution ID (FK)", "").strip())
 
+# Step 2: Solution ID Table - show only those with IDs in recent_prep_ids
 st.markdown("### 📘 Solution ID Table (Filtered by Recent Prep)")
 solution_records = solution_sheet.get_all_records()
 filtered_solution_ids = [rec for rec in solution_records if rec.get("Solution ID", "").strip() in recent_solution_ids]
+
 if filtered_solution_ids:
     st.dataframe(pd.DataFrame(filtered_solution_ids))
 else:
     st.write("No recent Solution ID records based on prep activity.")
 
+# Step 3: Solution Prep Data Table - directly show recent entries
 st.markdown("### 🧪 Solution Prep Data (Last 7 Days Only)")
 if recent_prep_ids:
     st.dataframe(pd.DataFrame(recent_prep_ids))
 else:
     st.write("No Solution Prep records in the last 7 days.")
 
+# Step 4: Combined Solution Table - filter if A or B used recently
 st.markdown("### 🧪 Combined Solution Data (Using Recently Prepped IDs)")
 combined_records = combined_sheet.get_all_records()
 recent_combined = [
@@ -212,7 +203,11 @@ recent_combined = [
     if rec.get("Solution ID A", "").strip() in recent_solution_ids or
        rec.get("Solution ID B", "").strip() in recent_solution_ids
 ]
+
 if recent_combined:
     st.dataframe(pd.DataFrame(recent_combined))
 else:
     st.write("No Combined Solution records linked to recent prep entries.")
+
+
+
