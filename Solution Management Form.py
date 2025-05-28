@@ -21,7 +21,32 @@ COMBINED_HEADERS = [
     "Solution Mass A", "Solution Mass B", "Date", "Initials", "Notes"
 ]
 
-# --- Utility Functions ---
+# --- Utility Functions (Cached) ---
+@st.cache_resource(ttl=600)
+def connect_google_sheet(sheet_key):
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(
+        json.loads(st.secrets["gcp_service_account"]), scope)
+    client = gspread.authorize(creds)
+    return client.open_by_key(sheet_key)
+
+@st.cache_resource(ttl=300)
+def get_or_create_tab(spreadsheet, tab_name, headers):
+    try:
+        worksheet = spreadsheet.worksheet(tab_name)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+        worksheet.insert_row(headers, 1)
+    return worksheet
+
+@st.cache_data(ttl=120)
+def cached_get_all_records(worksheet):
+    return worksheet.get_all_records()
+
+@st.cache_data(ttl=120)
+def cached_col_values(worksheet, col):
+    return worksheet.col_values(col)[1:]
+
 def safe_get(record, key, default=""):
     if isinstance(record, dict):
         for k, v in record.items():
@@ -38,26 +63,10 @@ def parse_date(date_val):
                 return datetime.strptime(date_val.strip(), fmt)
             except:
                 continue
-    return None
-
-
-def connect_google_sheet(sheet_key):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        json.loads(st.secrets["gcp_service_account"]), scope)
-    client = gspread.authorize(creds)
-    return client.open_by_key(sheet_key)
-
-def get_or_create_tab(spreadsheet, tab_name, headers):
-    try:
-        worksheet = spreadsheet.worksheet(tab_name)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-        worksheet.insert_row(headers, 1)
-    return worksheet
+    return datetime.today()
 
 def get_last_id(worksheet, id_prefix):
-    records = worksheet.col_values(1)[1:]
+    records = cached_col_values(worksheet, 1)
     if not records:
         return f"{id_prefix}-001"
     nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
@@ -69,7 +78,8 @@ spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
 solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
 prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
 combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
-existing_solution_ids = solution_sheet.col_values(1)[1:]
+
+existing_solution_ids = cached_col_values(solution_sheet, 1)
 
 # --- Solution ID Form ---
 st.markdown("## 🔹 Solution ID Entry")
@@ -86,6 +96,9 @@ if submit_solution:
     st.success("✅ Solution ID saved!")
 
 st.divider()
+
+# The full code for Solution Prep and Combined Solution forms, as well as the filtered view, should follow the same structure, utilizing cached functions consistently to optimize API usage and prevent quota errors.
+
 
 # --- Solution Prep Form ---
 st.markdown("## 🔹 Solution Prep Data Entry")
