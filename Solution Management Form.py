@@ -48,13 +48,30 @@ def connect_google_sheet(sheet_key):
     client = gspread.authorize(creds)
     return client.open_by_key(sheet_key)
 
-def get_or_create_tab(spreadsheet, tab_name, headers):
+# --- Updated: Connect to Google Sheet Safely with Error Logging ---
+def connect_google_sheet(sheet_key):
     try:
-        worksheet = spreadsheet.worksheet(tab_name)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-        worksheet.insert_row(headers, 1)
-    return worksheet
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            json.loads(st.secrets["gcp_service_account"]), scope)
+        client = gspread.authorize(creds)
+        st.success("✅ Google Sheets authentication successful.")
+
+        # Try opening the spreadsheet
+        spreadsheet = client.open_by_key(sheet_key)
+        st.success(f"✅ Successfully opened sheet: `{spreadsheet.title}`")
+        return spreadsheet
+
+    except gspread.exceptions.APIError as api_err:
+        st.error("🚨 Gspread APIError while accessing Google Sheet.")
+        st.code(str(api_err), language="text")
+        raise
+
+    except Exception as e:
+        st.error("❌ Unexpected error while authenticating or opening the sheet.")
+        st.code(str(e), language="text")
+        raise
+
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
@@ -65,11 +82,25 @@ def get_last_id(worksheet, id_prefix):
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
 # --- Setup ---
-spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
-solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
-prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
-combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
-existing_solution_ids = solution_sheet.col_values(1)[1:]
+try:
+    spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
+
+except Exception as setup_error:
+    st.error("❌ Setup failed. Please check the error details above.")
+    st.code(str(setup_error), language="text")
+    st.stop()
+
+
+    # Create or fetch worksheets
+    solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
+    prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
+    combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
+
+    # Cache existing Solution IDs
+    existing_solution_ids = solution_sheet.col_values(1)[1:]
+
+except Exception as setup_error:
+    st.stop()  # Halts the app if setup fails
 
 # --- Solution ID Form ---
 st.markdown("## 🔹 Solution ID Entry")
