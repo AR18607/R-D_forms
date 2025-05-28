@@ -104,6 +104,7 @@ st.divider()
 
 # --- Solution Prep Form ---
 st.markdown("## 🔹 Solution Prep Data Entry")
+
 selected_solution_fk = st.selectbox("Select Solution ID", options=existing_solution_ids, key="prep_solution_fk")
 prep_entries = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
 existing_record = next((r for r in prep_entries if r.get("Solution ID (FK)", "") == selected_solution_fk), None)
@@ -114,23 +115,58 @@ else:
     st.info("🟢 No prep entry found. Enter new details.")
 
 with st.form("prep_data_form"):
-    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(cached_col_values(SPREADSHEET_KEY, "Solution Prep Data Tbl"), "PREP"))
+    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(
+        [r["Solution Prep ID"] for r in prep_entries if "Solution Prep ID" in r], "PREP"
+    ))
+
     st.markdown(f"**Prep ID:** `{prep_id}`")
 
-    desired_conc = st.number_input("Desired Solution Concentration (%)", format="%.2f")
-    final_volume = st.number_input("Desired Final Volume", format="%.1f")
-    solvent = st.selectbox("Solvent", ['IPA', 'EtOH', 'Heptane', 'Novec 7300'])
-    solvent_lot = st.text_input("Solvent Lot Number")
-    solvent_weight = st.number_input("Solvent Weight Measured (g)", format="%.2f")
-    polymer = st.selectbox("Polymer", ['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'])
-    polymer_conc = st.number_input("Polymer starting concentration (%)", format="%.2f")
-    polymer_lot = st.text_input("Polymer Lot Number")
-    polymer_weight = st.number_input("Polymer Weight Measured (g)", format="%.2f")
-    prep_date = st.date_input("Prep Date")
-    initials = st.text_input("Initials")
-    notes = st.text_area("Notes")
-    c_sol_conc = st.number_input("C-Solution Concentration", format="%.2f")
-    c_label_jar = st.text_input("C-Label for jar")
+    desired_conc = st.number_input(
+        "Desired Solution Concentration (%)",
+        value=float(safe_get(existing_record, "Desired Solution Concentration", 0.0)),
+        format="%.2f"
+    )
+    final_volume = st.number_input(
+        "Desired Final Volume",
+        value=float(safe_get(existing_record, "Desired Final Volume", 0.0)),
+        format="%.1f"
+    )
+    solvent = st.selectbox("Solvent", ['IPA', 'EtOH', 'Heptane', 'Novec 7300'],
+        index=['IPA', 'EtOH', 'Heptane', 'Novec 7300'].index(safe_get(existing_record, "Solvent", "IPA")) if existing_record else 0
+    )
+    solvent_lot = st.text_input("Solvent Lot Number", value=safe_get(existing_record, "Solvent Lot Number", ""))
+    solvent_weight = st.number_input("Solvent Weight Measured (g)",
+        value=float(safe_get(existing_record, "Solvent Weight Measured (g)", 0.0)),
+        format="%.2f"
+    )
+    polymer = st.selectbox("Polymer", ['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'],
+        index=['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'].index(safe_get(existing_record, "Polymer", "CMS-72")) if existing_record else 0
+    )
+    polymer_conc = st.number_input("Polymer starting concentration (%)",
+        value=float(safe_get(existing_record, "Polymer starting concentration", 0.0)),
+        format="%.2f"
+    )
+    polymer_lot = st.text_input("Polymer Lot Number", value=safe_get(existing_record, "Polymer Lot Number", ""))
+    polymer_weight = st.number_input("Polymer Weight Measured (g)",
+        value=float(safe_get(existing_record, "Polymer Weight Measured (g)", 0.0)),
+        format="%.2f"
+    )
+
+    prep_date_str = safe_get(existing_record, "Prep Date")
+    try:
+        prep_date = datetime.strptime(prep_date_str, "%Y-%m-%d").date() if prep_date_str else datetime.today().date()
+    except:
+        prep_date = datetime.today().date()
+
+    prep_date = st.date_input("Prep Date", value=prep_date)
+
+    initials = st.text_input("Initials", value=safe_get(existing_record, "Initials", ""))
+    notes = st.text_area("Notes", value=safe_get(existing_record, "Notes", ""))
+    c_sol_conc = st.number_input("C-Solution Concentration",
+        value=float(safe_get(existing_record, "C-Solution Concentration", 0.0)),
+        format="%.2f"
+    )
+    c_label_jar = st.text_input("C-Label for jar", value=safe_get(existing_record, "C-Label for jar", ""))
 
     submit_prep = st.form_submit_button("Submit/Update Prep Details")
 
@@ -140,16 +176,18 @@ if submit_prep:
         solvent_weight, polymer, polymer_conc, polymer_lot, polymer_weight, str(prep_date),
         initials, notes, c_sol_conc, c_label_jar
     ]
-    if existing_record:
-        cell = prep_sheet.find(selected_solution_fk)
-        row_number = cell.row
-        prep_sheet.update(f"A{row_number}:P{row_number}", [data])
-        st.success("✅ Prep Data updated!")
-    else:
-        prep_sheet.append_row(data)
-        st.success("✅ Prep Data submitted!")
+    try:
+        if existing_record:
+            cell = prep_sheet.find(selected_solution_fk)
+            row_number = cell.row
+            prep_sheet.update(f"A{row_number}:P{row_number}", [data])
+            st.success("✅ Prep Data updated!")
+        else:
+            prep_sheet.append_row(data)
+            st.success("✅ Prep Data submitted!")
+    except Exception as e:
+        st.error(f"❌ Error while writing to Google Sheet: {e}")
 
-st.divider()
 
 # --- Combined Solution Form ---
 st.markdown("## 🔹 Combined Solution Entry")
