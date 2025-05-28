@@ -77,6 +77,17 @@ def safe_get(record, key, default=""):
                 return v
     return default
 
+def parse_date(date_val):
+    if isinstance(date_val, datetime):
+        return date_val
+    elif isinstance(date_val, str):
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(date_val.strip(), fmt)
+            except:
+                continue
+    return None
+
 
 # --- Setup ---
 spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
