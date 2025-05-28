@@ -5,6 +5,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
 from datetime import datetime, timedelta
+import time
 
 # --- Configuration ---
 SPREADSHEET_KEY = "1uPdUWiiwMdJCYJaxZ5TneFa9h6tbSrs327BVLT5GVPY"
@@ -30,10 +31,20 @@ def connect_google_sheet(sheet_key):
     client = gspread.authorize(creds)
     return client.open_by_key(sheet_key)
 
-# Do not cache this function
+def retry_open_worksheet(spreadsheet, tab_name, retries=3, wait=2):
+    for i in range(retries):
+        try:
+            return spreadsheet.worksheet(tab_name)
+        except gspread.exceptions.APIError as e:
+            if i < retries - 1:
+                time.sleep(wait)
+            else:
+                st.error(f"🚨 API Error while accessing tab `{tab_name}`: {str(e)}")
+                st.stop()
+
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
-        worksheet = spreadsheet.worksheet(tab_name)
+        worksheet = retry_open_worksheet(spreadsheet, tab_name)
     except gspread.exceptions.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
         worksheet.insert_row(headers, 1)
@@ -42,13 +53,13 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
 @st.cache_data(ttl=120)
 def cached_col_values(sheet_key, tab_name, col=1):
     spreadsheet = connect_google_sheet(sheet_key)
-    worksheet = spreadsheet.worksheet(tab_name)
+    worksheet = retry_open_worksheet(spreadsheet, tab_name)
     return worksheet.col_values(col)[1:]
 
 @st.cache_data(ttl=120)
 def cached_get_all_records(sheet_key, tab_name):
     spreadsheet = connect_google_sheet(sheet_key)
-    worksheet = spreadsheet.worksheet(tab_name)
+    worksheet = retry_open_worksheet(spreadsheet, tab_name)
     return worksheet.get_all_records()
 
 # Uncached function for generating IDs
@@ -58,6 +69,14 @@ def get_last_id_from_records(records, id_prefix):
     nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
     next_num = max(nums) + 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
+
+def safe_get(record, key, default=""):
+    if isinstance(record, dict):
+        for k, v in record.items():
+            if k.strip().lower() == key.strip().lower():
+                return v
+    return default
+
 
 # --- Setup ---
 spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
