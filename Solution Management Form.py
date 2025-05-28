@@ -30,7 +30,7 @@ def connect_google_sheet(sheet_key):
     client = gspread.authorize(creds)
     return client.open_by_key(sheet_key)
 
-@st.cache_resource(ttl=300)
+# Removed caching from get_or_create_tab due to unhashable parameter issue
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
@@ -97,7 +97,7 @@ if submit_solution:
 
 st.divider()
 
-# The full code for Solution Prep and Combined Solution forms, as well as the filtered view, should follow the same structure, utilizing cached functions consistently to optimize API usage and prevent quota errors.
+# Ensure the remaining forms also use non-cached `get_or_create_tab` consistently, while keeping caching on other data retrieval methods to optimize API usage.
 
 
 # --- Solution Prep Form ---
