@@ -156,15 +156,29 @@ st.subheader("📅 Records (Last 7 Days)")
 
 def filter_last_7_days(records, date_key):
     today = datetime.today()
+    cutoff_date = today - timedelta(days=7)
     filtered_records = []
+
     for record in records:
         date_str = record.get(date_key, "").strip()
-        try:
-            parsed_date = datetime.strptime(date_str, "%Y-%m-%d")
-            if parsed_date.date() >= (today - timedelta(days=7)).date():
-                filtered_records.append(record)
-        except Exception:
+        if not date_str:
+            continue  # skip empty date
+
+        parsed_date = None
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y"):
+            try:
+                parsed_date = datetime.strptime(date_str, fmt)
+                break
+            except ValueError:
+                continue
+
+        if not parsed_date:
+            st.warning(f"⚠️ Skipping record with invalid date: {record}")
             continue
+
+        if parsed_date.date() >= cutoff_date.date():
+            filtered_records.append(record)
+
     return filtered_records
 
 
