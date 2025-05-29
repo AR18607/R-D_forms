@@ -91,7 +91,9 @@ if submit_module:
 # ------------------ MODULE FAILURE FORM ------------------
 st.subheader("🔹 Module Failure Table")
 with st.form("failure_form"):
-    failure_id = get_last_id(failure_sheet, "FAIL")
+    #failure_id = get_last_id(failure_sheet, "FAIL")
+    failure_id = get_cached_col_values(failure_sheet, 1)[1:]
+
     failure_module_fk = st.selectbox("Module ID (Failure)", existing_module_ids)
     failure_description = st.text_area("Failure Description")
     autopsy = st.selectbox("Autopsy Done?", ["Yes", "No"])
