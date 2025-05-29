@@ -155,35 +155,17 @@ if st.button("💧 Submit All Leak Points"):
 st.subheader("📅 Records (Last 7 Days)")
 
 def filter_last_7_days(records, date_key):
-    today = datetime.today().date()
+    today = datetime.today()
     filtered_records = []
-
     for record in records:
-        date_str = str(record.get(date_key, "")).strip()
-        parsed_date = None
-
-        # Debugging
-        if date_str == "":
-            st.write("⚠️ Skipping record with empty date:", record)
+        date_str = record.get(date_key, "").strip()
+        try:
+            parsed_date = datetime.strptime(date_str, "%Y-%m-%d")
+            if parsed_date.date() >= (today - timedelta(days=7)).date():
+                filtered_records.append(record)
+        except Exception:
             continue
-
-        # Attempt to parse using known formats
-        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"):
-            try:
-                parsed_date = datetime.strptime(date_str, fmt).date()
-                break
-            except ValueError:
-                continue
-
-        if not parsed_date:
-            st.write(f"⚠️ Unrecognized date format: '{date_str}' in record:", record)
-            continue
-
-        if parsed_date >= today - timedelta(days=7):
-            filtered_records.append(record)
-
     return filtered_records
-
 
 
 try:
@@ -191,20 +173,28 @@ try:
     failure_data = pd.DataFrame(get_all_records_cached(TAB_FAILURES))
     leak_data = pd.DataFrame(get_all_records_cached(TAB_LEAK))
 
+    # Show Module Table fully (no date filtering needed)
     if not module_data.empty:
         st.subheader("📦 Module Table")
         st.dataframe(module_data)
 
+    # Only apply date filter to failure table
     if not failure_data.empty:
         st.subheader("🚨 Module Failures Table (Last 7 Days)")
         filtered_failure = filter_last_7_days(failure_data.to_dict(orient="records"), "Date")
-        st.write(pd.DataFrame(filtered_failure) if filtered_failure else "No failure records in the last 7 days.")
+        if filtered_failure:
+            st.dataframe(pd.DataFrame(filtered_failure))
+        else:
+            st.info("No failure records in the last 7 days.")
 
+    # Only apply date filter to leak test table
     if not leak_data.empty:
         st.subheader("💧 Leak Test Table (Last 7 Days)")
         filtered_leak = filter_last_7_days(leak_data.to_dict(orient="records"), "Date/Time")
-        st.write(pd.DataFrame(filtered_leak) if filtered_leak else "No leak test records in the last 7 days.")
+        if filtered_leak:
+            st.dataframe(pd.DataFrame(filtered_leak))
+        else:
+            st.info("No leak test records in the last 7 days.")
 
 except Exception as e:
     st.error(f"❌ Error loading recent data: {e}")
-
