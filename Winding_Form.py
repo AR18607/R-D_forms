@@ -43,8 +43,12 @@ def fetch_column_values(worksheet, col_index=1):
 
 def filter_last_7_days(records, date_key):
     today = datetime.today()
-    return [r for r in records if date_key in r and r[date_key] and \
-            datetime.strptime(r[date_key], "%Y-%m-%d").date() >= (today - timedelta(days=7)).date()]
+    return [
+        r for r in records
+        if date_key in r and r[date_key] and
+        datetime.strptime(r[date_key], "%Y-%m-%d").date() >= (today - timedelta(days=7)).date()
+    ]
+
 
 # ----------------- CONNECT SHEETS -----------------
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
@@ -169,3 +173,29 @@ if spools_submit:
         spools_date.strftime("%Y-%m-%d")
     ])
     st.success(f"✅ Spool Entry `{spools_id}` saved.")
+
+
+# ------------------ 7-DAY DATA REVIEW ------------------
+st.subheader("📅 Last 7 Days Entries")
+
+try:
+    review_sections = {
+        "🧵 Wound Modules": (wound_module_sheet, "Date"),
+        "🎁 Wrap Per Module": (wrap_per_module_sheet, "Date"),
+        "🧪 Spools Per Wind": (spools_per_wind_sheet, "Date"),
+    }
+
+    for label, (sheet, date_col) in review_sections.items():
+        st.markdown(f"### {label}")
+        df = pd.DataFrame(sheet.get_all_records())
+        if not df.empty:
+            filtered = filter_last_7_days(df.to_dict(orient="records"), date_col)
+            if filtered:
+                st.dataframe(pd.DataFrame(filtered))
+            else:
+                st.info("No entries in the last 7 days.")
+        else:
+            st.info("No data found.")
+
+except Exception as e:
+    st.error(f"❌ Error during 7-day review: {e}")
