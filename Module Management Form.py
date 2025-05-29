@@ -42,10 +42,8 @@ def get_cached_col_values(_worksheet_name, col_index):
 def get_last_id(_worksheet_name, prefix):
     try:
         records = get_cached_col_values(_worksheet_name, 1)[1:]
-        if not records:
-            return f"{prefix}-001"
-        nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix)]
-        next_num = max(nums) + 1
+        nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix) and r.split('-')[-1].isdigit()]
+        next_num = max(nums) + 1 if nums else 1
         return f"{prefix}-{str(next_num).zfill(3)}"
     except Exception as e:
         st.error(f"⚠️ Failed to generate ID: {e}")
