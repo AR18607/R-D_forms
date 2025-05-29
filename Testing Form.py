@@ -3,21 +3,18 @@ import pandas as pd
 import gspread
 import json
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-from uuid import uuid4
+from datetime import datetime, timedelta
+import uuid
 
 # ---------------- CONFIGURATION ----------------
-
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_MODULE = "Module Tbl"
 TAB_PRESSURE_TEST = "Pressure Test Tbl"
 
-# ---------------- CONNECTION FUNCTIONS ----------------
-
+# ---------------- GOOGLE SHEETS FUNCTIONS ----------------
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        json.loads(st.secrets["gcp_service_account"]), scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
@@ -29,86 +26,87 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-def get_last_id(worksheet, id_prefix):
-    records = worksheet.col_values(1)[1:]  # Skip header
-    nums = []
-    for r in records:
-        if r.startswith(id_prefix):
-            try:
-                nums.append(int(r.split('-')[-1]))
-            except Exception:
-                continue
-    if not nums:
-        return f"{id_prefix}-001"
-    next_num = max(nums) + 1
-    return f"{id_prefix}-{str(next_num).zfill(3)}"
+def get_last_id(worksheet, prefix):
+    ids = worksheet.col_values(1)[1:]
+    nums = [int(i.split("-")[-1]) for i in ids if i.startswith(prefix)]
+    return f"{prefix}-{str(max(nums)+1 if nums else 1).zfill(3)}"
 
-# ---------------- MAIN APP ----------------
+# ---------------- INIT ----------------
+st.set_page_config(page_title="Pressure Test Form", layout="centered")
+st.title("🧪 Pressure Test Form")
 
-st.title("🧪 Pressure Test Entry (Enhanced)")
-
-# Connect to Google Sheets
+# ---------------- CONNECT ----------------
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
-
-# Setup Tabs
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
-pressure_test_sheet = get_or_create_tab(spreadsheet, TAB_PRESSURE_TEST, [
-    "Pressure Test ID", "Module ID", "Feed Pressure", "Permeate Flow", "Pressure Test Date & Time",
-    "Operator Initials", "Notes", "Passed"
+pressure_sheet = get_or_create_tab(spreadsheet, TAB_PRESSURE_TEST, [
+    "Pressure Test ID", "Module ID", "Feed Pressure", "Permeate Flow", "Date Time", "Operator Initials", "Notes", "Passed"
 ])
 
-# Fetch Module IDs
-existing_module_ids = module_sheet.col_values(1)[1:]  # Skip header
+module_ids = module_sheet.col_values(1)[1:]
 
-# ---------------- FORM: MULTI-MEASUREMENT ----------------
-st.subheader("➕ Add Multiple Pressure Measurements")
-
+# ---------------- SESSION STATE INIT ----------------
 if "measurements" not in st.session_state:
     st.session_state.measurements = []
 
+# ---------------- MULTI-MEASUREMENT UI ----------------
+st.subheader("➕ Add Multiple Pressure Measurements")
+
 if st.button("➕ Add Measurement"):
     st.session_state.measurements.append({
-        "id": str(uuid4()),
+        "id": str(uuid.uuid4())[:8],
         "feed_pressure": 0.0,
         "permeate_flow": 0.0
     })
 
-module_id = st.selectbox("Module ID", existing_module_ids)
+# Common fields
+module_id = st.selectbox("Module ID", module_ids)
 operator_initials = st.text_input("Operator Initials")
-test_date = st.date_input("Pressure Test Date", datetime.now())
-test_time = st.time_input("Pressure Test Time", datetime.now().time())
-test_datetime = datetime.combine(test_date, test_time)
-notes = st.text_area("Notes")
+notes = st.text_area("General Notes")
+test_date = st.date_input("Pressure Test Date", datetime.now().date())
+test_time = st.time_input("Test Time", datetime.now().time())
 passed = st.selectbox("Passed?", ["Yes", "No"])
 
-for idx, m in enumerate(st.session_state.measurements):
-    st.markdown(f"**Measurement #{idx + 1}**")
-    m["feed_pressure"] = st.number_input(f"Feed Pressure {idx+1} (psi)", format="%.2f", key=f"fp_{m['id']}")
-    m["permeate_flow"] = st.number_input(f"Permeate Flow {idx+1} (L/min)", format="%.2f", key=f"pf_{m['id']}")
+# Show each measurement
+for i, m in enumerate(st.session_state.measurements):
+    st.markdown(f"**Measurement {i+1}**")
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        m["feed_pressure"] = st.number_input(f"Feed Pressure {i+1}", key=f"feed_{i}", step=0.1, value=m["feed_pressure"])
+    with col2:
+        m["permeate_flow"] = st.number_input(f"Permeate Flow {i+1}", key=f"perm_{i}", step=0.1, value=m["permeate_flow"])
+    with col3:
+        if st.button("❌ Delete", key=f"del_{i}"):
+            st.session_state.measurements.pop(i)
+            st.experimental_rerun()
 
-submit_multi = st.button("🚀 Submit All Measurements")
+# Submit button
+if st.button("🚀 Submit All Measurements"):
+    try:
+        for m in st.session_state.measurements:
+            pt_id = get_last_id(pressure_sheet, "PT")
+            dt_str = datetime.combine(test_date, test_time).strftime("%Y-%m-%d %H:%M")
+            pressure_sheet.append_row([
+                pt_id, module_id, m["feed_pressure"], m["permeate_flow"], dt_str,
+                operator_initials, notes, passed
+            ])
+        st.success("✅ All measurements submitted!")
+        st.session_state.measurements = []
+    except Exception as e:
+        st.error(f"❌ Error submitting data: {e}")
 
-if submit_multi:
-    for m in st.session_state.measurements:
-        pt_id = get_last_id(pressure_test_sheet, "PT")
-        pressure_test_sheet.append_row([
-            pt_id, module_id, m["feed_pressure"], m["permeate_flow"],
-            str(test_datetime), operator_initials, notes, passed
-        ])
-    st.success("✅ All measurements saved.")
-    st.session_state.measurements = []  # Reset after submission
-
-# ---------------- 7-DAY REVIEW ----------------
-st.subheader("📅 Last 7 Days Review")
+# ---------------- REVIEW TABLE ----------------
+st.subheader("📅 7-Day Review")
 
 try:
-    records = pressure_test_sheet.get_all_records()
-    if records:
-        df = pd.DataFrame(records)
-        df["Pressure Test Date & Time"] = pd.to_datetime(df["Pressure Test Date & Time"])
-        df_filtered = df[df["Pressure Test Date & Time"] >= datetime.now() - pd.Timedelta(days=7)]
-        st.dataframe(df_filtered)
+    records = pressure_sheet.get_all_records()
+    df = pd.DataFrame(records)
+    df["Date Time"] = pd.to_datetime(df["Date Time"])
+    cutoff = datetime.now() - timedelta(days=7)
+    recent = df[df["Date Time"] >= cutoff]
+
+    if not recent.empty:
+        st.dataframe(recent)
     else:
-        st.info("No data found in Pressure Test table.")
+        st.info("No records in the last 7 days.")
 except Exception as e:
-    st.error(f"❌ Error fetching data: {e}")
+    st.error(f"❌ Could not load review table: {e}")
