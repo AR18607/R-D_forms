@@ -155,22 +155,28 @@ if st.button("💧 Submit All Leak Points"):
 st.subheader("📅 Records (Last 7 Days)")
 
 def filter_last_7_days(records, date_key):
-    def parse_flexible_date(date_str):
-        formats = ["%Y-%m-%d", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S"]
-        for fmt in formats:
-            try:
-                return datetime.strptime(date_str.strip(), fmt)
-            except:
-                continue
-        return None
-
-    today = datetime.today()
+    today = datetime.today().date()
     filtered_records = []
+
     for record in records:
-        date_str = record.get(date_key, "").strip()
-        parsed_date = parse_flexible_date(date_str)
-        if parsed_date and parsed_date.date() >= (today - timedelta(days=7)).date():
+        date_val = record.get(date_key, "")
+        parsed_date = None
+
+        # Attempt to parse if already datetime
+        if isinstance(date_val, datetime):
+            parsed_date = date_val.date()
+        elif isinstance(date_val, str):
+            # Try multiple common formats
+            for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+                try:
+                    parsed_date = datetime.strptime(date_val.strip(), fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+        if parsed_date and parsed_date >= (today - timedelta(days=7)):
             filtered_records.append(record)
+
     return filtered_records
 
 
