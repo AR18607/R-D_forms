@@ -159,25 +159,31 @@ def filter_last_7_days(records, date_key):
     filtered_records = []
 
     for record in records:
-        date_val = record.get(date_key, "")
+        date_str = str(record.get(date_key, "")).strip()
         parsed_date = None
 
-        # Attempt to parse if already datetime
-        if isinstance(date_val, datetime):
-            parsed_date = date_val.date()
-        elif isinstance(date_val, str):
-            # Try multiple common formats
-            for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
-                try:
-                    parsed_date = datetime.strptime(date_val.strip(), fmt).date()
-                    break
-                except ValueError:
-                    continue
+        # Debugging
+        if date_str == "":
+            st.write("⚠️ Skipping record with empty date:", record)
+            continue
 
-        if parsed_date and parsed_date >= (today - timedelta(days=7)):
+        # Attempt to parse using known formats
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"):
+            try:
+                parsed_date = datetime.strptime(date_str, fmt).date()
+                break
+            except ValueError:
+                continue
+
+        if not parsed_date:
+            st.write(f"⚠️ Unrecognized date format: '{date_str}' in record:", record)
+            continue
+
+        if parsed_date >= today - timedelta(days=7):
             filtered_records.append(record)
 
     return filtered_records
+
 
 
 try:
