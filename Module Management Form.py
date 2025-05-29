@@ -152,9 +152,9 @@ if st.button("💧 Submit All Leak Points"):
     st.session_state["leak_points"] = []
 
 # ------------------ 7-DAYS DATA PREVIEW ------------------
-st.subheader("📅 Records (Last 7 Days)")
-
+st.subheader(":date: Records (Last 7 Days)")
 def filter_last_7_days(records, date_key):
+    """Filters records based on Date column, keeping only last 7 days."""
     today = datetime.today()
     filtered_records = []
     for record in records:
@@ -164,33 +164,23 @@ def filter_last_7_days(records, date_key):
             if parsed_date.date() >= (today - timedelta(days=7)).date():
                 filtered_records.append(record)
         except ValueError:
-            pass
+            pass  # Skip records with invalid dates
     return filtered_records
-
+# Load & Filter Data
 try:
-    module_data = pd.DataFrame(get_all_records_cached(TAB_MODULE))
-    failure_data = pd.DataFrame(get_all_records_cached(TAB_FAILURES))
-    leak_data = pd.DataFrame(get_all_records_cached(TAB_LEAK))
-
+    module_data = pd.DataFrame(module_sheet.get_all_records())
+    failure_data = pd.DataFrame(failure_sheet.get_all_records())
+    leak_data = pd.DataFrame(leak_sheet.get_all_records())
     if not module_data.empty:
-        st.subheader("📦 Module Table")
+        st.subheader(":package: Module Table")
         st.dataframe(module_data)
-
     if not failure_data.empty:
-        st.subheader("🚨 Module Failures Table (Last 7 Days)")
+        st.subheader(":rotating_light: Module Failures Table (Last 7 Days)")
         filtered_failure = filter_last_7_days(failure_data.to_dict(orient="records"), "Date")
         st.write(pd.DataFrame(filtered_failure) if filtered_failure else "No failure records in the last 7 days.")
-
     if not leak_data.empty:
-        st.subheader("💧 Leak Test Table (Last 7 Days)")
+        st.subheader(":droplet: Leak Test Table (Last 7 Days)")
         filtered_leak = filter_last_7_days(leak_data.to_dict(orient="records"), "Date/Time")
         st.write(pd.DataFrame(filtered_leak) if filtered_leak else "No leak test records in the last 7 days.")
-
 except Exception as e:
-    st.error(f"❌ Error loading recent data: {e}")
-
-# ------------------ OPTIONAL EDIT VIEW & COLUMNS CLARITY ------------------
-st.markdown("---")
-st.markdown("### ℹ️ Notes")
-st.markdown("- Use **clear labels** for all fields; consult team if column names are unclear.")
-st.markdown("- Editing/viewing of existing entries will be added in a future release.")
+    st.error(f":x: Error loading recent data: {e}")
