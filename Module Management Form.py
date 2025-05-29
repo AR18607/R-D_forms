@@ -175,3 +175,9 @@ try:
 
 except Exception as e:
     st.error(f"❌ Error loading recent data: {e}")
+
+# ------------------ OPTIONAL EDIT VIEW & COLUMNS CLARITY ------------------
+st.markdown("---")
+st.markdown("### ℹ️ Notes")
+st.markdown("- Use **clear labels** for all fields; consult team if column names are unclear.")
+st.markdown("- Editing/viewing of existing entries will be added in a future release.")
