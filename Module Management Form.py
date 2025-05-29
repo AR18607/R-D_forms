@@ -41,7 +41,15 @@ def get_last_id(worksheet, prefix):
 st.title("🛠 Module Management Form")
 
 # Connect
-spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+@st.cache_resource(show_spinner=False)
+def cached_connect_google_sheet(sheet_name):
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
+    client = gspread.authorize(creds)
+    return client.open(sheet_name)
+
+spreadsheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
+
 
 # Setup Tabs
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
