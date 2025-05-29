@@ -156,33 +156,34 @@ st.subheader("📅 Records (Last 7 Days)")
 
 def filter_last_7_days(records, date_key):
     today = datetime.today()
-    cutoff_date = today - timedelta(days=7)
+    seven_days_ago = today - timedelta(days=7)
     filtered_records = []
 
     for record in records:
-        raw_date = record.get(date_key, "")
-        date_str = str(raw_date).strip()
-
-        if not date_str:
-            continue  # skip if empty
-
+        raw_date = str(record.get(date_key, "")).strip()
         parsed_date = None
-        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+
+        # Skip empty date
+        if not raw_date:
+            continue
+
+        # Try common date formats
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%m/%d/%Y"):
             try:
-                parsed_date = datetime.strptime(date_str, fmt)
+                parsed_date = datetime.strptime(raw_date, fmt)
                 break
             except ValueError:
                 continue
 
         if not parsed_date:
-            # Show warning only for invalid (non-empty) date values
-            st.warning(f"⚠️ Skipping record with unrecognized date format: {date_str}\n{record}")
-            continue
+            continue  # skip unparseable
 
-        if parsed_date.date() >= cutoff_date.date():
+        # Include if within the last 7 days
+        if parsed_date.date() >= seven_days_ago.date():
             filtered_records.append(record)
 
     return filtered_records
+
 
 
 try:
