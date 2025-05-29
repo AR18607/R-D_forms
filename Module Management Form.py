@@ -25,20 +25,6 @@ def connect_google_sheet(sheet_name):
 def cached_connect_google_sheet(sheet_name):
     return connect_google_sheet(sheet_name)
 
-@st.cache_resource(show_spinner=False)
-def get_all_tabs(spreadsheet):
-    module = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
-    failures = get_or_create_tab(spreadsheet, TAB_FAILURES, [
-        "Module Failure ID", "Module ID (FK)", "Description of Failure", "Autopsy", 
-        "Autopsy Notes", "Microscopy", "Microscopy Notes", "Failure Mode", "Operator Initials", 
-        "Date", "Label"
-    ])
-    leak = get_or_create_tab(spreadsheet, TAB_LEAK, [
-        "Leak Test ID", "Module ID (FK)", "End", "Leak Test Type", "Leak Location", 
-        "Number of Leaks", "Repaired", "Operator Initials", "Notes", "Date/Time"
-    ])
-    return module, failures, leak
-
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
@@ -48,12 +34,14 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
     return worksheet
 
 @st.cache_data(ttl=300)
-def get_cached_col_values(worksheet, col_index):
+def get_cached_col_values(_worksheet_name, col_index):
+    sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
+    worksheet = sheet.worksheet(_worksheet_name)
     return worksheet.col_values(col_index)
 
-def get_last_id(worksheet, prefix):
+def get_last_id(_worksheet_name, prefix):
     try:
-        records = get_cached_col_values(worksheet, 1)[1:]
+        records = get_cached_col_values(_worksheet_name, 1)[1:]
         if not records:
             return f"{prefix}-001"
         nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix)]
@@ -64,23 +52,34 @@ def get_last_id(worksheet, prefix):
         return f"{prefix}-ERR"
 
 @st.cache_data(ttl=300)
-def get_all_records_cached(ws):
-    return ws.get_all_records()
+def get_all_records_cached(_worksheet_name):
+    sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
+    worksheet = sheet.worksheet(_worksheet_name)
+    return worksheet.get_all_records()
 
 # --------------- MAIN SCRIPT ----------------
 st.title("🛠 Module Management Form")
 
 # Connect and Setup Tabs
 spreadsheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
-module_sheet, failure_sheet, leak_sheet = get_all_tabs(spreadsheet)
+module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
+failure_sheet = get_or_create_tab(spreadsheet, TAB_FAILURES, [
+    "Module Failure ID", "Module ID (FK)", "Description of Failure", "Autopsy", 
+    "Autopsy Notes", "Microscopy", "Microscopy Notes", "Failure Mode", "Operator Initials", 
+    "Date", "Label"
+])
+leak_sheet = get_or_create_tab(spreadsheet, TAB_LEAK, [
+    "Leak Test ID", "Module ID (FK)", "End", "Leak Test Type", "Leak Location", 
+    "Number of Leaks", "Repaired", "Operator Initials", "Notes", "Date/Time"
+])
 
 # Fetch Existing Module IDs
-existing_module_ids = get_cached_col_values(module_sheet, 1)[1:]
+existing_module_ids = get_cached_col_values(TAB_MODULE, 1)[1:]
 
 # ------------------ MODULE TABLE FORM ------------------
 st.subheader("🔹 Module Table")
 with st.form("module_form"):
-    module_id = get_last_id(module_sheet, "MOD")
+    module_id = get_last_id(TAB_MODULE, "MOD")
     st.markdown(f"**Auto-generated Module ID:** `{module_id}`")
     module_type = st.selectbox("Module Type", ["Wound", "Mini"])
     module_notes = st.text_area("Module Notes")
@@ -93,7 +92,7 @@ if submit_module:
 # ------------------ MODULE FAILURE FORM ------------------
 st.subheader("🔹 Module Failure Table")
 with st.form("failure_form"):
-    failure_id = get_last_id(failure_sheet, "FAIL")
+    failure_id = get_last_id(TAB_FAILURES, "FAIL")
     failure_module_fk = st.selectbox("Module ID (Failure)", existing_module_ids)
     failure_description = st.text_area("Failure Description")
     autopsy = st.selectbox("Autopsy Done?", ["Yes", "No"])
@@ -119,7 +118,7 @@ st.subheader("🔹 Leak Test Table (Multi-Entry)")
 if "leak_points" not in st.session_state:
     st.session_state["leak_points"] = []
 
-leak_id = get_last_id(leak_sheet, "LEAK")
+leak_id = get_last_id(TAB_LEAK, "LEAK")
 leak_module_fk = st.selectbox("Module ID (Leak)", existing_module_ids)
 leak_end = st.selectbox("End", ["Plug", "Nozzle"])
 leak_test_type = st.selectbox("Leak Test Type", ["Water", "N2"])
@@ -171,9 +170,9 @@ def filter_last_7_days(records, date_key):
     return filtered_records
 
 try:
-    module_data = pd.DataFrame(get_all_records_cached(module_sheet))
-    failure_data = pd.DataFrame(get_all_records_cached(failure_sheet))
-    leak_data = pd.DataFrame(get_all_records_cached(leak_sheet))
+    module_data = pd.DataFrame(get_all_records_cached(TAB_MODULE))
+    failure_data = pd.DataFrame(get_all_records_cached(TAB_FAILURES))
+    leak_data = pd.DataFrame(get_all_records_cached(TAB_LEAK))
 
     if not module_data.empty:
         st.subheader("📦 Module Table")
