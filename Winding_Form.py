@@ -111,3 +111,63 @@ wound_data = pd.DataFrame(wound_module_sheet.get_all_records())
 latest_id = get_last_id(wound_module_sheet, "WMOD")
 if latest_id in wound_data["Wound Module ID"].values:
     st.warning(f"⚠️ Wound Module ID `{latest_id}` already exists. Consider reviewing existing entries.")
+
+# ----------------- WOUND MODULE FORM -----------------
+st.subheader("🧵 Wound Module Entry")
+with st.form("wound_module_form", clear_on_submit=True):
+    wound_module_id = get_last_id(wound_module_sheet, "WMOD")
+    module_fk = st.selectbox("Module ID (FK)", module_ids)
+    wind_program_fk = st.selectbox("Wind Program ID (FK)", wind_program_ids)
+    operator = st.text_input("Operator Initials")
+    notes = st.text_area("Notes")
+    mfg_wind = st.text_input("MFG DB Wind ID")
+    mfg_potting = st.text_input("MFG DB Potting ID")
+    mfg_mod = st.number_input("MFG DB Mod ID", min_value=0, step=1)
+    entry_date = st.date_input("Date", value=datetime.today())
+
+    wound_submit = st.form_submit_button("💾 Save Wound Module")
+
+if wound_submit:
+    wound_module_sheet.append_row([
+        wound_module_id, module_fk, wind_program_fk, operator, notes,
+        mfg_wind, mfg_potting, mfg_mod, entry_date.strftime("%Y-%m-%d")
+    ])
+    st.success(f"✅ Wound Module `{wound_module_id}` saved.")
+
+# ----------------- WRAP PER MODULE FORM -----------------
+st.subheader("🎁 Wrap Per Module Entry")
+with st.form("wrap_module_form", clear_on_submit=True):
+    wrap_id = get_last_id(wrap_per_module_sheet, "WRAP")
+    wrap_module_fk = st.selectbox("Module ID (FK)", module_ids)
+    after_layer = st.number_input("Wrap After Layer #", min_value=0, step=1)
+    wrap_type = st.selectbox("Type of Wrap", ["Teflon", "Nylon", "Other"])
+    wrap_notes = st.text_area("Notes")
+    wrap_date = st.date_input("Date", value=datetime.today())
+
+    wrap_submit = st.form_submit_button("💾 Save Wrap Info")
+
+if wrap_submit:
+    wrap_per_module_sheet.append_row([
+        wrap_id, wrap_module_fk, after_layer, wrap_type, wrap_notes,
+        wrap_date.strftime("%Y-%m-%d")
+    ])
+    st.success(f"✅ Wrap Entry `{wrap_id}` saved.")
+
+# ----------------- SPOOLS PER WIND FORM -----------------
+st.subheader("🧪 Spools Per Wind Entry")
+with st.form("spools_per_wind_form", clear_on_submit=True):
+    spools_id = get_last_id(spools_per_wind_sheet, "SPW")
+    mfg_wind_fk = st.text_input("MFG DB Wind ID")
+    coated_spool = st.text_input("Coated Spool ID")
+    length_used = st.number_input("Length Used", min_value=0.0, step=0.1)
+    spools_notes = st.text_area("Notes")
+    spools_date = st.date_input("Date", value=datetime.today())
+
+    spools_submit = st.form_submit_button("💾 Save Spool Info")
+
+if spools_submit:
+    spools_per_wind_sheet.append_row([
+        spools_id, mfg_wind_fk, coated_spool, length_used, spools_notes,
+        spools_date.strftime("%Y-%m-%d")
+    ])
+    st.success(f"✅ Spool Entry `{spools_id}` saved.")
