@@ -4,6 +4,7 @@ import gspread
 import json
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+from uuid import uuid4
 
 # ---------------- CONFIGURATION ----------------
 
@@ -44,7 +45,7 @@ def get_last_id(worksheet, id_prefix):
 
 # ---------------- MAIN APP ----------------
 
-st.title("🧪 Testing Form")
+st.title("🧪 Pressure Test Entry (Enhanced)")
 
 # Connect to Google Sheets
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
@@ -56,60 +57,58 @@ pressure_test_sheet = get_or_create_tab(spreadsheet, TAB_PRESSURE_TEST, [
     "Operator Initials", "Notes", "Passed"
 ])
 
-# Fetch Existing Module IDs
+# Fetch Module IDs
 existing_module_ids = module_sheet.col_values(1)[1:]  # Skip header
 
-# ---------------- FORM ----------------
+# ---------------- FORM: MULTI-MEASUREMENT ----------------
+st.subheader("➕ Add Multiple Pressure Measurements")
 
-with st.form("pressure_test_form"):
-    st.subheader("🔹 Pressure Test Entry")
+if "measurements" not in st.session_state:
+    st.session_state.measurements = []
 
-    pressure_test_id = get_last_id(pressure_test_sheet, "PT")
-    st.markdown(f"**Auto-generated Pressure Test ID:** `{pressure_test_id}`")
+if st.button("➕ Add Measurement"):
+    st.session_state.measurements.append({
+        "id": str(uuid4()),
+        "feed_pressure": 0.0,
+        "permeate_flow": 0.0
+    })
 
-    module_id = st.selectbox("Select Module ID", existing_module_ids) if existing_module_ids else st.text_input("Module ID (Manual Entry)")
+module_id = st.selectbox("Module ID", existing_module_ids)
+operator_initials = st.text_input("Operator Initials")
+test_date = st.date_input("Pressure Test Date", datetime.now())
+test_time = st.time_input("Pressure Test Time", datetime.now().time())
+test_datetime = datetime.combine(test_date, test_time)
+notes = st.text_area("Notes")
+passed = st.selectbox("Passed?", ["Yes", "No"])
 
-    feed_pressure = st.number_input("Feed Pressure (psi)", format="%.2f")
-    permeate_flow = st.number_input("Permeate Flow (L/min)", format="%.2f")
+for idx, m in enumerate(st.session_state.measurements):
+    st.markdown(f"**Measurement #{idx + 1}**")
+    m["feed_pressure"] = st.number_input(f"Feed Pressure {idx+1} (psi)", format="%.2f", key=f"fp_{m['id']}")
+    m["permeate_flow"] = st.number_input(f"Permeate Flow {idx+1} (L/min)", format="%.2f", key=f"pf_{m['id']}")
 
-    test_date = st.date_input("Pressure Test Date", datetime.now())
-    test_time = st.time_input("Pressure Test Time", datetime.now().time())
-    test_datetime = datetime.combine(test_date, test_time)
+submit_multi = st.button("🚀 Submit All Measurements")
 
-    operator_initials = st.text_input("Operator Initials")
-    notes = st.text_area("Test Notes")
-    passed = st.selectbox("Passed?", ["Yes", "No"])
-
-    submit_button = st.form_submit_button("🚀 Submit Pressure Test Record")
-
-# ---------------- SAVE DATA ----------------
-
-if submit_button:
-    try:
+if submit_multi:
+    for m in st.session_state.measurements:
+        pt_id = get_last_id(pressure_test_sheet, "PT")
         pressure_test_sheet.append_row([
-            pressure_test_id,
-            module_id,
-            feed_pressure,
-            permeate_flow,
-            str(test_datetime),
-            operator_initials,
-            notes,
-            passed
+            pt_id, module_id, m["feed_pressure"], m["permeate_flow"],
+            str(test_datetime), operator_initials, notes, passed
         ])
-        st.success("✅ Pressure Test Record Successfully Saved!")
-    except Exception as e:
-        st.error(f"❌ Error saving data: {e}")
+    st.success("✅ All measurements saved.")
+    st.session_state.measurements = []  # Reset after submission
 
-# ---------------- OPTIONAL: Weekly View ----------------
-
-st.subheader("📅 Recent Pressure Test Records")
+# ---------------- 7-DAY REVIEW ----------------
+st.subheader("📅 Last 7 Days Review")
 
 try:
     records = pressure_test_sheet.get_all_records()
     if records:
         df = pd.DataFrame(records)
-        st.dataframe(df)
+        df["Pressure Test Date & Time"] = pd.to_datetime(df["Pressure Test Date & Time"])
+        df_filtered = df[df["Pressure Test Date & Time"] >= datetime.now() - pd.Timedelta(days=7)]
+        st.dataframe(df_filtered)
     else:
-        st.info("No records found.")
+        st.info("No data found in Pressure Test table.")
 except Exception as e:
-    st.error(f"❌ Error fetching records: {e}")
+    st.error(f"❌ Error fetching data: {e}")
