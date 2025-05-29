@@ -12,6 +12,7 @@ import pandas as pd
 GOOGLE_SHEET_NAME = "R&D Data Form"
 GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
 
+
 TAB_MODULE = "Module Tbl"
 TAB_WIND_PROGRAM = "Wind Program Tbl"
 TAB_WOUND_MODULE = "Wound Module Tbl"
@@ -24,6 +25,7 @@ def connect_google_sheet(sheet_name):
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
     return client.open(sheet_name)
+
 
 def get_or_create_tab(sheet, tab_name, headers):
     clean_tab_name = tab_name.strip().lower()
