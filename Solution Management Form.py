@@ -229,11 +229,12 @@ else:
 # Step 4: Combined Solution Table - filter if A or B used recently
 st.markdown("### 🧪 Combined Solution Data (Using Recently Prepped IDs)")
 combined_records = combined_sheet.get_all_records()
-recent_combined = [
-    rec for rec in combined_records
-    if rec.get("Solution ID A", "").strip() in recent_solution_ids or
-       rec.get("Solution ID B", "").strip() in recent_solution_ids
-]
+recent_combined = []
+for rec in combined_records:
+    combined_date = parse_date(rec.get("Combined Date", ""))
+    if combined_date and combined_date >= today - timedelta(days=7):
+        recent_combined.append(rec)
+
 
 if recent_combined:
     st.dataframe(pd.DataFrame(recent_combined))
