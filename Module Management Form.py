@@ -21,6 +21,24 @@ def connect_google_sheet(sheet_name):
     client = gspread.authorize(creds)
     return client.open(sheet_name)
 
+@st.cache_resource(show_spinner=False)
+def cached_connect_google_sheet(sheet_name):
+    return connect_google_sheet(sheet_name)
+
+@st.cache_resource(show_spinner=False)
+def get_all_tabs(spreadsheet):
+    module = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
+    failures = get_or_create_tab(spreadsheet, TAB_FAILURES, [
+        "Module Failure ID", "Module ID (FK)", "Description of Failure", "Autopsy", 
+        "Autopsy Notes", "Microscopy", "Microscopy Notes", "Failure Mode", "Operator Initials", 
+        "Date", "Label"
+    ])
+    leak = get_or_create_tab(spreadsheet, TAB_LEAK, [
+        "Leak Test ID", "Module ID (FK)", "End", "Leak Test Type", "Leak Location", 
+        "Number of Leaks", "Repaired", "Operator Initials", "Notes", "Date/Time"
+    ])
+    return module, failures, leak
+
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
@@ -29,7 +47,7 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-@st.cache_data(ttl=300)  # cache for 5 minutes
+@st.cache_data(ttl=300)
 def get_cached_col_values(worksheet, col_index):
     return worksheet.col_values(col_index)
 
@@ -45,35 +63,19 @@ def get_last_id(worksheet, prefix):
         st.error(f"⚠️ Failed to generate ID: {e}")
         return f"{prefix}-ERR"
 
+@st.cache_data(ttl=300)
+def get_all_records_cached(ws):
+    return ws.get_all_records()
 
 # --------------- MAIN SCRIPT ----------------
 st.title("🛠 Module Management Form")
 
-# Connect
-@st.cache_resource(show_spinner=False)
-def cached_connect_google_sheet(sheet_name):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
-    client = gspread.authorize(creds)
-    return client.open(sheet_name)
-
+# Connect and Setup Tabs
 spreadsheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
-
-
-# Setup Tabs
-module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
-failure_sheet = get_or_create_tab(spreadsheet, TAB_FAILURES, [
-    "Module Failure ID", "Module ID (FK)", "Description of Failure", "Autopsy", 
-    "Autopsy Notes", "Microscopy", "Microscopy Notes", "Failure Mode", "Operator Initials", 
-    "Date", "Label"
-])
-leak_sheet = get_or_create_tab(spreadsheet, TAB_LEAK, [
-    "Leak Test ID", "Module ID (FK)", "End", "Leak Test Type", "Leak Location", 
-    "Number of Leaks", "Repaired", "Operator Initials", "Notes", "Date/Time"
-])
+module_sheet, failure_sheet, leak_sheet = get_all_tabs(spreadsheet)
 
 # Fetch Existing Module IDs
-existing_module_ids = module_sheet.col_values(1)[1:]
+existing_module_ids = get_cached_col_values(module_sheet, 1)[1:]
 
 # ------------------ MODULE TABLE FORM ------------------
 st.subheader("🔹 Module Table")
@@ -91,9 +93,7 @@ if submit_module:
 # ------------------ MODULE FAILURE FORM ------------------
 st.subheader("🔹 Module Failure Table")
 with st.form("failure_form"):
-    #failure_id = get_last_id(failure_sheet, "FAIL")
-    failure_id = get_cached_col_values(failure_sheet, 1)[1:]
-
+    failure_id = get_last_id(failure_sheet, "FAIL")
     failure_module_fk = st.selectbox("Module ID (Failure)", existing_module_ids)
     failure_description = st.text_area("Failure Description")
     autopsy = st.selectbox("Autopsy Done?", ["Yes", "No"])
@@ -152,14 +152,12 @@ if st.button("💧 Submit All Leak Points"):
             1, point["Repaired"], leak_operator, leak_notes, leak_date.strftime("%Y-%m-%d")
         ])
     st.success(f"✅ {len(st.session_state['leak_points'])} Leak Points saved under Leak ID {leak_id}")
-    st.session_state["leak_points"] = []  # clear after submit
-
+    st.session_state["leak_points"] = []
 
 # ------------------ 7-DAYS DATA PREVIEW ------------------
 st.subheader("📅 Records (Last 7 Days)")
 
 def filter_last_7_days(records, date_key):
-    """Filters records based on Date column, keeping only last 7 days."""
     today = datetime.today()
     filtered_records = []
     for record in records:
@@ -169,14 +167,13 @@ def filter_last_7_days(records, date_key):
             if parsed_date.date() >= (today - timedelta(days=7)).date():
                 filtered_records.append(record)
         except ValueError:
-            pass  # Skip records with invalid dates
+            pass
     return filtered_records
 
-# Load & Filter Data
 try:
-    module_data = pd.DataFrame(module_sheet.get_all_records())
-    failure_data = pd.DataFrame(failure_sheet.get_all_records())
-    leak_data = pd.DataFrame(leak_sheet.get_all_records())
+    module_data = pd.DataFrame(get_all_records_cached(module_sheet))
+    failure_data = pd.DataFrame(get_all_records_cached(failure_sheet))
+    leak_data = pd.DataFrame(get_all_records_cached(leak_sheet))
 
     if not module_data.empty:
         st.subheader("📦 Module Table")
