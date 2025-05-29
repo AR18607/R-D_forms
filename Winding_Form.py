@@ -1,6 +1,3 @@
-# ----------------- WINDING FORM WITH PREFILL + DUPLICATE CHECK -----------------
-# 📅 Season 2 Update – May 2025
-
 import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -11,7 +8,6 @@ import pandas as pd
 # ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
 GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
-
 
 TAB_MODULE = "Module Tbl"
 TAB_WIND_PROGRAM = "Wind Program Tbl"
@@ -25,7 +21,6 @@ def connect_google_sheet(sheet_name):
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
     return client.open(sheet_name)
-
 
 def get_or_create_tab(sheet, tab_name, headers):
     clean_tab_name = tab_name.strip().lower()
@@ -77,7 +72,11 @@ st.subheader("🌬️ Wind Program Entry")
 wind_program_data = pd.DataFrame(wind_program_sheet.get_all_records())
 selected_wp_id = st.selectbox("Select Wind Program ID to View/Edit", [""] + wind_program_ids)
 
-wp_prefill = wind_program_data[wind_program_data["Wind Program ID"] == selected_wp_id].iloc[0] if selected_wp_id and selected_wp_id in wind_program_data["Wind Program ID"].values else None
+wp_prefill = None
+if selected_wp_id and "Wind Program ID" in wind_program_data.columns:
+    wp_prefill_rows = wind_program_data[wind_program_data["Wind Program ID"] == selected_wp_id]
+    if not wp_prefill_rows.empty:
+        wp_prefill = wp_prefill_rows.iloc[0]
 
 with st.form("wind_program_form", clear_on_submit=True):
     wind_program_id = selected_wp_id or get_last_id(wind_program_sheet, "WP")
@@ -108,10 +107,10 @@ if wind_submit:
         wind_program_sheet.append_row(new_entry)
         st.success(f"✅ Wind Program `{wind_program_id}` saved.")
 
-# ----------------- DUPLICATE CHECK FOR WOUND MODULE ID -----------------
+# ----------------- DUPLICATE CHECK -----------------
 wound_data = pd.DataFrame(wound_module_sheet.get_all_records())
 latest_id = get_last_id(wound_module_sheet, "WMOD")
-if latest_id in wound_data["Wound Module ID"].values:
+if "Wound Module ID" in wound_data.columns and latest_id in wound_data["Wound Module ID"].values:
     st.warning(f"⚠️ Wound Module ID `{latest_id}` already exists. Consider reviewing existing entries.")
 
 # ----------------- WOUND MODULE FORM -----------------
@@ -126,7 +125,6 @@ with st.form("wound_module_form", clear_on_submit=True):
     mfg_potting = st.text_input("MFG DB Potting ID")
     mfg_mod = st.number_input("MFG DB Mod ID", min_value=0, step=1)
     entry_date = st.date_input("Date", value=datetime.today())
-
     wound_submit = st.form_submit_button("💾 Save Wound Module")
 
 if wound_submit:
@@ -145,7 +143,6 @@ with st.form("wrap_module_form", clear_on_submit=True):
     wrap_type = st.selectbox("Type of Wrap", ["Teflon", "Nylon", "Other"])
     wrap_notes = st.text_area("Notes")
     wrap_date = st.date_input("Date", value=datetime.today())
-
     wrap_submit = st.form_submit_button("💾 Save Wrap Info")
 
 if wrap_submit:
@@ -164,7 +161,6 @@ with st.form("spools_per_wind_form", clear_on_submit=True):
     length_used = st.number_input("Length Used", min_value=0.0, step=0.1)
     spools_notes = st.text_area("Notes")
     spools_date = st.date_input("Date", value=datetime.today())
-
     spools_submit = st.form_submit_button("💾 Save Spool Info")
 
 if spools_submit:
