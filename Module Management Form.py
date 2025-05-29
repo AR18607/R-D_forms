@@ -29,13 +29,22 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
+@st.cache_data(ttl=300)  # cache for 5 minutes
+def get_cached_col_values(worksheet, col_index):
+    return worksheet.col_values(col_index)
+
 def get_last_id(worksheet, prefix):
-    records = worksheet.col_values(1)[1:]
-    if not records:
-        return f"{prefix}-001"
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix)]
-    next_num = max(nums) + 1
-    return f"{prefix}-{str(next_num).zfill(3)}"
+    try:
+        records = get_cached_col_values(worksheet, 1)[1:]
+        if not records:
+            return f"{prefix}-001"
+        nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix)]
+        next_num = max(nums) + 1
+        return f"{prefix}-{str(next_num).zfill(3)}"
+    except Exception as e:
+        st.error(f"⚠️ Failed to generate ID: {e}")
+        return f"{prefix}-ERR"
+
 
 # --------------- MAIN SCRIPT ----------------
 st.title("🛠 Module Management Form")
