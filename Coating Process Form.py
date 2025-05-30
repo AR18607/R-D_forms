@@ -4,12 +4,10 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import pandas as pd
+import time
 
-# ----------- GOOGLE SHEETS SETUP -----------
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
-]
+# ----------------- GOOGLE SHEETS SETUP -----------------
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
 client = gspread.authorize(creds)
 spreadsheet = client.open("R&D Data Form")
@@ -20,26 +18,47 @@ def get_or_create_worksheet(sheet, title, headers):
     except gspread.exceptions.WorksheetNotFound:
         worksheet = sheet.add_worksheet(title=title, rows="1000", cols="50")
         worksheet.append_row(headers)
+        time.sleep(1)
+    # If header mismatch, update the first row
+    existing_header = worksheet.row_values(1)
+    if existing_header != headers:
+        worksheet.update('A1', [headers])
     return worksheet
 
-def get_next_id(worksheet, id_column):
-    # Get all records (list of dicts)
-    records = worksheet.get_all_records()
+def get_next_id(worksheet, id_column, prefix):
+    try:
+        records = worksheet.get_all_records()
+    except Exception:
+        return f"{prefix}-001"
     nums = []
     for record in records:
-        # Defensive: check if the key is present and not empty
-        value = record.get(id_column, "")
-        if value:
-            # Extract number part (after dash), handle PCOAT-001 etc.
-            parts = str(value).split('-')
+        val = str(record.get(id_column, ""))
+        if val.startswith(prefix + "-"):
             try:
-                nums.append(int(parts[-1]))
+                nums.append(int(val.split('-')[-1]))
             except Exception:
                 continue
-    return (max(nums) + 1) if nums else 1
+    next_num = max(nums) + 1 if nums else 1
+    return f"{prefix}-{str(next_num).zfill(3)}"
 
+def filter_last_7_days(records, date_key):
+    today = datetime.today()
+    filtered = []
+    for record in records:
+        date_str = record.get(date_key, "").strip()
+        try:
+            # Try both date and datetime
+            date_val = datetime.strptime(date_str, "%Y-%m-%d")
+        except Exception:
+            try:
+                date_val = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+            except Exception:
+                continue
+        if date_val.date() >= (today - timedelta(days=7)).date():
+            filtered.append(record)
+    return filtered
 
-# ----------- DATA LOADING -----------
+# ----------------- WORKSHEETS SETUP -----------------
 solution_sheet = get_or_create_worksheet(spreadsheet, "Solution ID Tbl", ["Solution ID"])
 ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", ["Batch_Fiber_ID"])
 usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID"])
@@ -48,43 +67,40 @@ solution_ids = [record["Solution ID"] for record in solution_sheet.get_all_recor
 batch_fiber_ids = [record["Batch_Fiber_ID"] for record in ufd_sheet.get_all_records()]
 uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_all_records()]
 
-# ----------- WORKSHEETS SETUP -----------
 pcp_sheet = get_or_create_worksheet(spreadsheet, "Pilot Coating Process Tbl", [
     "PCoating_ID", "Solution ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
     "Load_Cell_Slope", "Number_of_Fibers", "Coating_Speed", "Tower_1_Set_Point",
     "Tower_1_Entry_Temperature", "Tower_2_Set_Point", "Tower_2_Entry_Temperature",
-    "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"
-])
+    "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"])
 
 dcp_sheet = get_or_create_worksheet(spreadsheet, "Dip Coating Process Tbl", [
     "DCoating_ID", "Solution ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "Date", "Box_Temperature",
     "Box_RH", "N2_Flow", "Number_of_Fibers", "Coating_Speed", "Annealing_Time",
     "Annealing_Temperature", "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature",
-    "Ambient_RH", "Notes"
-])
+    "Ambient_RH", "Notes"])
 
 ct_sheet = get_or_create_worksheet(spreadsheet, "Coater Tension Tbl", [
-    "Tension_ID", "PCoating_ID", "Payout_Location", "Tension", "Notes"
-])
+    "Tension_ID", "PCoating_ID", "Payout_Location", "Tension", "Notes"])
 
 csm_sheet = get_or_create_worksheet(spreadsheet, "Coating Solution Mass Tbl", [
     "SolutionMass_ID", "Solution ID", "Date_Time", "DCoating_ID", "PCoating_ID",
-    "Solution_Mass", "Operators_Initials", "Notes"
+    "Solution_Mass", "Operators_Initials", "Notes"])
+
+# ----------------- STREAMLIT LAYOUT -----------------
+st.title("🧪 Coating Process Form (Season 2 Update)")
+
+tab1, tab2, tab3, tab4 = st.tabs([
+    "Pilot Coating", "Dip Coating", "Coater Tension", "Coating Solution Mass"
 ])
 
-# ----------- STREAMLIT UI -----------
-st.title("🧪 Coating Process Entry")
-tabs = st.tabs(["Pilot Coating", "Dip Coating", "Coater Tension", "Solution Mass"])
-
-# =========== PILOT COATING ===========
-with tabs[0]:
+# ----------------- PILOT COATING FORM -----------------
+with tab1:
     st.subheader("Pilot Coating Process Entry")
     with st.form("pilot_form", clear_on_submit=True):
-        pcoating_id_num = get_next_id(pcp_sheet, "PCoating_ID")
-        pcoating_id = f"PCOAT-{pcoating_id_num:03}"
-        st.markdown(f"**Auto-generated PCoating ID:** `{pcoating_id}`")
+        pcoating_id = get_next_id(pcp_sheet, "PCoating_ID", "PCOAT")
+        st.markdown(f"**Auto-generated PCoating ID:** :green[`{pcoating_id}`]")
         selected_solution_id = st.selectbox("Solution ID", solution_ids)
-        date = st.date_input("Date", value=datetime.now())
+        date = st.date_input("Date", datetime.today())
         box_temperature = st.number_input("Box Temperature (°C)", min_value=0.0)
         box_rh = st.number_input("Box RH (%)", min_value=0.0)
         n2_flow = st.number_input("N2 Flow (L/min)", min_value=0.0)
@@ -100,26 +116,33 @@ with tabs[0]:
         ambient_temp = st.number_input("Ambient Temp (°C)", min_value=0.0)
         ambient_rh = st.number_input("Ambient RH (%)", min_value=0.0)
         notes = st.text_area("Notes")
-        submit_pilot = st.form_submit_button("Submit Pilot Coating")
-    if submit_pilot:
+        pilot_submit = st.form_submit_button("Submit Pilot Coating")
+    if pilot_submit:
         pcp_sheet.append_row([
-            pcoating_id, selected_solution_id, date.strftime("%Y-%m-%d"), box_temperature, box_rh, n2_flow,
-            load_cell_slope, number_of_fibers, coating_speed, tower1_set_point, tower1_entry_temp,
-            tower2_set_point, tower2_entry_temp, coating_layer_type, operator_initials, ambient_temp, ambient_rh, notes
+            pcoating_id, selected_solution_id, date.strftime("%Y-%m-%d"), box_temperature, box_rh,
+            n2_flow, load_cell_slope, number_of_fibers, coating_speed,
+            tower1_set_point, tower1_entry_temp, tower2_set_point, tower2_entry_temp,
+            coating_layer_type, operator_initials, ambient_temp, ambient_rh, notes
         ])
         st.success(f"✅ Entry saved with ID {pcoating_id}")
 
-# =========== DIP COATING ===========
-with tabs[1]:
+    st.markdown("#### 7-Day Review (Pilot Coating)")
+    try:
+        df = pd.DataFrame(filter_last_7_days(pcp_sheet.get_all_records(), "Date"))
+        st.dataframe(df if not df.empty else pd.DataFrame(columns=pcp_sheet.row_values(1)))
+    except Exception as e:
+        st.error(f"❌ Could not load review table: {e}")
+
+# ----------------- DIP COATING FORM -----------------
+with tab2:
     st.subheader("Dip Coating Process Entry")
     with st.form("dip_form", clear_on_submit=True):
-        dcoating_id_num = get_next_id(dcp_sheet, "DCoating_ID")
-        dcoating_id = f"DCOAT-{dcoating_id_num:03}"
-        st.markdown(f"**Auto-generated DCoating ID:** `{dcoating_id}`")
+        dcoating_id = get_next_id(dcp_sheet, "DCoating_ID", "DCOAT")
+        st.markdown(f"**Auto-generated DCoating ID:** :green[`{dcoating_id}`]")
         solution = st.selectbox("Solution ID", solution_ids)
         batch = st.selectbox("Batch Fiber ID", batch_fiber_ids)
         spool = st.selectbox("Uncoated Spool ID", uncoated_spool_ids)
-        date = st.date_input("Date", value=datetime.now())
+        date = st.date_input("Date", datetime.today())
         box_temp = st.number_input("Box Temp (°C)", min_value=0.0)
         rh = st.number_input("RH (%)", min_value=0.0)
         n2 = st.number_input("N2 Flow", min_value=0.0)
@@ -132,17 +155,25 @@ with tabs[1]:
         amb_temp = st.number_input("Ambient Temp", min_value=0.0)
         amb_rh = st.number_input("Ambient RH", min_value=0.0)
         note = st.text_area("Notes")
-        submit_dip = st.form_submit_button("Submit Dip Coating")
-    if submit_dip:
+        dip_submit = st.form_submit_button("Submit Dip Coating")
+    if dip_submit:
         dcp_sheet.append_row([
-            dcoating_id, solution, batch, spool, date.strftime("%Y-%m-%d"), box_temp, rh, n2,
-            fibers, speed, anneal_time, anneal_temp, layer, op, amb_temp, amb_rh, note
+            dcoating_id, solution, batch, spool, date.strftime("%Y-%m-%d"),
+            box_temp, rh, n2, fibers, speed, anneal_time, anneal_temp, layer,
+            op, amb_temp, amb_rh, note
         ])
         st.success(f"✅ Entry saved with ID {dcoating_id}")
 
-# =========== COATER TENSION (MULTI-MEASUREMENT) ===========
-with tabs[2]:
-    st.subheader("Coater Tension Entry (Multi Data Point)")
+    st.markdown("#### 7-Day Review (Dip Coating)")
+    try:
+        df = pd.DataFrame(filter_last_7_days(dcp_sheet.get_all_records(), "Date"))
+        st.dataframe(df if not df.empty else pd.DataFrame(columns=dcp_sheet.row_values(1)))
+    except Exception as e:
+        st.error(f"❌ Could not load review table: {e}")
+
+# ----------------- COATER TENSION FORM (MULTI-MEASUREMENT) -----------------
+with tab3:
+    st.subheader("Coater Tension Entry (Multi Measurement)")
     pcoating_ids = [record["PCoating_ID"] for record in pcp_sheet.get_all_records()]
     selected_pcoating_id = st.selectbox("PCoating ID", pcoating_ids)
     if "tension_list" not in st.session_state:
@@ -151,21 +182,28 @@ with tabs[2]:
         payout = st.text_input("Payout Location")
         tension_val = st.number_input("Tension (g)", min_value=0.0)
         tension_note = st.text_area("Notes")
-        add_tension = st.form_submit_button("Add Data Point")
-        if add_tension:
+        add = st.form_submit_button("➕ Add Data Point")
+        if add:
             st.session_state.tension_list.append((payout, tension_val, tension_note))
     if st.session_state.tension_list:
         st.write("### Preview Entries")
         st.table(pd.DataFrame(st.session_state.tension_list, columns=["Payout", "Tension", "Notes"]))
-    if st.button("Submit All Tension Data"):
+    if st.button("✅ Submit All Tension Data"):
         for payout, tension_val, note in st.session_state.tension_list:
-            tid = f"T-{get_next_id(ct_sheet, 'Tension_ID'):03}"
+            tid = get_next_id(ct_sheet, "Tension_ID", "TENS")
             ct_sheet.append_row([tid, selected_pcoating_id, payout, tension_val, note])
         st.session_state.tension_list.clear()
         st.success("✅ All entries saved!")
 
-# =========== COATING SOLUTION MASS (MULTI-MEASUREMENT) ===========
-with tabs[3]:
+    st.markdown("#### 7-Day Review (Coater Tension)")
+    try:
+        df = pd.DataFrame(filter_last_7_days(ct_sheet.get_all_records(), "PCoating_ID"))
+        st.dataframe(df if not df.empty else pd.DataFrame(columns=ct_sheet.row_values(1)))
+    except Exception as e:
+        st.error(f"❌ Could not load review table: {e}")
+
+# ----------------- COATING SOLUTION MASS ENTRY (MULTI) -----------------
+with tab4:
     st.subheader("Coating Solution Mass Entry (Multi)")
     dcoating_ids = [record["DCoating_ID"] for record in dcp_sheet.get_all_records()]
     pcoating_ids = [record["PCoating_ID"] for record in pcp_sheet.get_all_records()]
@@ -175,49 +213,26 @@ with tabs[3]:
         sid = st.selectbox("Solution ID", solution_ids)
         date_time = st.datetime_input("Date & Time", value=datetime.now())
         d_id = st.selectbox("DCoating ID (optional)", [""] + dcoating_ids)
-        p_id = st.selectbox("PCoating ID", [""] + pcoating_ids)
-        mass = st.number_input("Solution Mass (g)", min_value=0.0)
+        p_id = st.selectbox("PCoating ID (optional)", [""] + pcoating_ids)
+        mass = st.number_input("Mass (g)", min_value=0.0)
         initials = st.text_input("Operator Initials")
         note = st.text_area("Notes")
-        add_mass = st.form_submit_button("Add Solution Mass")
-        if add_mass:
-            st.session_state.mass_list.append((sid, date_time, d_id, p_id, mass, initials, note))
+        add = st.form_submit_button("➕ Add Solution Mass")
+        if add:
+            st.session_state.mass_list.append((sid, date_time.strftime("%Y-%m-%d %H:%M"), d_id, p_id, mass, initials, note))
     if st.session_state.mass_list:
         st.write("### Preview Mass Entries")
-        st.dataframe(pd.DataFrame(st.session_state.mass_list, columns=[
-            "Solution ID", "Date_Time", "DCoating ID", "PCoating ID", "Mass", "Initials", "Notes"
-        ]))
-    if st.button("Submit All Mass Entries"):
+        st.dataframe(pd.DataFrame(st.session_state.mass_list, columns=["Solution ID", "Date_Time", "DCoating ID", "PCoating ID", "Mass", "Initials", "Notes"]))
+    if st.button("✅ Submit All Mass Entries"):
         for sid, dt, d_id, p_id, mass, initials, note in st.session_state.mass_list:
-            mid = f"M-{get_next_id(csm_sheet, 'SolutionMass_ID'):03}"
-            csm_sheet.append_row([mid, sid, dt.strftime("%Y-%m-%d %H:%M"), d_id, p_id, mass, initials, note])
+            mid = get_next_id(csm_sheet, "SolutionMass_ID", "CMASS")
+            csm_sheet.append_row([mid, sid, dt, d_id, p_id, mass, initials, note])
         st.session_state.mass_list.clear()
         st.success("✅ All mass entries saved!")
 
-# ----------- LAST 7 DAYS PREVIEW -----------
-def filter_last_7_days(records, date_key):
-    today = datetime.today()
-    filtered = []
-    for record in records:
-        date_str = record.get(date_key, "").split()[0]
-        try:
-            date_val = datetime.strptime(date_str, "%Y-%m-%d")
-            if date_val.date() >= (today - timedelta(days=7)).date():
-                filtered.append(record)
-        except:
-            continue
-    return filtered
-
-st.markdown("## 📅 Recent Entries (Last 7 Days)")
-def safe_preview(title, records, key):
-    st.markdown(f"### ✅ {title}")
-    filtered = filter_last_7_days(records, key)
-    if filtered:
-        st.dataframe(pd.DataFrame(filtered))
-    else:
-        st.write("No entries in the last 7 days.")
-
-safe_preview("Pilot Coating", pcp_sheet.get_all_records(), "Date")
-safe_preview("Dip Coating", dcp_sheet.get_all_records(), "Date")
-safe_preview("Coater Tension", ct_sheet.get_all_records(), "PCoating_ID")  # Needs a date field in real app
-safe_preview("Coating Solution Mass", csm_sheet.get_all_records(), "Date_Time")
+    st.markdown("#### 7-Day Review (Coating Solution Mass)")
+    try:
+        df = pd.DataFrame(filter_last_7_days(csm_sheet.get_all_records(), "Date_Time"))
+        st.dataframe(df if not df.empty else pd.DataFrame(columns=csm_sheet.row_values(1)))
+    except Exception as e:
+        st.error(f"❌ Could not load review table: {e}")
