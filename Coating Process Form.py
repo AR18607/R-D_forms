@@ -5,7 +5,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import pandas as pd
 
-# --------- Google Sheets Setup ------------
 SHEET_NAME = "R&D Data Form"
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
@@ -15,7 +14,6 @@ spreadsheet = client.open(SHEET_NAME)
 def get_or_create_worksheet(title, headers):
     try:
         ws = spreadsheet.worksheet(title)
-        # Check and fix headers if needed
         current_headers = ws.row_values(1)
         if current_headers != headers:
             ws.delete_rows(1)
@@ -47,8 +45,6 @@ def filter_7_days(records, date_col):
             continue
     return filtered
 
-# --------- Table Setup ----------
-# Main tabs/worksheets
 PCP_HEADERS = ["PCoating ID","Solution ID","Date","Box Temperature","Box RH","N2 flow",
                "Load cell slope","Number of fibers","Coating Speed","Tower 1 set point",
                "Tower 1 entry temperature","Tower 2 set point","Tower 2 entry temperature",
@@ -63,7 +59,6 @@ pcp_ws = get_or_create_worksheet("Pilot Coating Process Tbl", PCP_HEADERS)
 ct_ws  = get_or_create_worksheet("Coater Tension Tbl", CT_HEADERS)
 csm_ws = get_or_create_worksheet("Coating Solution Mass Tbl", CSM_HEADERS)
 
-# FKs: Load lists for dropdowns
 solution_ids = list(set([r.get("Solution ID") for r in pcp_ws.get_all_records()] +
                         [r.get("Solution ID") for r in csm_ws.get_all_records()]))
 solution_ids = [s for s in solution_ids if s] or ["SOL-001"]
@@ -117,7 +112,7 @@ with tabs[1]:
     st.header("Coater Tension Entry (Multi-Entry)")
     t_pcoat_ids = [x for x in pcoating_ids] or ["PCOAT-001"]
     if "ct_multi" not in st.session_state: st.session_state.ct_multi = []
-    ct_pid = st.selectbox("Pcoating ID", t_pcoat_ids)
+    ct_pid = st.selectbox("Pcoating ID", t_pcoat_ids, key="ct_pcoating_id")
     payout = st.selectbox("Payout Location", payout_locations)
     tension = st.number_input("Tension (g)", 0.0)
     ct_notes = st.text_area("Notes (Memo)")
@@ -140,7 +135,7 @@ with tabs[2]:
     mass_time = st.time_input("Time", datetime.now().time())
     dt = datetime.combine(mass_date, mass_time)
     mass_dcoating_id = st.selectbox("DCoating ID", [""] + dcoating_ids)
-    mass_pcoating_id = st.selectbox("Pcoating ID", pcoating_ids)
+    mass_pcoating_id = st.selectbox("Pcoating ID", pcoating_ids, key="mass_pcoating_id")
     mass_val = st.number_input("Solution Mass", 0.0)
     mass_op_init = st.text_input("Operators Initials")
     mass_notes = st.text_area("Notes")
@@ -176,5 +171,5 @@ def review_table(ws, title, date_col):
         st.error(f"Could not load review table: {e}")
 
 review_table(pcp_ws, "Pilot Coating Process Tbl", "Date")
-review_table(ct_ws, "Coater Tension Tbl", "Tension ID")  # (change to Date if you have date)
+review_table(ct_ws, "Coater Tension Tbl", "Tension ID")  # Change to correct date col if needed
 review_table(csm_ws, "Coating Solution Mass Tbl", "Date & Time")
