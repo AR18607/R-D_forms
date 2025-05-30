@@ -68,7 +68,7 @@ mass_ws = get_or_create_worksheet("Coating Solution Mass Tbl", [
 solution_ids = [r["Solution ID"] for r in solution_ws.get_all_records()]
 pcoat_ids = [r["PCoating ID"] for r in pcoat_ws.get_all_records()]
 dcoat_ids = [r["DCoating ID"] for r in dcoat_ws.get_all_records()]
-payout_locations = ["A", "B", "C", "D", "Other"] # Example; you may fetch this from a lookup table
+payout_locations = ["A", "B", "C", "D", "Other"]  # Example payout locations; customize as needed
 
 # ---------- STREAMLIT UI ----------
 st.title("🧪 Coating Process Form")
@@ -99,6 +99,7 @@ with tab1:
         amb_rh = st.number_input("Ambient %RH", min_value=0.0)
         notes = st.text_area("Notes")
         pilot_submit = st.form_submit_button("Submit Pilot Coating Entry")
+
     if pilot_submit:
         pcoat_ws.append_row([
             next_pcoat_id, pcoat_sol, pcoat_date.strftime("%Y-%m-%d"), box_temp, box_rh, n2, load_cell, num_fibers, coat_speed,
@@ -121,6 +122,7 @@ with tab2:
     # Multi-measurement buffer
     if "tension_points" not in st.session_state:
         st.session_state.tension_points = []
+
     with st.form("tension_form", clear_on_submit=True):
         next_tension_id = get_next_id(tension_ws, "TENSION")
         st.markdown(f"**Auto-generated Tension ID:** <span style='color:purple;font-weight:bold'>{next_tension_id}</span>", unsafe_allow_html=True)
@@ -129,6 +131,7 @@ with tab2:
         tension_val = st.number_input("Tension (g)", min_value=0.0)
         tension_note = st.text_area("Notes", key="tens_note")
         add_tension = st.form_submit_button("➕ Add Data Point")
+
     if add_tension:
         st.session_state.tension_points.append({
             "Tension ID": next_tension_id,
@@ -137,6 +140,7 @@ with tab2:
             "Tension (g)": tension_val,
             "Notes": tension_note
         })
+
     if st.session_state.tension_points:
         st.write("#### Pending Data Points")
         st.table(pd.DataFrame(st.session_state.tension_points))
@@ -147,10 +151,11 @@ with tab2:
                 ])
             st.session_state.tension_points.clear()
             st.success("All tension entries saved!")
+
     # 7-day review
     try:
         tens_df = pd.DataFrame(tension_ws.get_all_records())
-        recent = filter_last_7_days(tens_df, "Tension ID")  # if you have date, replace with that column
+        recent = filter_last_7_days(tens_df, "Tension ID")  # if you have date, replace with date column here
         st.markdown("### 📅 7-Day Review")
         st.dataframe(recent if not recent.empty else pd.DataFrame(columns=tens_df.columns))
     except Exception as e:
@@ -161,6 +166,7 @@ with tab3:
     st.subheader("Coating Solution Mass Entry (Multi-Entry)")
     if "mass_points" not in st.session_state:
         st.session_state.mass_points = []
+
     with st.form("mass_form", clear_on_submit=True):
         next_mass_id = get_next_id(mass_ws, "SOLMASS")
         st.markdown(f"**Auto-generated SolutionMass ID:** <span style='color:purple;font-weight:bold'>{next_mass_id}</span>", unsafe_allow_html=True)
@@ -172,6 +178,7 @@ with tab3:
         mass_op = st.text_input("Operators Initials", key="mass_op")
         mass_note = st.text_area("Notes", key="mass_note")
         add_mass = st.form_submit_button("➕ Add Solution Mass Entry")
+
     if add_mass:
         st.session_state.mass_points.append({
             "SolutionMass ID": next_mass_id,
@@ -183,6 +190,7 @@ with tab3:
             "Operators Initials": mass_op,
             "Notes": mass_note
         })
+
     if st.session_state.mass_points:
         st.write("#### Pending Solution Mass Entries")
         st.table(pd.DataFrame(st.session_state.mass_points))
@@ -194,6 +202,7 @@ with tab3:
                 ])
             st.session_state.mass_points.clear()
             st.success("All solution mass entries saved!")
+
     # 7-day review
     try:
         mass_df = pd.DataFrame(mass_ws.get_all_records())
@@ -202,4 +211,3 @@ with tab3:
         st.dataframe(recent if not recent.empty else pd.DataFrame(columns=mass_df.columns))
     except Exception as e:
         st.error(f"Could not load review table: {e}")
-
