@@ -5,19 +5,31 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import pandas as pd
 
-# ---------- CONFIGURATION ----------
+# -------- CONFIGURATION --------
 SHEET_NAME = "R&D Data Form"
 
-scope = [
-    "https://spreadsheets.google.com/feeds",
+# Updated scopes - do not use deprecated scopes
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(
-    json.loads(st.secrets["gcp_service_account"]), scope
-)
-client = gspread.authorize(creds)
-spreadsheet = client.open(SHEET_NAME)
 
+# Initialize Google Sheets client with error handling
+@st.cache_resource(show_spinner=False)
+def init_gspread_client():
+    creds_json = json.loads(st.secrets["gcp_service_account"])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, SCOPES)
+    client = gspread.authorize(creds)
+    return client
+
+try:
+    client = init_gspread_client()
+    spreadsheet = client.open(SHEET_NAME)
+except Exception as e:
+    st.error(f"Error connecting to Google Sheets: {e}")
+    st.stop()
+
+# Helper: get or create worksheet with header row
 def get_or_create_worksheet(title, headers):
     try:
         ws = spreadsheet.worksheet(title)
@@ -26,13 +38,14 @@ def get_or_create_worksheet(title, headers):
         ws.append_row(headers)
     return ws
 
+# Helper: auto-generate next ID
 def get_next_id(ws, prefix):
-    """Auto-generate a new PK (e.g. PCOAT-001)."""
-    ids = [str(row[0]) for row in ws.get_all_values()[1:] if row and row[0].startswith(prefix)]
-    nums = [int(i.split('-')[-1]) for i in ids if i.split('-')[-1].isdigit()]
+    all_ids = [row[0] for row in ws.get_all_values()[1:] if row and row[0].startswith(prefix)]
+    nums = [int(i.split('-')[-1]) for i in all_ids if i.split('-')[-1].isdigit()]
     next_num = max(nums) + 1 if nums else 1
     return f"{prefix}-{str(next_num).zfill(3)}"
 
+# Helper: filter DataFrame for last 7 days
 def filter_last_7_days(df, date_col):
     today = datetime.today()
     def is_recent(x):
@@ -41,9 +54,12 @@ def filter_last_7_days(df, date_col):
             return d.date() >= (today - timedelta(days=7)).date()
         except:
             return False
-    return df[df[date_col].apply(is_recent)] if date_col in df.columns else df.iloc[[]]
+    if date_col in df.columns:
+        return df[df[date_col].apply(is_recent)]
+    else:
+        return pd.DataFrame()
 
-# ---------- DATA SOURCES ----------
+# Load worksheets
 solution_ws = get_or_create_worksheet("Solution ID Tbl", ["Solution ID", "Type", "Expired", "Consumed"])
 pcoat_ws = get_or_create_worksheet("Pilot Coating Process Tbl", [
     "PCoating ID", "Solution ID", "Date", "Box Temperature", "Box RH", "N2 flow",
@@ -64,18 +80,17 @@ mass_ws = get_or_create_worksheet("Coating Solution Mass Tbl", [
     "Solution Mass", "Operators Initials", "Notes"
 ])
 
-# ---------- FK DROPDOWNS ----------
+# Dropdown options
 solution_ids = [r["Solution ID"] for r in solution_ws.get_all_records()]
 pcoat_ids = [r["PCoating ID"] for r in pcoat_ws.get_all_records()]
 dcoat_ids = [r["DCoating ID"] for r in dcoat_ws.get_all_records()]
-payout_locations = ["A", "B", "C", "D", "Other"]  # Example payout locations; customize as needed
+payout_locations = ["A", "B", "C", "D", "Other"]  # Replace with dynamic list if available
 
-# ---------- STREAMLIT UI ----------
 st.title("🧪 Coating Process Form")
 
 tab1, tab2, tab3 = st.tabs(["Pilot Coating", "Coater Tension", "Solution Mass"])
 
-# ---------------- PILOT COATING ----------------
+# Pilot Coating Form
 with tab1:
     st.subheader("Pilot Coating Process Entry")
     with st.form("pilot_coating_form", clear_on_submit=True):
@@ -102,12 +117,12 @@ with tab1:
 
     if pilot_submit:
         pcoat_ws.append_row([
-            next_pcoat_id, pcoat_sol, pcoat_date.strftime("%Y-%m-%d"), box_temp, box_rh, n2, load_cell, num_fibers, coat_speed,
-            tower1, tower1_ent, tower2, tower2_ent, layer_type, op_init, amb_temp, amb_rh, notes
+            next_pcoat_id, pcoat_sol, pcoat_date.strftime("%Y-%m-%d"), box_temp, box_rh, n2, load_cell, num_fibers,
+            coat_speed, tower1, tower1_ent, tower2, tower2_ent, layer_type, op_init, amb_temp, amb_rh, notes
         ])
         st.success(f"Saved Pilot Coating Entry: {next_pcoat_id}")
 
-    # --- 7-day review ---
+    # 7-day review
     try:
         pcoat_df = pd.DataFrame(pcoat_ws.get_all_records())
         recent = filter_last_7_days(pcoat_df, "Date")
@@ -116,13 +131,11 @@ with tab1:
     except Exception as e:
         st.error(f"Could not load review table: {e}")
 
-# ---------------- COATER TENSION ----------------
+# Coater Tension Form with Multi-Entry
 with tab2:
     st.subheader("Coater Tension Entry (Multi-Measurement)")
-    # Multi-measurement buffer
     if "tension_points" not in st.session_state:
         st.session_state.tension_points = []
-
     with st.form("tension_form", clear_on_submit=True):
         next_tension_id = get_next_id(tension_ws, "TENSION")
         st.markdown(f"**Auto-generated Tension ID:** <span style='color:purple;font-weight:bold'>{next_tension_id}</span>", unsafe_allow_html=True)
@@ -155,18 +168,17 @@ with tab2:
     # 7-day review
     try:
         tens_df = pd.DataFrame(tension_ws.get_all_records())
-        recent = filter_last_7_days(tens_df, "Tension ID")  # if you have date, replace with date column here
+        recent = filter_last_7_days(tens_df, "Tension ID")  # Update to a date column if exists
         st.markdown("### 📅 7-Day Review")
         st.dataframe(recent if not recent.empty else pd.DataFrame(columns=tens_df.columns))
     except Exception as e:
         st.error(f"Could not load review table: {e}")
 
-# ---------------- COATING SOLUTION MASS ----------------
+# Coating Solution Mass Multi-Entry Form
 with tab3:
     st.subheader("Coating Solution Mass Entry (Multi-Entry)")
     if "mass_points" not in st.session_state:
         st.session_state.mass_points = []
-
     with st.form("mass_form", clear_on_submit=True):
         next_mass_id = get_next_id(mass_ws, "SOLMASS")
         st.markdown(f"**Auto-generated SolutionMass ID:** <span style='color:purple;font-weight:bold'>{next_mass_id}</span>", unsafe_allow_html=True)
