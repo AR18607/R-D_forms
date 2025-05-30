@@ -23,15 +23,21 @@ def get_or_create_worksheet(sheet, title, headers):
     return worksheet
 
 def get_next_id(worksheet, id_column):
+    # Get all records (list of dicts)
     records = worksheet.get_all_records()
     nums = []
     for record in records:
-        value = record.get(id_column)
-        try:
-            nums.append(int(str(value).replace('PCOAT-', '').replace('DCOAT-', '').replace('T-', '').replace('M-', '')))
-        except Exception:
-            continue
+        # Defensive: check if the key is present and not empty
+        value = record.get(id_column, "")
+        if value:
+            # Extract number part (after dash), handle PCOAT-001 etc.
+            parts = str(value).split('-')
+            try:
+                nums.append(int(parts[-1]))
+            except Exception:
+                continue
     return (max(nums) + 1) if nums else 1
+
 
 # ----------- DATA LOADING -----------
 solution_sheet = get_or_create_worksheet(spreadsheet, "Solution ID Tbl", ["Solution ID"])
