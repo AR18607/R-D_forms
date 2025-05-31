@@ -1,41 +1,38 @@
-import json
 import streamlit as st
 import gspread
+import json
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import pandas as pd
 
-# ----------------- CONFIG -----------------
+# ---------- CONFIG ----------
 SHEET_NAME = "R&D Data Form"
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
+
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(
+    json.loads(st.secrets["gcp_service_account"]), scope
+)
 client = gspread.authorize(creds)
 spreadsheet = client.open(SHEET_NAME)
 
-# ----------------- HELPERS -----------------
 def get_or_create_worksheet(title, headers):
     try:
         ws = spreadsheet.worksheet(title)
-        # Insert headers if empty
-        if ws.row_values(1) == []:
-            ws.insert_row(headers, 1)
     except gspread.exceptions.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title=title, rows="1000", cols="50")
-        ws.insert_row(headers, 1)
+        ws.append_row(headers)
     return ws
 
-def safe_get_all_records(ws):
-    try:
-        if ws.row_count > 0 and len(ws.row_values(1)) > 0:
-            return ws.get_all_records()
-        else:
-            return []
-    except Exception as e:
-        st.error(f"Error reading {ws.title}: {e}")
-        return []
+@st.cache_data(ttl=600)  # Cache data for 10 minutes to reduce API calls
+def get_all_records_cached(ws):
+    return ws.get_all_records()
 
 def get_next_id(ws, prefix):
-    ids = [str(row[0]) for row in ws.get_all_values()[1:] if row and row[0].startswith(prefix)]
+    rows = ws.get_all_values()[1:]  # skip header row
+    ids = [row[0] for row in rows if row and row[0].startswith(prefix)]
     nums = [int(i.split('-')[-1]) for i in ids if i.split('-')[-1].isdigit()]
     next_num = max(nums) + 1 if nums else 1
     return f"{prefix}-{str(next_num).zfill(3)}"
@@ -48,9 +45,9 @@ def filter_last_7_days(df, date_col):
             return d.date() >= (today - timedelta(days=7)).date()
         except:
             return False
-    return df[df[date_col].apply(is_recent)] if date_col in df.columns else pd.DataFrame()
+    return df[df[date_col].apply(is_recent)] if date_col in df.columns else df.iloc[[]]
 
-# ----------------- WORKSHEETS -----------------
+# ---------------- Worksheets ----------------
 solution_ws = get_or_create_worksheet("Solution ID Tbl", ["Solution ID", "Type", "Expired", "Consumed"])
 pcoat_ws = get_or_create_worksheet("Pilot Coating Process Tbl", [
     "PCoating ID", "Solution ID", "Date", "Box Temperature", "Box RH", "N2 flow",
@@ -71,23 +68,23 @@ mass_ws = get_or_create_worksheet("Coating Solution Mass Tbl", [
     "Solution Mass", "Operators Initials", "Notes"
 ])
 
-# ----------------- FETCH FK LISTS -----------------
-solution_ids = [r["Solution ID"] for r in safe_get_all_records(solution_ws)]
-pcoat_ids = [r["PCoating ID"] for r in safe_get_all_records(pcoat_ws)]
-dcoat_ids = [r["DCoating ID"] for r in safe_get_all_records(dcoat_ws)]
-payout_locations = ["A", "B", "C", "D", "Other"]  # Example, adjust if you have a sheet
+# ---------------- Dropdown data ----------------
+solution_ids = [r["Solution ID"] for r in get_all_records_cached(solution_ws)]
+pcoat_ids = [r["PCoating ID"] for r in get_all_records_cached(pcoat_ws)]
+dcoat_ids = [r["DCoating ID"] for r in get_all_records_cached(dcoat_ws)]
+payout_locations = ["A", "B", "C", "D", "Other"]
 
-# ----------------- UI -----------------
+# ---------------- Streamlit UI ----------------
 st.title("🧪 Coating Process Form")
 
 tab1, tab2, tab3 = st.tabs(["Pilot Coating", "Coater Tension", "Solution Mass"])
 
-# -- Pilot Coating Form --
+# Pilot Coating Form
 with tab1:
     st.subheader("Pilot Coating Process Entry")
     with st.form("pilot_coating_form", clear_on_submit=True):
         next_pcoat_id = get_next_id(pcoat_ws, "PCOAT")
-        st.markdown(f"**Auto-generated PCoating ID:** <span style='color:purple;font-weight:bold'>{next_pcoat_id}</span>", unsafe_allow_html=True)
+        st.markdown(f"**Auto-generated PCoating ID:** `{next_pcoat_id}`")
         pcoat_sol = st.selectbox("Solution ID", solution_ids, key="pilot_sol")
         pcoat_date = st.date_input("Date")
         box_temp = st.number_input("Box Temperature (°C)", min_value=0.0)
@@ -113,23 +110,23 @@ with tab1:
         ])
         st.success(f"Saved Pilot Coating Entry: {next_pcoat_id}")
 
-    # 7-day review
+    # 7-Day review
     try:
-        pcoat_df = pd.DataFrame(safe_get_all_records(pcoat_ws))
+        pcoat_df = pd.DataFrame(get_all_records_cached(pcoat_ws))
         recent = filter_last_7_days(pcoat_df, "Date")
         st.markdown("### 📅 7-Day Review")
         st.dataframe(recent if not recent.empty else pd.DataFrame(columns=pcoat_df.columns))
     except Exception as e:
-        st.error(f"Could not load review table: {e}")
+        st.error(f"Error loading Pilot Coating review: {e}")
 
-# -- Coater Tension Form --
+# Coater Tension Form (multi-entry)
 with tab2:
     st.subheader("Coater Tension Entry (Multi-Measurement)")
     if "tension_points" not in st.session_state:
         st.session_state.tension_points = []
     with st.form("tension_form", clear_on_submit=True):
         next_tension_id = get_next_id(tension_ws, "TENSION")
-        st.markdown(f"**Auto-generated Tension ID:** <span style='color:purple;font-weight:bold'>{next_tension_id}</span>", unsafe_allow_html=True)
+        st.markdown(f"**Auto-generated Tension ID:** `{next_tension_id}`")
         t_pcoat_id = st.selectbox("PCoating ID", pcoat_ids, key="tens_pcoat")
         payout_loc = st.selectbox("Payout Location", payout_locations, key="tens_payout")
         tension_val = st.number_input("Tension (g)", min_value=0.0)
@@ -155,52 +152,45 @@ with tab2:
             st.success("All tension entries saved!")
     # 7-day review
     try:
-        tens_df = pd.DataFrame(safe_get_all_records(tension_ws))
-        recent = filter_last_7_days(tens_df, "Tension ID")  # Replace with actual date if available
+        tens_df = pd.DataFrame(get_all_records_cached(tension_ws))
+        recent = filter_last_7_days(tens_df, "Tension ID")  # Change to date column if available
         st.markdown("### 📅 7-Day Review")
         st.dataframe(recent if not recent.empty else pd.DataFrame(columns=tens_df.columns))
     except Exception as e:
-        st.error(f"Could not load review table: {e}")
+        st.error(f"Error loading Tension review: {e}")
 
-# -- Coating Solution Mass Form --
+# Coating Solution Mass Form (multi-entry)
 with tab3:
     st.subheader("Coating Solution Mass Entry (Multi-Entry)")
     if "mass_points" not in st.session_state:
         st.session_state.mass_points = []
-
     with st.form("mass_form", clear_on_submit=True):
         next_mass_id = get_next_id(mass_ws, "SOLMASS")
-        st.markdown(f"**Auto-generated SolutionMass ID:** <span style='color:purple;font-weight:bold'>{next_mass_id}</span>", unsafe_allow_html=True)
-
+        st.markdown(f"**Auto-generated SolutionMass ID:** `{next_mass_id}`")
         mass_sol = st.selectbox("Solution ID", solution_ids, key="mass_sol")
-        mass_date = st.date_input("Date", value=datetime.now().date(), key="mass_date")
-        mass_time = st.time_input("Time", value=datetime.now().time(), key="mass_time")
-        mass_dt = datetime.combine(mass_date, mass_time)
-
+        mass_dt = st.date_input("Date", value=datetime.now())
+        mass_tm = st.time_input("Time", value=datetime.now().time())
         mass_dcoat = st.selectbox("DCoating ID (optional)", [""] + dcoat_ids, key="mass_dcoat")
         mass_pcoat = st.selectbox("Pcoating ID", pcoat_ids, key="mass_pcoat")
         mass_val = st.number_input("Solution Mass", min_value=0.0, key="mass_val")
         mass_op = st.text_input("Operators Initials", key="mass_op")
         mass_note = st.text_area("Notes", key="mass_note")
-
         add_mass = st.form_submit_button("➕ Add Solution Mass Entry")
-
     if add_mass:
+        dt_combined = datetime.combine(mass_dt, mass_tm)
         st.session_state.mass_points.append({
             "SolutionMass ID": next_mass_id,
             "Solution ID": mass_sol,
-            "Date & Time": mass_dt.strftime("%Y-%m-%d %H:%M"),
+            "Date & Time": dt_combined.strftime("%Y-%m-%d %H:%M"),
             "DCoating ID": mass_dcoat,
             "Pcoating ID": mass_pcoat,
             "Solution Mass": mass_val,
             "Operators Initials": mass_op,
             "Notes": mass_note
         })
-
     if st.session_state.mass_points:
         st.write("#### Pending Solution Mass Entries")
         st.table(pd.DataFrame(st.session_state.mass_points))
-
         if st.button("Submit All Mass Data", key="submit_all_mass"):
             for entry in st.session_state.mass_points:
                 mass_ws.append_row([
@@ -209,13 +199,11 @@ with tab3:
                 ])
             st.session_state.mass_points.clear()
             st.success("All solution mass entries saved!")
-
-
     # 7-day review
     try:
-        mass_df = pd.DataFrame(safe_get_all_records(mass_ws))
+        mass_df = pd.DataFrame(get_all_records_cached(mass_ws))
         recent = filter_last_7_days(mass_df, "Date & Time")
         st.markdown("### 📅 7-Day Review")
         st.dataframe(recent if not recent.empty else pd.DataFrame(columns=mass_df.columns))
     except Exception as e:
-        st.error(f"Could not load review table: {e}")
+        st.error(f"Error loading Solution Mass review: {e}")
