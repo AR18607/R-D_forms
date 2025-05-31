@@ -167,17 +167,24 @@ with tab3:
     st.subheader("Coating Solution Mass Entry (Multi-Entry)")
     if "mass_points" not in st.session_state:
         st.session_state.mass_points = []
+
     with st.form("mass_form", clear_on_submit=True):
         next_mass_id = get_next_id(mass_ws, "SOLMASS")
         st.markdown(f"**Auto-generated SolutionMass ID:** <span style='color:purple;font-weight:bold'>{next_mass_id}</span>", unsafe_allow_html=True)
+
         mass_sol = st.selectbox("Solution ID", solution_ids, key="mass_sol")
-        mass_dt = st.datetime_input("Date & Time", value=datetime.now(), key="mass_dt")
+        mass_date = st.date_input("Date", value=datetime.now().date(), key="mass_date")
+        mass_time = st.time_input("Time", value=datetime.now().time(), key="mass_time")
+        mass_dt = datetime.combine(mass_date, mass_time)
+
         mass_dcoat = st.selectbox("DCoating ID (optional)", [""] + dcoat_ids, key="mass_dcoat")
         mass_pcoat = st.selectbox("Pcoating ID", pcoat_ids, key="mass_pcoat")
         mass_val = st.number_input("Solution Mass", min_value=0.0, key="mass_val")
         mass_op = st.text_input("Operators Initials", key="mass_op")
         mass_note = st.text_area("Notes", key="mass_note")
+
         add_mass = st.form_submit_button("➕ Add Solution Mass Entry")
+
     if add_mass:
         st.session_state.mass_points.append({
             "SolutionMass ID": next_mass_id,
@@ -189,9 +196,11 @@ with tab3:
             "Operators Initials": mass_op,
             "Notes": mass_note
         })
+
     if st.session_state.mass_points:
         st.write("#### Pending Solution Mass Entries")
         st.table(pd.DataFrame(st.session_state.mass_points))
+
         if st.button("Submit All Mass Data", key="submit_all_mass"):
             for entry in st.session_state.mass_points:
                 mass_ws.append_row([
@@ -200,6 +209,7 @@ with tab3:
                 ])
             st.session_state.mass_points.clear()
             st.success("All solution mass entries saved!")
+
 
     # 7-day review
     try:
