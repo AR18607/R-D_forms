@@ -60,11 +60,6 @@ leak_sheet = get_or_create_tab(spreadsheet, TAB_LEAK, [
     "Leak Test ID", "Module ID", "Module Type", "End", "Leak Test Type", "Leak Location",
     "Repaired", "Operator Initials", "Notes", "Date/Time"
 ])
-failure_sheet = get_or_create_tab(spreadsheet, TAB_FAILURES, [
-    "Module Failure ID", "Module ID", "Description of Failure", "Autopsy",
-    "Autopsy Notes", "Microscopy", "Microscopy Notes", "Failure Mode",
-    "Operator Initials", "Date", "Label"
-])
 
 existing_modules_df = pd.DataFrame(get_all_records_cached(TAB_MODULE))
 module_options = existing_modules_df[['Module ID', 'Module Type']].apply(lambda x: f"{x[0]} ({x[1]})", axis=1).tolist()
@@ -80,51 +75,30 @@ with st.form("module_entry_form", clear_on_submit=True):
         module_sheet.append_row([module_id, module_type, module_notes])
         st.success(f"✅ Module {module_id} saved successfully!")
 
-# MODULE FAILURE FORM
-st.subheader("🔹 Module Failure Entry")
-with st.form("failure_entry_form", clear_on_submit=True):
-    failure_id = get_last_id(TAB_FAILURES, "FAIL")
-    failure_module_fk = st.selectbox("Module ID", module_options)
-    description = st.text_area("Description of Failure")
-    autopsy = st.selectbox("Autopsy Done?", ["Yes", "No"])
-    autopsy_notes = st.text_area("Autopsy Notes")
-    microscopy = st.selectbox("Microscopy Type", ["Classical", "SEM", "None"])
-    microscopy_notes = st.text_area("Microscopy Notes")
-    failure_mode = st.text_input("Failure Mode")
-    operator_initials = st.text_input("Operator Initials")
-    failure_date = st.date_input("Failure Date")
-    label = st.text_input("Label")
-
-    if st.form_submit_button("🚨 Submit Failure Entry"):
-        mod_id, _ = failure_module_fk.split(' (')
-        failure_sheet.append_row([
-            failure_id, mod_id, description, autopsy, autopsy_notes,
-            microscopy, microscopy_notes, failure_mode, operator_initials,
-            str(failure_date), label
-        ])
-        st.success(f"✅ Failure Entry {failure_id} saved successfully!")
-
 # LEAK TEST FORM
 st.subheader("🔹 Leak Test Entry")
+leak_id = get_last_id(TAB_LEAK, "LEAK")
+st.markdown(f"**Auto-generated Leak Test ID:** `{leak_id}`")
 
 if "leak_points" not in st.session_state:
     st.session_state["leak_points"] = []
 
 with st.form("leak_entry_form"):
-    leak_id = get_last_id(TAB_LEAK, "LEAK")
     module_selection = st.selectbox("Module ID", module_options)
     leak_end = st.selectbox("End", ["Plug", "Nozzle"])
     leak_test_type = st.selectbox("Leak Test Type", ["Water", "N2"])
     operator_initials = st.text_input("Operator Initials")
-    leak_notes = st.text_area("Notes")
     leak_location = st.selectbox("Leak Location", ["Fiber", "Potting"])
     repaired = st.selectbox("Repaired", ["Yes", "No"])
+    leak_notes = st.text_area("Notes")
     add_point = st.form_submit_button("➕ Add Leak Point")
 
     if add_point:
         st.session_state.leak_points.append({
             "Leak Location": leak_location,
-            "Repaired": repaired
+            "Repaired": repaired,
+            "End": leak_end,
+            "Notes": leak_notes
         })
         st.success("Leak point added.")
 
@@ -139,12 +113,13 @@ if st.session_state.leak_points:
 
         for point in st.session_state.leak_points:
             leak_sheet.append_row([
-                leak_id, mod_id, mod_type, leak_end, leak_test_type,
+                leak_id, mod_id, mod_type, point["End"], leak_test_type,
                 point["Leak Location"], point["Repaired"], operator_initials,
-                leak_notes, date_now
+                point["Notes"], date_now
             ])
         st.success(f"✅ Leak points saved under Leak ID {leak_id}")
         st.session_state.leak_points = []
+
 
 # 7-DAYS DATA REVIEW
 st.subheader("📅 Records (Last 7 Days)")
