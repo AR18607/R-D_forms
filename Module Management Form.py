@@ -5,16 +5,16 @@ from oauth2client.service_account import ServiceAccountCredentials
 import json
 from datetime import datetime, timedelta
 
-# --------------- CONFIG ----------------
+# CONFIGURATION
 GOOGLE_SHEET_NAME = "R&D Data Form"
 GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
 
 # Tab Names
 TAB_MODULE = "Module Tbl"
-TAB_FAILURES = "Module Failures Tbl"
 TAB_LEAK = "Leak Test Tbl"
+TAB_FAILURES = "Module Failures Tbl"
 
-# --------------- GOOGLE SHEET FUNCTIONS ----------------
+# Google Sheet functions
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
@@ -34,186 +34,149 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
     return worksheet
 
 @st.cache_data(ttl=300)
-def get_cached_col_values(_worksheet_name, col_index):
+def get_cached_col_values(sheet_name, col_index):
     sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
-    worksheet = sheet.worksheet(_worksheet_name)
+    worksheet = sheet.worksheet(sheet_name)
     return worksheet.col_values(col_index)
 
-def get_last_id(_worksheet_name, prefix):
-    try:
-        records = get_cached_col_values(_worksheet_name, 1)[1:]
-        nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix) and r.split('-')[-1].isdigit()]
-        next_num = max(nums) + 1 if nums else 1
-        return f"{prefix}-{str(next_num).zfill(3)}"
-    except Exception as e:
-        st.error(f"⚠️ Failed to generate ID: {e}")
-        return f"{prefix}-ERR"
-
 @st.cache_data(ttl=300)
-def get_all_records_cached(_worksheet_name):
+def get_all_records_cached(sheet_name):
     sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
-    worksheet = sheet.worksheet(_worksheet_name)
+    worksheet = sheet.worksheet(sheet_name)
     return worksheet.get_all_records()
 
-# --------------- MAIN SCRIPT ----------------
+def get_last_id(sheet_name, prefix):
+    records = get_cached_col_values(sheet_name, 1)[1:]
+    nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix) and r.split('-')[-1].isdigit()]
+    next_num = max(nums) + 1 if nums else 1
+    return f"{prefix}-{str(next_num).zfill(3)}"
+
+# Streamlit app
 st.title("🛠 Module Management Form")
 
-# Connect and Setup Tabs
 spreadsheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
-failure_sheet = get_or_create_tab(spreadsheet, TAB_FAILURES, [
-    "Module Failure ID", "Module ID (FK)", "Description of Failure", "Autopsy", 
-    "Autopsy Notes", "Microscopy", "Microscopy Notes", "Failure Mode", "Operator Initials", 
-    "Date", "Label"
-])
 leak_sheet = get_or_create_tab(spreadsheet, TAB_LEAK, [
-    "Leak Test ID", "Module ID (FK)", "End", "Leak Test Type", "Leak Location", 
-    "Number of Leaks", "Repaired", "Operator Initials", "Notes", "Date/Time"
+    "Leak Test ID", "Module ID", "Module Type", "End", "Leak Test Type", "Leak Location",
+    "Repaired", "Operator Initials", "Notes", "Date/Time"
+])
+failure_sheet = get_or_create_tab(spreadsheet, TAB_FAILURES, [
+    "Module Failure ID", "Module ID", "Description of Failure", "Autopsy",
+    "Autopsy Notes", "Microscopy", "Microscopy Notes", "Failure Mode",
+    "Operator Initials", "Date", "Label"
 ])
 
-# Fetch Existing Module IDs
-existing_module_ids = get_cached_col_values(TAB_MODULE, 1)[1:]
+existing_modules_df = pd.DataFrame(get_all_records_cached(TAB_MODULE))
+module_options = existing_modules_df[['Module ID', 'Module Type']].apply(lambda x: f"{x[0]} ({x[1]})", axis=1).tolist()
 
-# ------------------ MODULE TABLE FORM ------------------
-st.subheader("🔹 Module Table")
-with st.form("module_form"):
+# MODULE ENTRY FORM
+st.subheader("🔹 Module Entry")
+with st.form("module_entry_form", clear_on_submit=True):
     module_id = get_last_id(TAB_MODULE, "MOD")
     st.markdown(f"**Auto-generated Module ID:** `{module_id}`")
     module_type = st.selectbox("Module Type", ["Wound", "Mini"])
-    module_notes = st.text_area("Module Notes")
-    submit_module = st.form_submit_button("🚀 Submit Module")
+    module_notes = st.text_area("Notes")
+    if st.form_submit_button("🚀 Submit Module"):
+        module_sheet.append_row([module_id, module_type, module_notes])
+        st.success(f"✅ Module {module_id} saved successfully!")
 
-if submit_module:
-    module_sheet.append_row([module_id, module_type, module_notes])
-    st.success(f"✅ Module {module_id} saved successfully!")
-
-# ------------------ MODULE FAILURE FORM ------------------
-st.subheader("🔹 Module Failure Table")
-with st.form("failure_form"):
+# MODULE FAILURE FORM
+st.subheader("🔹 Module Failure Entry")
+with st.form("failure_entry_form", clear_on_submit=True):
     failure_id = get_last_id(TAB_FAILURES, "FAIL")
-    failure_module_fk = st.selectbox("Module ID (Failure)", existing_module_ids)
-    failure_description = st.text_area("Failure Description")
+    failure_module_fk = st.selectbox("Module ID", module_options)
+    description = st.text_area("Description of Failure")
     autopsy = st.selectbox("Autopsy Done?", ["Yes", "No"])
     autopsy_notes = st.text_area("Autopsy Notes")
     microscopy = st.selectbox("Microscopy Type", ["Classical", "SEM", "None"])
     microscopy_notes = st.text_area("Microscopy Notes")
     failure_mode = st.text_input("Failure Mode")
-    failure_operator = st.text_input("Failure Operator Initials")
+    operator_initials = st.text_input("Operator Initials")
     failure_date = st.date_input("Failure Date")
-    failure_label = st.text_input("Failure Label")
-    submit_failure = st.form_submit_button("🚨 Submit Failure Entry")
+    label = st.text_input("Label")
 
-if submit_failure:
-    failure_sheet.append_row([
-        failure_id, failure_module_fk, failure_description, autopsy, autopsy_notes,
-        microscopy, microscopy_notes, failure_mode, failure_operator, str(failure_date), failure_label
-    ])
-    st.success(f"✅ Failure Entry {failure_id} saved successfully!")
+    if st.form_submit_button("🚨 Submit Failure Entry"):
+        mod_id, _ = failure_module_fk.split(' (')
+        failure_sheet.append_row([
+            failure_id, mod_id, description, autopsy, autopsy_notes,
+            microscopy, microscopy_notes, failure_mode, operator_initials,
+            str(failure_date), label
+        ])
+        st.success(f"✅ Failure Entry {failure_id} saved successfully!")
 
-# ------------------ LEAK TEST FORM (SUPPORT MULTIPLE ENTRIES) ------------------
-st.subheader("🔹 Leak Test Table (Multi-Entry)")
+# LEAK TEST FORM
+st.subheader("🔹 Leak Test Entry")
 
 if "leak_points" not in st.session_state:
     st.session_state["leak_points"] = []
 
-leak_id = get_last_id(TAB_LEAK, "LEAK")
-leak_module_fk = st.selectbox("Module ID (Leak)", existing_module_ids)
-leak_end = st.selectbox("End", ["Plug", "Nozzle"])
-leak_test_type = st.selectbox("Leak Test Type", ["Water", "N2"])
-leak_operator = st.text_input("Operator Initials")
-leak_notes = st.text_area("Notes")
-leak_date = st.date_input("Leak Date/Time", value=datetime.today())
-
-st.markdown("### ➕ Add Leak Points")
-
-with st.form("add_leak_point_form"):
-    leak_location = st.selectbox("Leak Location", ["Fiber", "Potting"], key="location_entry")
-    repaired = st.selectbox("Repaired?", ["Yes", "No"], key="repaired_entry")
+with st.form("leak_entry_form"):
+    leak_id = get_last_id(TAB_LEAK, "LEAK")
+    module_selection = st.selectbox("Module ID", module_options)
+    leak_end = st.selectbox("End", ["Plug", "Nozzle"])
+    leak_test_type = st.selectbox("Leak Test Type", ["Water", "N2"])
+    operator_initials = st.text_input("Operator Initials")
+    leak_notes = st.text_area("Notes")
+    leak_location = st.selectbox("Leak Location", ["Fiber", "Potting"])
+    repaired = st.selectbox("Repaired", ["Yes", "No"])
     add_point = st.form_submit_button("➕ Add Leak Point")
 
-if add_point:
-    st.session_state["leak_points"].append({
-        "Leak Location": leak_location,
-        "Repaired": repaired
-    })
-    st.success("Leak point added.")
+    if add_point:
+        st.session_state.leak_points.append({
+            "Leak Location": leak_location,
+            "Repaired": repaired
+        })
+        st.success("Leak point added.")
 
-if st.session_state["leak_points"]:
+if st.session_state.leak_points:
     st.markdown("### 📋 Pending Leak Points")
-    st.dataframe(pd.DataFrame(st.session_state["leak_points"]))
+    st.dataframe(pd.DataFrame(st.session_state.leak_points))
 
-if st.button("💧 Submit All Leak Points"):
-    for point in st.session_state["leak_points"]:
-        leak_sheet.append_row([
-            leak_id, leak_module_fk, leak_end, leak_test_type, point["Leak Location"],
-            1, point["Repaired"], leak_operator, leak_notes, leak_date.strftime("%Y-%m-%d")
-        ])
-    st.success(f"✅ {len(st.session_state['leak_points'])} Leak Points saved under Leak ID {leak_id}")
-    st.session_state["leak_points"] = []
+    if st.button("💧 Submit All Leak Points"):
+        mod_id, mod_type = module_selection.split(' (')
+        mod_type = mod_type.rstrip(')')
+        date_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-# ------------------ 7-DAYS DATA PREVIEW ------------------
+        for point in st.session_state.leak_points:
+            leak_sheet.append_row([
+                leak_id, mod_id, mod_type, leak_end, leak_test_type,
+                point["Leak Location"], point["Repaired"], operator_initials,
+                leak_notes, date_now
+            ])
+        st.success(f"✅ Leak points saved under Leak ID {leak_id}")
+        st.session_state.leak_points = []
+
+# 7-DAYS DATA REVIEW
 st.subheader("📅 Records (Last 7 Days)")
 
-def filter_last_7_days(records, date_key):
-    today = datetime.today()
-    seven_days_ago = today - timedelta(days=7)
-    filtered_records = []
+# Module Data
+module_data = pd.DataFrame(get_all_records_cached(TAB_MODULE))
+if not module_data.empty:
+    st.subheader("📦 Module Table")
+    st.dataframe(module_data)
 
-    for record in records:
-        raw_date = str(record.get(date_key, "")).strip()
-        parsed_date = None
-
-        # Skip empty date
-        if not raw_date:
-            continue
-
-        # Try common date formats
-        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%m/%d/%Y"):
-            try:
-                parsed_date = datetime.strptime(raw_date, fmt)
-                break
-            except ValueError:
-                continue
-
-        if not parsed_date:
-            continue  # skip unparseable
-
-        # Include if within the last 7 days
-        if parsed_date.date() >= seven_days_ago.date():
-            filtered_records.append(record)
-
-    return filtered_records
-
-
-
-try:
-    module_data = pd.DataFrame(get_all_records_cached(TAB_MODULE))
-    failure_data = pd.DataFrame(get_all_records_cached(TAB_FAILURES))
-    leak_data = pd.DataFrame(get_all_records_cached(TAB_LEAK))
-
-    # Show Module Table fully (no date filtering needed)
-    if not module_data.empty:
-        st.subheader("📦 Module Table")
-        st.dataframe(module_data)
-
-    # Failures (Last 7 Days)
-    if not failure_data.empty:
-        st.subheader("🚨 Module Failures Table (Last 7 Days)")
-    filtered_failure = filter_last_7_days(failure_data.to_dict(orient="records"), "Date")
-    if filtered_failure:
-        st.dataframe(pd.DataFrame(filtered_failure))
-    else:
-        st.info("No failure records in the last 7 days.")
-
-# Leaks (Last 7 Days)
-    if not leak_data.empty:
+# Leak Data
+leak_data = pd.DataFrame(get_all_records_cached(TAB_LEAK))
+if not leak_data.empty:
+    leak_data["Date/Time"] = pd.to_datetime(leak_data["Date/Time"], errors='coerce')
+    recent_leak_data = leak_data[leak_data["Date/Time"] >= (datetime.now() - timedelta(days=7))]
+    if not recent_leak_data.empty:
         st.subheader("💧 Leak Test Table (Last 7 Days)")
-    filtered_leak = filter_last_7_days(leak_data.to_dict(orient="records"), "Date/Time")
-    if filtered_leak:
-        st.dataframe(pd.DataFrame(filtered_leak))
+        st.dataframe(recent_leak_data.sort_values(by="Date/Time", ascending=False))
     else:
-        st.info("No leak test records in the last 7 days.")
+        st.info("No leak test records found in the last 7 days.")
+else:
+    st.info("No leak test data available.")
 
-
-except Exception as e:
-    st.error(f"❌ Error loading recent data: {e}")
+# Failure Data
+failure_data = pd.DataFrame(get_all_records_cached(TAB_FAILURES))
+if not failure_data.empty:
+    failure_data["Date"] = pd.to_datetime(failure_data["Date"], errors='coerce')
+    recent_failure_data = failure_data[failure_data["Date"] >= (datetime.now() - timedelta(days=7))]
+    if not recent_failure_data.empty:
+        st.subheader("🚨 Module Failures Table (Last 7 Days)")
+        st.dataframe(recent_failure_data.sort_values(by="Date", ascending=False))
+    else:
+        st.info("No failure records found in the last 7 days.")
+else:
+    st.info("No module failure data available.")
