@@ -146,13 +146,14 @@ for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAI
         if not df.empty:
             if date_col:
                 df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-                df = df[df[date_col] >= datetime.now() - timedelta(days=7)]
+                df = df[df[date_col].dt.date >= (datetime.now().date() - timedelta(days=7))]
             if not df.empty:
                 st.markdown(f"### 📋 Recent `{tab_name}`")
-                st.dataframe(df)
+                st.dataframe(df.sort_values(by=date_col, ascending=False) if date_col else df)
             else:
                 st.info(f"No recent data in `{tab_name}`.")
         else:
             st.info(f"No data found in `{tab_name}`.")
     except Exception as e:
         st.error(f"Error loading `{tab_name}`: {e}")
+
