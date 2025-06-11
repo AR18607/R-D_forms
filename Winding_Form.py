@@ -1,3 +1,5 @@
+# Winding Form – Final Updated Version with Full Corrections
+
 import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -14,6 +16,7 @@ TAB_WIND_PROGRAM = "Wind Program Tbl"
 TAB_WOUND_MODULE = "Wound Module Tbl"
 TAB_WRAP_PER_MODULE = "Wrap per Module Tbl"
 TAB_SPOOLS_PER_WIND = "Spools per Wind Tbl"
+TAB_COATED_SPOOL = "Coated Spool Tbl"
 
 # ----------------- UTILS -----------------
 def connect_google_sheet(sheet_name):
@@ -46,17 +49,19 @@ wind_program_sheet = get_or_create_tab(sheet, TAB_WIND_PROGRAM, ["Wind Program I
 wound_module_sheet = get_or_create_tab(sheet, TAB_WOUND_MODULE, ["Wound Module ID", "Module ID (FK)", "Wind Program ID (FK)", "Operator Initials", "Notes", "MFG DB Wind ID", "MFG DB Potting ID", "MFG DB Mod ID", "Date"])
 wrap_sheet = get_or_create_tab(sheet, TAB_WRAP_PER_MODULE, ["WrapPerModule PK", "Module ID (FK)", "Wrap After Layer #", "Type of Wrap", "Notes", "Date"])
 spool_sheet = get_or_create_tab(sheet, TAB_SPOOLS_PER_WIND, ["SpoolPerWind PK", "MFG DB Wind ID (FK)", "Coated Spool ID", "Length Used", "Notes", "Date"])
+coated_spool_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID", "UnCoatedSpool_ID"])
 
 module_df = pd.DataFrame(module_sheet.get_all_records())
 wound_module_df = pd.DataFrame(wound_module_sheet.get_all_records())
+coated_spool_ids = fetch_column_values(coated_spool_sheet)
 
-# Filter Wound Modules only and format
+# Filter Wound Modules only and format with Type
 wound_modules = module_df[module_df["Module Type"] == "Wound"]
 module_options = [f"{row['Module ID']} ({row['Module Type']})" for _, row in wound_modules.iterrows()]
 wind_ids = wound_module_df["Wound Module ID"].dropna().tolist()
-spool_ids = fetch_column_values(spool_sheet, 2)
 
-# ----------------- LAYOUT -----------------
+st.title("🌀 Winding Form")
+
 col1, col2 = st.columns([2, 3])
 
 # ----------------- WIND PROGRAM FORM -----------------
@@ -66,97 +71,106 @@ with col1:
         wind_program_id = get_last_id(wind_program_sheet, "WP")
         st.markdown(f"**Wind Program ID:** `{wind_program_id}`")
         program_name = st.text_input("Program Name")
-        bundles = st.number_input("Number of Bundles / Wind", min_value=0)
-        fibers_per_ribbon = st.number_input("Number of Fibers / Ribbon", min_value=0)
-        spacing = st.number_input("Space Between Ribbons", min_value=0.0)
-        wind_angle = st.number_input("Wind Angle (deg)", min_value=0)
+        bundles = st.number_input("Number of Bundles / Wind", min_value=0, step=1)
+        fibers_per_ribbon = st.number_input("Number of Fibers / Ribbon", min_value=0, step=1)
+        spacing = st.number_input("Space Between Ribbons", min_value=0.0, step=0.1)
+        wind_angle = st.number_input("Wind Angle (deg)", min_value=0, step=1)
         active_length = st.number_input("Active Fiber Length (inch)", min_value=0.0)
         total_length = st.number_input("Total Fiber Length (inch)", min_value=0.0)
         active_area = st.number_input("Active Area / Fiber", min_value=0.0)
-        layers = st.number_input("Number of Layers", min_value=0)
-        loops_per_layer = st.number_input("Number of Loops / Layer", min_value=0)
+        layers = st.number_input("Number of Layers", min_value=0, step=1)
+        loops_per_layer = st.number_input("Number of Loops / Layer", min_value=0, step=1)
         area_layer = st.number_input("C - Active Area / Layer", min_value=0.0)
         notes = st.text_area("Notes")
         if st.form_submit_button("💾 Save Wind Program"):
             wind_program_sheet.append_row([wind_program_id, program_name, bundles, fibers_per_ribbon, spacing, wind_angle, active_length, total_length, active_area, layers, loops_per_layer, area_layer, notes])
-            st.success("✅ Saved")
+            st.success(f"✅ Wind Program `{wind_program_id}` saved.")
 
-# ----------------- RIGHT COLUMN FORMS -----------------
+# ----------------- OTHER FORMS STACKED -----------------
 with col2:
     st.subheader("🧵 Wound Module")
     with st.form("wound_module_form", clear_on_submit=True):
         wound_id = get_last_id(wound_module_sheet, "WMOD", start_at=72)
         st.markdown(f"Wound Module ID: `{wound_id}`")
-        module_fk = st.selectbox("Module ID", module_options)
+        selected_module = st.selectbox("Module ID", module_options)
         wind_fk = st.selectbox("Wind Program ID", wind_ids)
         operator = st.text_input("Operator Initials")
         notes = st.text_area("Notes")
         mfg_wind = st.text_input("MFG DB Wind ID")
         mfg_potting = st.text_input("MFG DB Potting ID")
-        mfg_mod = st.number_input("MFG DB Mod ID", min_value=0)
-        date = st.date_input("Date", value=datetime.today())
+        mfg_mod = st.number_input("MFG DB Mod ID", min_value=0, step=1)
+        entry_date = st.date_input("Date", value=datetime.today())
         if st.form_submit_button("💾 Save Wound Module"):
-            wound_module_sheet.append_row([wound_id, module_fk.split(" ")[0], wind_fk, operator, notes, mfg_wind, mfg_potting, mfg_mod, date.strftime("%Y-%m-%d")])
-            st.success("✅ Saved")
+            module_fk = selected_module.split(" ")[0]
+            wound_module_sheet.append_row([wound_id, module_fk, wind_fk, operator, notes, mfg_wind, mfg_potting, mfg_mod, entry_date.strftime("%Y-%m-%d")])
+            st.success(f"✅ Saved {wound_id}")
 
+    # Wrap Per Module
     st.subheader("🎁 Wrap Per Module")
     if "wrap_entries" not in st.session_state:
         st.session_state.wrap_entries = []
     with st.form("wrap_form"):
         wrap_id = get_last_id(wrap_sheet, "WRAP")
-        module_wrap = st.selectbox("Module ID", module_options)
+        st.markdown(f"Wrap PK: `{wrap_id}`")
+        wrap_mod = st.selectbox("Module ID", module_options)
         after_layer = st.number_input("Wrap After Layer #", min_value=0)
         wrap_type = st.selectbox("Type of Wrap", ["Teflon", "Nylon", "Other"])
         wrap_notes = st.text_area("Notes")
         wrap_date = st.date_input("Date", value=datetime.today())
         if st.form_submit_button("➕ Add Wrap"):
-            st.session_state.wrap_entries.append([wrap_id, module_wrap.split(" ")[0], after_layer, wrap_type, wrap_notes, wrap_date.strftime("%Y-%m-%d")])
+            st.session_state.wrap_entries.append([wrap_id, wrap_mod.split(" ")[0], after_layer, wrap_type, wrap_notes, wrap_date.strftime("%Y-%m-%d")])
     if st.session_state.wrap_entries:
-        st.dataframe(pd.DataFrame(st.session_state.wrap_entries, columns=["ID", "Module", "Layer", "Type", "Notes", "Date"]))
+        st.dataframe(pd.DataFrame(st.session_state.wrap_entries, columns=["PK", "Mod", "Layer", "Type", "Notes", "Date"]))
         if st.button("💾 Submit All Wraps"):
             for entry in st.session_state.wrap_entries:
                 wrap_sheet.append_row(entry)
-            st.success("✅ Wraps saved")
+            st.success("✅ Wraps submitted")
             st.session_state.wrap_entries.clear()
 
+    # Spools Per Wind
     st.subheader("🧪 Spools Per Wind")
     if "spool_entries" not in st.session_state:
         st.session_state.spool_entries = []
     with st.form("spool_form"):
         spool_id = get_last_id(spool_sheet, "SPW")
-        wind_id = st.selectbox("Wind ID", wind_ids)
-        coated_id = st.selectbox("Coated Spool ID", list(set(spool_ids)))
-        length_used = st.number_input("Length Used", min_value=0.0)
-        spool_notes = st.text_area("Notes")
+        wind_fk = st.selectbox("Wind ID", wind_ids)
+        coated_fk = st.selectbox("Coated Spool ID", coated_spool_ids)
+        length = st.number_input("Length Used", min_value=0.0)
+        notes = st.text_area("Notes")
         spool_date = st.date_input("Date", value=datetime.today())
         if st.form_submit_button("➕ Add Spool"):
-            st.session_state.spool_entries.append([spool_id, wind_id, coated_id, length_used, spool_notes, spool_date.strftime("%Y-%m-%d")])
+            st.session_state.spool_entries.append([spool_id, wind_fk, coated_fk, length, notes, spool_date.strftime("%Y-%m-%d")])
     if st.session_state.spool_entries:
         st.dataframe(pd.DataFrame(st.session_state.spool_entries, columns=["ID", "Wind", "Spool", "Length", "Notes", "Date"]))
         if st.button("💾 Submit All Spools"):
             for entry in st.session_state.spool_entries:
                 spool_sheet.append_row(entry)
-            st.success("✅ Spools saved")
+            st.success("✅ Spools submitted")
             st.session_state.spool_entries.clear()
 
 # ------------------ 30-DAY DATA REVIEW ------------------
 st.subheader("📅 Recent Entries (Last 30 Days)")
-review_tabs = {
-    "Module Tbl": module_sheet,
-    "Wind Program Tbl": wind_program_sheet,
-    "Wound Module Tbl": wound_module_sheet,
-    "Wrap per Module Tbl": wrap_sheet,
-    "Spools per Wind Tbl": spool_sheet,
+review_tables = {
+    "Module Tbl": (module_sheet, "Module ID"),
+    "Wind Program Tbl": (wind_program_sheet, "Wind Program ID"),
+    "Wound Module Tbl": (wound_module_sheet, "Date"),
+    "Wrap per Module Tbl": (wrap_sheet, "Date"),
+    "Spools per Wind Tbl": (spool_sheet, "Date")
 }
-for label, ws in review_tabs.items():
-    df = pd.DataFrame(ws.get_all_records())
-    df.columns = [c.strip() for c in df.columns]
+
+for label, (ws, date_col) in review_tables.items():
     st.markdown(f"### {label}")
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df = df[df["Date"].notna()]
-        df = df[df["Date"].dt.date >= (datetime.now().date() - timedelta(days=30))]
-    if df.empty:
-        st.info("No recent data.")
-    else:
-        st.dataframe(df)
+    try:
+        df = pd.DataFrame(ws.get_all_records())
+        if not df.empty:
+            df.columns = [c.strip() for c in df.columns]
+            if date_col in df.columns:
+                df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+                df = df[df[date_col].dt.date >= (datetime.today().date() - timedelta(days=30))]
+                st.dataframe(df.sort_values(by=date_col, ascending=False))
+            else:
+                st.dataframe(df)
+        else:
+            st.info("No recent entries.")
+    except Exception as e:
+        st.error(f"❌ Failed to load {label}: {e}")
