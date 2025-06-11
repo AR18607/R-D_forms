@@ -33,12 +33,10 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-
 def get_cached_col_values(sheet_name, col_index):
     sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
     worksheet = sheet.worksheet(sheet_name)
     return worksheet.col_values(col_index)
-
 
 def get_all_records_cached(sheet_name):
     sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
@@ -156,4 +154,3 @@ for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAI
             st.info(f"No data found in `{tab_name}`.")
     except Exception as e:
         st.error(f"Error loading `{tab_name}`: {e}")
-
