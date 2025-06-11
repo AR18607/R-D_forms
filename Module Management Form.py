@@ -143,14 +143,11 @@ st.subheader("📅 Records (Last 7 Days)")
 for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAILURES, "Date")]:
     try:
         df = pd.DataFrame(get_all_records(tab_name))
-
         if not df.empty:
             if date_col:
-                # Parse only rows that look like valid dates
                 df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-                df = df[df[date_col].notna()]  # keep only valid dates
+                df = df[df[date_col].notna()]  # ensure valid dates only
                 df = df[df[date_col].dt.date >= (datetime.now().date() - timedelta(days=7))]
-
             if not df.empty:
                 st.markdown(f"### 📋 Recent `{tab_name}`")
                 st.dataframe(df.sort_values(by=date_col, ascending=False) if date_col else df)
@@ -160,4 +157,5 @@ for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAI
             st.info(f"No data found in `{tab_name}`.")
     except Exception as e:
         st.error(f"Error loading `{tab_name}`: {e}")
+
 
