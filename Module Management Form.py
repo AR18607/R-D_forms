@@ -138,12 +138,13 @@ if st.session_state.leak_points:
         st.success(f"✅ Leak points saved under Leak ID {leak_id}")
         st.session_state.leak_points = []
 
-st.subheader("📅 Records (Last 7 Days)")
+# 30-DAYS DATA REVIEW
+st.subheader("📅 Records (Last 30 Days)")
 for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAILURES, "Date")]:
     try:
         df = pd.DataFrame(get_all_records(tab_name))
 
-        # Clean column names
+        # Clean column names to handle trailing spaces or odd characters
         df.columns = [col.strip() for col in df.columns]
 
         if not df.empty:
@@ -152,7 +153,7 @@ for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAI
                 if date_col_clean in df.columns:
                     df[date_col_clean] = pd.to_datetime(df[date_col_clean], errors="coerce")
                     df = df[df[date_col_clean].notna()]
-                    df = df[df[date_col_clean].dt.date >= (datetime.now().date() - timedelta(days=7))]
+                    df = df[df[date_col_clean].dt.date >= (datetime.now().date() - timedelta(days=30))]
                 else:
                     st.warning(f"⚠️ Column '{date_col}' not found in `{tab_name}`.")
                     continue
