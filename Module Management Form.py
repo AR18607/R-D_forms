@@ -33,13 +33,13 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-@st.cache_data(ttl=300)
+
 def get_cached_col_values(sheet_name, col_index):
     sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
     worksheet = sheet.worksheet(sheet_name)
     return worksheet.col_values(col_index)
 
-@st.cache_data(ttl=300)
+
 def get_all_records_cached(sheet_name):
     sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
     worksheet = sheet.worksheet(sheet_name)
