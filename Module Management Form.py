@@ -33,18 +33,18 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-def get_cached_col_values(sheet_name, col_index):
+def get_col_values(sheet_name, col_index):
     sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
     worksheet = sheet.worksheet(sheet_name)
     return worksheet.col_values(col_index)
 
-def get_all_records_cached(sheet_name):
+def get_all_records(sheet_name):
     sheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
     worksheet = sheet.worksheet(sheet_name)
     return worksheet.get_all_records()
 
 def get_last_id(sheet_name, prefix):
-    records = get_cached_col_values(sheet_name, 1)[1:]
+    records = get_col_values(sheet_name, 1)[1:]
     nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix) and r.split('-')[-1].isdigit()]
     next_num = max(nums) + 1 if nums else 1
     return f"{prefix}-{str(next_num).zfill(3)}"
@@ -63,7 +63,7 @@ failure_sheet = get_or_create_tab(spreadsheet, TAB_FAILURES, [
     "Microscopy", "Microscopy Notes", "Failure Mode", "Operator Initials", "Date", "Label"
 ])
 
-existing_modules_df = pd.DataFrame(get_all_records_cached(TAB_MODULE))
+existing_modules_df = pd.DataFrame(get_all_records(TAB_MODULE))
 module_options = existing_modules_df[['Module ID', 'Module Type']].apply(lambda x: f"{x[0]} ({x[1]})", axis=1).tolist()
 
 # MODULE ENTRY FORM
@@ -140,7 +140,7 @@ if st.session_state.leak_points:
 st.subheader("📅 Records (Last 7 Days)")
 for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAILURES, "Date")]:
     try:
-        df = pd.DataFrame(get_all_records_cached(tab_name))
+        df = pd.DataFrame(get_all_records(tab_name))
         if not df.empty:
             if date_col:
                 df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
