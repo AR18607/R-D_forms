@@ -68,7 +68,39 @@ failure_sheet = get_or_create_tab(spreadsheet, TAB_FAILURES, [
 existing_modules_df = pd.DataFrame(get_all_records_cached(TAB_MODULE))
 module_options = existing_modules_df[['Module ID', 'Module Type']].apply(lambda x: f"{x[0]} ({x[1]})", axis=1).tolist()
 
-# [Module and Failure entry forms remain unchanged]
+# MODULE ENTRY FORM
+st.subheader("🔹 Module Entry")
+with st.form("module_entry_form", clear_on_submit=True):
+    module_id = get_last_id(TAB_MODULE, "MOD")
+    st.markdown(f"**Auto-generated Module ID:** `{module_id}`")
+    module_type = st.selectbox("Module Type", ["Wound", "Mini"])
+    module_notes = st.text_area("Notes")
+    if st.form_submit_button("🚀 Submit Module"):
+        module_sheet.append_row([module_id, module_type, module_notes])
+        st.success(f"✅ Module {module_id} saved successfully!")
+
+# MODULE FAILURE FORM
+st.subheader("🔹 Module Failure Entry")
+with st.form("failure_entry_form", clear_on_submit=True):
+    failure_id = get_last_id(TAB_FAILURES, "FAIL")
+    failure_module_fk = st.selectbox("Module ID", module_options)
+    description = st.text_area("Description of Failure")
+    autopsy = st.selectbox("Autopsy Done?", ["Yes", "No"])
+    autopsy_notes = st.text_area("Autopsy Notes")
+    microscopy = st.selectbox("Microscopy Type", ["Classical", "SEM", "None"])
+    microscopy_notes = st.text_area("Microscopy Notes")
+    failure_mode = st.text_input("Failure Mode")
+    operator_initials = st.text_input("Operator Initials")
+    failure_date = st.date_input("Failure Date")
+    label = st.text_input("Label")
+    if st.form_submit_button("🚨 Submit Failure Entry"):
+        mod_id, _ = failure_module_fk.split(' (')
+        failure_sheet.append_row([
+            failure_id, mod_id, description, autopsy, autopsy_notes,
+            microscopy, microscopy_notes, failure_mode, operator_initials,
+            str(failure_date), label
+        ])
+        st.success(f"✅ Failure Entry {failure_id} saved successfully!")
 
 # LEAK TEST FORM
 st.subheader("🔹 Leak Test Entry")
@@ -109,15 +141,18 @@ if st.session_state.leak_points:
 # 7-DAYS DATA REVIEW
 st.subheader("📅 Records (Last 7 Days)")
 for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAILURES, "Date")]:
-    data_df = pd.DataFrame(get_all_records_cached(tab_name))
-    if not data_df.empty:
-        if date_col:
-            data_df[date_col] = pd.to_datetime(data_df[date_col], errors='coerce')
-            recent_data = data_df[data_df[date_col] >= datetime.now() - timedelta(days=7)]
+    try:
+        df = pd.DataFrame(get_all_records_cached(tab_name))
+        if not df.empty:
+            if date_col:
+                df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+                df = df[df[date_col] >= datetime.now() - timedelta(days=7)]
+            if not df.empty:
+                st.markdown(f"### 📋 Recent {tab_name}")
+                st.dataframe(df)
+            else:
+                st.info(f"No recent data in {tab_name}.")
         else:
-            recent_data = data_df
-        if not recent_data.empty:
-            st.markdown(f"### 📋 Recent {tab_name}")
-            st.dataframe(recent_data)
-        else:
-            st.info(f"No recent data in {tab_name}.")
+            st.info(f"No data found in {tab_name}.")
+    except Exception as e:
+        st.error(f"Error loading {tab_name}: {e}")
