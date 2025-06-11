@@ -138,24 +138,34 @@ if st.session_state.leak_points:
         st.success(f"✅ Leak points saved under Leak ID {leak_id}")
         st.session_state.leak_points = []
 
-# 7-DAYS DATA REVIEW
 st.subheader("📅 Records (Last 7 Days)")
 for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAILURES, "Date")]:
     try:
         df = pd.DataFrame(get_all_records(tab_name))
+
+        # Clean column names
+        df.columns = [col.strip() for col in df.columns]
+
         if not df.empty:
             if date_col:
-                df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-                df = df[df[date_col].notna()]  # ensure valid dates only
-                df = df[df[date_col].dt.date >= (datetime.now().date() - timedelta(days=7))]
+                date_col_clean = date_col.strip()
+                if date_col_clean in df.columns:
+                    df[date_col_clean] = pd.to_datetime(df[date_col_clean], errors="coerce")
+                    df = df[df[date_col_clean].notna()]
+                    df = df[df[date_col_clean].dt.date >= (datetime.now().date() - timedelta(days=7))]
+                else:
+                    st.warning(f"⚠️ Column '{date_col}' not found in `{tab_name}`.")
+                    continue
+
             if not df.empty:
                 st.markdown(f"### 📋 Recent `{tab_name}`")
-                st.dataframe(df.sort_values(by=date_col, ascending=False) if date_col else df)
+                st.dataframe(df.sort_values(by=date_col_clean, ascending=False) if date_col else df)
             else:
                 st.info(f"No recent data in `{tab_name}`.")
         else:
             st.info(f"No data found in `{tab_name}`.")
     except Exception as e:
         st.error(f"Error loading `{tab_name}`: {e}")
+
 
 
