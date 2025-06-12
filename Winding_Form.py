@@ -54,6 +54,7 @@ coated_spool_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID
 module_df = pd.DataFrame(module_sheet.get_all_records())
 wound_module_df = pd.DataFrame(wound_module_sheet.get_all_records())
 coated_spool_ids = fetch_column_values(coated_spool_sheet)
+wind_program_ids = fetch_column_values(wind_program_sheet)
 
 # Filter Wound Modules only and format with Type
 wound_modules = module_df[module_df["Module Type"] == "Wound"]
@@ -67,24 +68,39 @@ col1, col2 = st.columns([2, 3])
 # ----------------- WIND PROGRAM FORM -----------------
 with col1:
     st.subheader("🌬️ Wind Program")
+    selected_existing_wp_id = st.selectbox("Select Wind Program ID to View/Edit", [""] + wind_program_ids)
+    wind_program_data = pd.DataFrame(wind_program_sheet.get_all_records())
+    wp_prefill = None
+    if selected_existing_wp_id:
+        match = wind_program_data[wind_program_data["Wind Program ID"] == selected_existing_wp_id]
+        if not match.empty:
+            wp_prefill = match.iloc[0]
+
     with st.form("wind_program_form", clear_on_submit=True):
-        wind_program_id = get_last_id(wind_program_sheet, "WP")
+        wind_program_id = selected_existing_wp_id or get_last_id(wind_program_sheet, "WP")
         st.markdown(f"**Wind Program ID:** `{wind_program_id}`")
-        program_name = st.text_input("Program Name")
-        bundles = st.number_input("Number of Bundles / Wind", min_value=0, step=1)
-        fibers_per_ribbon = st.number_input("Number of Fibers / Ribbon", min_value=0, step=1)
-        spacing = st.number_input("Space Between Ribbons", min_value=0.0, step=0.1)
-        wind_angle = st.number_input("Wind Angle (deg)", min_value=0, step=1)
-        active_length = st.number_input("Active Fiber Length (inch)", min_value=0.0)
-        total_length = st.number_input("Total Fiber Length (inch)", min_value=0.0)
-        active_area = st.number_input("Active Area / Fiber", min_value=0.0)
-        layers = st.number_input("Number of Layers", min_value=0, step=1)
-        loops_per_layer = st.number_input("Number of Loops / Layer", min_value=0, step=1)
-        area_layer = st.number_input("C - Active Area / Layer", min_value=0.0)
-        notes = st.text_area("Notes")
+        program_name = st.text_input("Program Name", value=wp_prefill["Program Name"] if wp_prefill is not None else "")
+        bundles = st.number_input("Number of Bundles / Wind", min_value=0, step=1, value=int(wp_prefill["Number of bundles / wind"]) if wp_prefill is not None else 0)
+        fibers_per_ribbon = st.number_input("Number of Fibers / Ribbon", min_value=0, step=1, value=int(wp_prefill["Number of fibers / ribbon"]) if wp_prefill is not None else 0)
+        spacing = st.number_input("Space Between Ribbons", min_value=0.0, step=0.1, value=float(wp_prefill["Space between ribbons"]) if wp_prefill is not None else 0.0)
+        wind_angle = st.number_input("Wind Angle (deg)", min_value=0, step=1, value=int(wp_prefill["Wind Angle (deg)"]) if wp_prefill is not None else 0)
+        active_length = st.number_input("Active Fiber Length (inch)", min_value=0.0, value=float(wp_prefill["Active fiber length (inch)"]) if wp_prefill is not None else 0.0)
+        total_length = st.number_input("Total Fiber Length (inch)", min_value=0.0, value=float(wp_prefill["Total fiber length (inch)"]) if wp_prefill is not None else 0.0)
+        active_area = st.number_input("Active Area / Fiber", min_value=0.0, value=float(wp_prefill["Active Area / fiber"]) if wp_prefill is not None else 0.0)
+        layers = st.number_input("Number of Layers", min_value=0, step=1, value=int(wp_prefill["Number of layers"]) if wp_prefill is not None else 0)
+        loops_per_layer = st.number_input("Number of Loops / Layer", min_value=0, step=1, value=int(wp_prefill["Number of loops / layer"]) if wp_prefill is not None else 0)
+        area_layer = st.number_input("C - Active Area / Layer", min_value=0.0, value=float(wp_prefill["C - Active area / layer"]) if wp_prefill is not None else 0.0)
+        notes = st.text_area("Notes", value=wp_prefill["Notes"] if wp_prefill is not None else "")
         if st.form_submit_button("💾 Save Wind Program"):
-            wind_program_sheet.append_row([wind_program_id, program_name, bundles, fibers_per_ribbon, spacing, wind_angle, active_length, total_length, active_area, layers, loops_per_layer, area_layer, notes])
-            st.success(f"✅ Wind Program `{wind_program_id}` saved.")
+            new_entry = [wind_program_id, program_name, bundles, fibers_per_ribbon, spacing, wind_angle, active_length, total_length, active_area, layers, loops_per_layer, area_layer, notes]
+            if selected_existing_wp_id and selected_existing_wp_id in wind_program_data["Wind Program ID"].values:
+                idx = wind_program_data[wind_program_data["Wind Program ID"] == selected_existing_wp_id].index[0] + 2
+                wind_program_sheet.delete_rows(idx)
+                wind_program_sheet.insert_row(new_entry, idx)
+                st.success(f"✅ Wind Program `{wind_program_id}` updated.")
+            else:
+                wind_program_sheet.append_row(new_entry)
+                st.success(f"✅ Wind Program `{wind_program_id}` saved.")
 
 # ----------------- OTHER FORMS STACKED -----------------
 with col2:
