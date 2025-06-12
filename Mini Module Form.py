@@ -21,13 +21,13 @@ def connect_google_sheet(sheet_name):
     return gspread.authorize(creds).open(sheet_name)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
-    try:
-        worksheet = spreadsheet.worksheet(tab_name)
-        if len(worksheet.row_values(1)) == 0:
-            worksheet.insert_row(headers, 1)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-        worksheet.insert_row(headers, 1)
+    for worksheet in spreadsheet.worksheets():
+        if worksheet.title.strip().lower() == tab_name.strip().lower():
+            if len(worksheet.row_values(1)) == 0:
+                worksheet.insert_row(headers, 1)
+            return worksheet
+    worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+    worksheet.insert_row(headers, 1)
     return worksheet
 
 def get_last_id(worksheet, prefix):
@@ -46,7 +46,6 @@ def generate_c_module_label(operator_initials):
 
 # ---------- LOAD ----------
 sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
-
 mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, [
     "Mini Module ID", "Module ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "CoatedSpool_ID", "DCoating_ID",
     "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"
@@ -55,25 +54,17 @@ module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type",
 batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch_Fiber_ID"])
 uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID"])
 coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID"])
-dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["DCoating_ID"])
+dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["DCoating_ID", "Solution_ID", "Date", "Box_Temperature",
+    "Box_RH", "N2_Flow", "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
+    "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"])
 
 # ---------- FILTERS ----------
 module_df = pd.DataFrame(module_sheet.get_all_records())
 mini_df = pd.DataFrame(mini_sheet.get_all_records())
-
 mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module ID"].tolist()
-
-# Safe fetch with empty fallback
-def safe_column(sheet, column):
-    try:
-        df = pd.DataFrame(sheet.get_all_records())
-        return df[column].dropna().tolist() if column in df else []
-    except:
-        return []
-
-batch_ids = safe_column(batch_sheet, "Batch_Fiber_ID")
-uncoated_ids = safe_column(uncoated_sheet, "UncoatedSpool_ID")
-coated_ids = safe_column(coated_sheet, "CoatedSpool_ID")
+batch_ids = pd.DataFrame(batch_sheet.get_all_records()).get("Batch_Fiber_ID", pd.Series()).dropna().tolist()
+uncoated_ids = pd.DataFrame(uncoated_sheet.get_all_records()).get("UncoatedSpool_ID", pd.Series()).dropna().tolist()
+coated_ids = pd.DataFrame(coated_sheet.get_all_records()).get("CoatedSpool_ID", pd.Series()).dropna().tolist()
 
 try:
     dcoating_df = pd.DataFrame(dcoating_sheet.get_all_records(expected_headers=[
@@ -97,10 +88,10 @@ with st.form("mini_module_form", clear_on_submit=True):
     mini_module_id = prefill["Mini Module ID"] if prefill is not None else get_last_id(mini_sheet, "MINIMOD")
     st.markdown(f"**Mini Module ID:** `{mini_module_id}`")
 
-    batch_fiber_id = st.selectbox("Batch_Fiber_ID", batch_ids, index=batch_ids.index(prefill["Batch_Fiber_ID"]) if prefill and prefill["Batch_Fiber_ID"] in batch_ids else 0)
-    uncoated_spool_id = st.selectbox("UncoatedSpool_ID", uncoated_ids, index=uncoated_ids.index(prefill["UncoatedSpool_ID"]) if prefill and prefill["UncoatedSpool_ID"] in uncoated_ids else 0)
-    coated_spool_id = st.selectbox("CoatedSpool_ID", coated_ids, index=coated_ids.index(prefill["CoatedSpool_ID"]) if prefill and prefill["CoatedSpool_ID"] in coated_ids else 0)
-    dcoating_id = st.selectbox("DCoating_ID", dcoating_ids, index=dcoating_ids.index(prefill["DCoating_ID"]) if prefill and prefill["DCoating_ID"] in dcoating_ids else 0)
+    batch_fiber_id = st.selectbox("Batch_Fiber_ID", batch_ids, index=batch_ids.index(prefill["Batch_Fiber_ID"]) if prefill is not None else 0)
+    uncoated_spool_id = st.selectbox("UncoatedSpool_ID", uncoated_ids, index=uncoated_ids.index(prefill["UncoatedSpool_ID"]) if prefill is not None else 0)
+    coated_spool_id = st.selectbox("CoatedSpool_ID", coated_ids, index=coated_ids.index(prefill["CoatedSpool_ID"]) if prefill is not None and prefill["CoatedSpool_ID"] in coated_ids else 0)
+    dcoating_id = st.selectbox("DCoating_ID", dcoating_ids, index=dcoating_ids.index(prefill["DCoating_ID"]) if prefill is not None and prefill["DCoating_ID"] in dcoating_ids else 0)
 
     num_fibers = st.number_input("Number of Fibers", step=1, value=int(prefill["Number of Fibers"]) if prefill is not None else 0)
     fiber_length = st.number_input("Fiber Length (inches)", format="%.2f", value=float(prefill["Fiber Length"]) if prefill is not None else 0.0)
