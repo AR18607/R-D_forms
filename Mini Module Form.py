@@ -54,6 +54,19 @@ module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type",
 batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch_Fiber_ID"])
 uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID"])
 coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID"])
+
+try:
+    coated_data = coated_sheet.get_all_records()
+    if coated_data:
+        coated_df = pd.DataFrame(coated_data)
+        coated_ids = coated_df["CoatedSpool_ID"].dropna().tolist()
+    else:
+        st.warning("⚠️ Coated Spool Tbl (Used) is empty.")
+        coated_ids = []
+except Exception as e:
+    st.error(f"❌ Error loading Coated Spool Tbl (Used): {e}")
+    coated_ids = []
+
 dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["DCoating_ID"])  # ✅ <--- ADD THIS LINE BACK
 
 # Handle DCoating sheet with duplicate/blank header fix
