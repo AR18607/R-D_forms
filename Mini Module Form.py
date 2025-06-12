@@ -61,14 +61,7 @@ dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, [
     "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
     "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
     "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"
-
-try:
-    dcoating_df = pd.DataFrame(dcoating_sheet.get_all_records(expected_headers=expected_headers))
-except Exception as e:
-    st.error(f"❌ Error loading Dip Coating Process Tbl: {e}")
-    dcoating_df = pd.DataFrame(columns=["DCoating_ID"])
-
-])
+    ])
 
 # ---------- LOAD DATA ----------
 module_df = pd.DataFrame(module_sheet.get_all_records())
@@ -82,6 +75,7 @@ mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module
 batch_ids = batch_df.get("Batch_Fiber_ID", pd.Series()).dropna().tolist()
 uncoated_ids = uncoated_df.get("UncoatedSpool_ID", pd.Series()).dropna().tolist()
 coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist()
+
 dcoating_ids = dcoating_df.get("DCoating_ID", pd.Series()).dropna().tolist()
 
 # ---------- FORM ----------
@@ -98,7 +92,15 @@ with st.form("mini_module_form", clear_on_submit=True):
 
     batch_fiber_id = st.selectbox("Batch_Fiber_ID", batch_ids, index=batch_ids.index(prefill["Batch_Fiber_ID"]) if prefill else 0)
     uncoated_spool_id = st.selectbox("UncoatedSpool_ID", uncoated_ids, index=uncoated_ids.index(prefill["UncoatedSpool_ID"]) if prefill else 0)
-    coated_spool_id = st.selectbox("CoatedSpool_ID", coated_ids, index=coated_ids.index(prefill["CoatedSpool_ID"]) if prefill and prefill["CoatedSpool_ID"] in coated_ids else 0)
+    if coated_ids:
+        coated_spool_id = st.selectbox(
+            "CoatedSpool_ID",
+            coated_ids,
+            index=coated_ids.index(prefill["CoatedSpool_ID"]) if prefill and prefill["CoatedSpool_ID"] in coated_ids else 0)
+    else:
+        st.warning("⚠️ No Coated Spool IDs found. Please add them to the 'Coated Spool Tbl (Used)' sheet.")
+        coated_spool_id = ""
+
     dcoating_id = st.selectbox("DCoating_ID", dcoating_ids, index=dcoating_ids.index(prefill["DCoating_ID"]) if prefill and prefill["DCoating_ID"] in dcoating_ids else 0)
 
     num_fibers = st.number_input("Number of Fibers", step=1, value=int(prefill["Number of Fibers"]) if prefill else 0)
