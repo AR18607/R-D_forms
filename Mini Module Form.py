@@ -63,6 +63,11 @@ batch_df = pd.DataFrame(batch_sheet.get_all_records())
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 coated_df = pd.DataFrame(coated_sheet.get_all_records())
 dcoating_df = pd.DataFrame(dcoating_sheet.get_all_records())
+batch_df.columns = [col.strip().replace(" ", "_") for col in batch_df.columns]
+uncoated_df.columns = [col.strip().replace(" ", "_") for col in uncoated_df.columns]
+coated_df.columns = [col.strip().replace(" ", "_") for col in coated_df.columns]
+dcoating_df.columns = [col.strip().replace(" ", "_") for col in dcoating_df.columns]
+
 
 batch_ids = batch_df["Batch_Fiber_ID"].dropna().tolist() if "Batch_Fiber_ID" in batch_df else []
 uncoated_ids = uncoated_df["UncoatedSpool_ID"].dropna().tolist() if "UncoatedSpool_ID" in uncoated_df else []
