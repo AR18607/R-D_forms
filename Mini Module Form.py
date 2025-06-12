@@ -53,7 +53,8 @@ mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, [
 module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
 batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch_Fiber_ID"])
 uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID"])
-coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID"])
+coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID", "UnCoatedSpool_ID"])
+
 dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["DCoating_ID", "Solution_ID", "Date", "Box_Temperature",
     "Box_RH", "N2_Flow", "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
     "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"])
