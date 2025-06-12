@@ -1,5 +1,3 @@
-# 🧪 Mini Module Entry Form – Updated Version with Edits
-
 import streamlit as st
 import pandas as pd
 import gspread
@@ -7,7 +5,7 @@ import json
 from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 
-# ------------------ CONFIG ------------------
+# ---------- CONFIG ----------
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_MINI_MODULE = "Mini Module Tbl"
 TAB_MODULE = "Module Tbl"
@@ -16,13 +14,11 @@ TAB_UNCOATED_SPOOL = "Uncoated Spool Tbl"
 TAB_COATED_SPOOL = "Coated Spool Tbl"
 TAB_DCOATING = "Dcoating Tbl"
 
-# ------------------ CONNECT GOOGLE SHEET ------------------
+# ---------- UTILS ----------
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        json.loads(st.secrets["gcp_service_account"]), scope)
-    client = gspread.authorize(creds)
-    return client.open(sheet_name)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
+    return gspread.authorize(creds).open(sheet_name)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
@@ -34,100 +30,89 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-def get_last_id(worksheet, id_prefix):
+def get_last_id(worksheet, prefix):
     records = worksheet.col_values(1)[1:]
-    if not records:
-        return f"{id_prefix}-001"
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
-    next_num = max(nums) + 1
-    return f"{id_prefix}-{str(next_num).zfill(3)}"
+    nums = [int(r.split('-')[-1]) for r in records if r.startswith(prefix)]
+    next_num = max(nums) + 1 if nums else 1
+    return f"{prefix}-{str(next_num).zfill(3)}"
 
 def generate_c_module_label(operator_initials):
     today = datetime.today().strftime("%Y%m%d")
-    base_label = today + operator_initials.upper()
-    existing_labels = mini_sheet.col_values(11)[1:]  # 11th column is Module Label
-    sequence = [l.replace(base_label, '') for l in existing_labels if l.startswith(base_label)]
-    if sequence:
-        letters = sorted(sequence)
-        next_letter = chr(ord(letters[-1]) + 1)
-    else:
-        next_letter = 'A'
-    return base_label + next_letter
+    base = today + operator_initials.upper()
+    labels = mini_sheet.col_values(11)[1:]
+    existing = [l.replace(base, '') for l in labels if l.startswith(base)]
+    next_letter = chr(ord(max(existing)) + 1) if existing else 'A'
+    return base + next_letter
 
-def filter_last_7_days(df):
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    return df[df["Date"] >= datetime.today() - timedelta(days=7)]
+# ---------- LOAD ----------
+sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, ["Mini Module ID", "Module ID", "Batch Fiber ID", "UncoatedSpool ID", "CoatedSpool ID", "Dcoating ID", "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"])
+module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
+batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch Fiber ID"])
+uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool ID"])
+coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID"])
+dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["Dcoating ID"])
 
-# ------------------ LOAD SHEETS ------------------
-spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
-mini_sheet = get_or_create_tab(spreadsheet, TAB_MINI_MODULE, [
-    "Mini Module ID", "Module ID", "Batch Fiber ID", "UncoatedSpool ID", "CoatedSpool ID", "Dcoating ID",
-    "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"])
-module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
-batch_fiber_sheet = get_or_create_tab(spreadsheet, TAB_BATCH_FIBER, ["Batch Fiber ID"])
-uncoated_spool_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool ID"])
-coated_spool_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool_ID"])
-dcoating_sheet = get_or_create_tab(spreadsheet, TAB_DCOATING, ["Dcoating ID"])
-
-# ------------------ DROPDOWNS ------------------
-mini_df = pd.DataFrame(mini_sheet.get_all_records())
+# ---------- FILTERS ----------
 module_df = pd.DataFrame(module_sheet.get_all_records())
-existing_modules = module_df[module_df["Module Type"] == "Mini Module"]["Module ID"].tolist()
-batch_fiber_ids = batch_fiber_sheet.col_values(1)[1:]
-uncoated_spool_ids = uncoated_spool_sheet.col_values(1)[1:]
-coated_spool_ids = coated_spool_sheet.col_values(1)[1:]
+mini_df = pd.DataFrame(mini_sheet.get_all_records())
+mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module ID"].tolist()
+batch_ids = batch_sheet.col_values(1)[1:]
+uncoated_ids = uncoated_sheet.col_values(1)[1:]
+coated_ids = coated_sheet.col_values(1)[1:]
 dcoating_ids = dcoating_sheet.col_values(1)[1:]
 
+# ---------- FORM ----------
 st.title("🧪 Mini Module Entry Form")
-
-with st.form("mini_module_form"):
+with st.form("mini_module_form", clear_on_submit=True):
     st.subheader("🔹 Mini Module Entry")
-    selected_module = st.selectbox("Module ID (Mini only)", existing_modules)
-    prefill_row = mini_df[mini_df["Module ID"] == selected_module].iloc[0] if selected_module in mini_df["Module ID"].values else None
 
-    mini_module_id = prefill_row["Mini Module ID"] if prefill_row is not None else get_last_id(mini_sheet, "MINIMOD")
+    selected_module = st.selectbox("Module ID (Mini only)", mini_modules)
+    existing = mini_df[mini_df["Module ID"] == selected_module]
+    prefill = existing.iloc[0] if not existing.empty else None
+    mini_module_id = prefill["Mini Module ID"] if prefill is not None else get_last_id(mini_sheet, "MINIMOD")
     st.markdown(f"**Mini Module ID:** `{mini_module_id}`")
 
-    batch_fiber_id = st.selectbox("Batch Fiber ID", batch_fiber_ids, index=0 if prefill_row is None else batch_fiber_ids.index(prefill_row["Batch Fiber ID"]))
-    uncoated_spool_id = st.selectbox("Uncoated Spool ID", uncoated_spool_ids, index=0 if prefill_row is None else uncoated_spool_ids.index(prefill_row["UncoatedSpool ID"]))
-    coated_spool_id = st.selectbox("Coated Spool ID", coated_spool_ids, index=0 if prefill_row is None else coated_spool_ids.index(prefill_row["CoatedSpool ID"]))
-    dcoating_id = st.selectbox("Dcoating ID", dcoating_ids, index=0 if prefill_row is None else dcoating_ids.index(prefill_row["Dcoating ID"]))
+    batch_fiber_id = st.selectbox("Batch Fiber ID", batch_ids, index=batch_ids.index(prefill["Batch Fiber ID"]) if prefill else 0)
+    uncoated_spool_id = st.selectbox("Uncoated Spool ID", uncoated_ids, index=uncoated_ids.index(prefill["UncoatedSpool ID"]) if prefill else 0)
+    coated_spool_id = st.selectbox("Coated Spool ID", coated_ids, index=coated_ids.index(prefill["CoatedSpool ID"]) if prefill else 0)
+    dcoating_id = st.selectbox("Dcoating ID", dcoating_ids, index=dcoating_ids.index(prefill["Dcoating ID"]) if prefill else 0)
 
-    number_of_fibers = st.number_input("Number of Fibers", step=1, value=0 if prefill_row is None else int(prefill_row["Number of Fibers"]))
-    fiber_length = st.number_input("Fiber Length (inches)", format="%.2f", value=0.0 if prefill_row is None else float(prefill_row["Fiber Length"]))
-    active_area = st.number_input("C - Active Area", format="%.2f", value=0.0 if prefill_row is None else float(prefill_row["Active Area"]))
-    operator_initials = st.text_input("Operator Initials", value="" if prefill_row is None else prefill_row["Operator Initials"])
+    num_fibers = st.number_input("Number of Fibers", step=1, value=int(prefill["Number of Fibers"]) if prefill else 0)
+    fiber_length = st.number_input("Fiber Length (inches)", format="%.2f", value=float(prefill["Fiber Length"]) if prefill else 0.0)
+    active_area = st.number_input("C - Active Area", format="%.2f", value=float(prefill["Active Area"]) if prefill else 0.0)
+    operator_initials = st.text_input("Operator Initials", value=prefill["Operator Initials"] if prefill else "")
+    auto_label = st.checkbox("Auto-generate C-Module Label?", value=True)
 
-    auto_generate_label = st.checkbox("Auto-generate C-Module Label?", value=True)
-    module_label = generate_c_module_label(operator_initials) if auto_generate_label and operator_initials else st.text_input("C-Module Label", value="" if prefill_row is None else prefill_row["Module Label"])
-    notes = st.text_area("Notes", value="" if prefill_row is None else prefill_row["Notes"])
-    date_today = st.date_input("Date", value=datetime.today().date() if prefill_row is None else datetime.strptime(prefill_row["Date"], "%Y-%m-%d").date())
+    module_label = generate_c_module_label(operator_initials) if auto_label and operator_initials else st.text_input("C-Module Label", value=prefill["Module Label"] if prefill else "")
+    notes = st.text_area("Notes", value=prefill["Notes"] if prefill else "")
+    date_val = st.date_input("Date", value=datetime.today().date() if prefill is None else datetime.strptime(prefill["Date"], "%Y-%m-%d").date())
 
     submit = st.form_submit_button("💾 Save Entry")
 
+# ---------- SAVE ----------
 if submit:
+    row = [mini_module_id, selected_module, batch_fiber_id, uncoated_spool_id, coated_spool_id, dcoating_id, num_fibers, fiber_length, active_area, operator_initials, module_label, notes, str(date_val)]
     try:
-        updated_row = [mini_module_id, selected_module, batch_fiber_id, uncoated_spool_id, coated_spool_id,
-                       dcoating_id, number_of_fibers, fiber_length, active_area, operator_initials,
-                       module_label, notes, str(date_today)]
-        if prefill_row is not None:
+        if prefill is not None:
             idx = mini_df[mini_df["Mini Module ID"] == mini_module_id].index[0] + 2
             mini_sheet.delete_rows(idx)
-            mini_sheet.insert_row(updated_row, idx)
-            st.success("✅ Entry updated successfully!")
+            mini_sheet.insert_row(row, idx)
+            st.success("✅ Entry updated.")
         else:
-            mini_sheet.append_row(updated_row)
-            st.success("✅ Mini Module entry saved successfully!")
+            mini_sheet.append_row(row)
+            st.success("✅ Entry saved.")
     except Exception as e:
-        st.error(f"❌ Error saving data: {e}")
+        st.error(f"❌ Error saving: {e}")
 
-# ------------------ 7-DAY REVIEW ------------------
-st.subheader("📅 Recent Mini Module Entries (Last 7 Days)")
+# ---------- LAST 7 DAYS ----------
+st.subheader("📅 Mini Modules: Last 7 Days")
 if not mini_df.empty:
-    recent = filter_last_7_days(mini_df)
+    mini_df["Date"] = pd.to_datetime(mini_df["Date"], errors="coerce")
+    recent = mini_df[mini_df["Date"] >= datetime.today() - timedelta(days=7)]
     if not recent.empty:
         st.dataframe(recent)
     else:
-        st.info("No entries in the last 7 days.")
+        st.info("No entries in last 7 days.")
 else:
-    st.info("No data found.")
+    st.info("No data yet.")
