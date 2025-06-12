@@ -62,18 +62,17 @@ mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module
 batch_df = pd.DataFrame(batch_sheet.get_all_records())
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 coated_df = pd.DataFrame(coated_sheet.get_all_records())
+
 try:
-    dcoating_data = dcoating_sheet.get_all_records()
-    dcoating_df = pd.DataFrame(dcoating_data)
+    raw_data = dcoating_sheet.get_all_records()
+    if raw_data:
+        dcoating_df = pd.DataFrame(raw_data)
+    else:
+        st.warning("⚠️ 'Dip Coating Process Tbl' is empty.")
+        dcoating_df = pd.DataFrame(columns=["DCoating_ID"])
 except Exception as e:
-    st.error(f"❌ Could not load Dip Coating Process Tbl: {e}")
-    dcoating_df = pd.DataFrame(columns=["DCoating_ID"])  # fallback structure
-
-batch_df.columns = [col.strip().replace(" ", "_") for col in batch_df.columns]
-uncoated_df.columns = [col.strip().replace(" ", "_") for col in uncoated_df.columns]
-coated_df.columns = [col.strip().replace(" ", "_") for col in coated_df.columns]
-dcoating_df.columns = [col.strip().replace(" ", "_") for col in dcoating_df.columns]
-
+    st.error(f"❌ Error loading Dip Coating Process Tbl: {e}")
+    dcoating_df = pd.DataFrame(columns=["DCoating_ID"])
 
 batch_ids = batch_df["Batch_Fiber_ID"].dropna().tolist() if "Batch_Fiber_ID" in batch_df else []
 uncoated_ids = uncoated_df["UncoatedSpool_ID"].dropna().tolist() if "UncoatedSpool_ID" in uncoated_df else []
