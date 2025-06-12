@@ -61,6 +61,13 @@ dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, [
     "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
     "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
     "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"
+
+try:
+    dcoating_df = pd.DataFrame(dcoating_sheet.get_all_records(expected_headers=expected_headers))
+except Exception as e:
+    st.error(f"❌ Error loading Dip Coating Process Tbl: {e}")
+    dcoating_df = pd.DataFrame(columns=["DCoating_ID"])
+
 ])
 
 # ---------- LOAD DATA ----------
