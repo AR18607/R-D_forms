@@ -181,8 +181,10 @@ for label, (ws, date_col) in review_tables.items():
         if not df.empty:
             df.columns = [c.strip() for c in df.columns]
             if date_col in df.columns:
-                df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-                df = df[df[date_col].dt.date >= (datetime.today().date() - timedelta(days=30))]
+                cutoff = datetime.today().date() - timedelta(days=30)
+                df[date_col] = pd.to_datetime(df[date_col], errors="coerce").dt.date
+                df = df[df[date_col] >= cutoff]
+
                 st.dataframe(df.sort_values(by=date_col, ascending=False))
             else:
                 st.dataframe(df)
