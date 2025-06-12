@@ -48,21 +48,21 @@ def generate_c_module_label(operator_initials):
 
 # ---------- LOAD ----------
 sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
-mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, ["Mini Module ID", "Module ID", "Batch_Fiber_ID", "UncoatedSpool ID", "CoatedSpool ID", "Dcoating ID", "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"])
+mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, ["Mini Module ID", "Module ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "CoatedSpool_ID", "DCoating_ID", "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"])
 module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
 batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch_Fiber_ID"])
-uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool ID"])
-coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpoolID"])
-dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["Dcoating ID"])
+uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID"])
+coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID"])
+dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["DCoating_ID"])
 
 # ---------- FILTERS ----------
 module_df = pd.DataFrame(module_sheet.get_all_records())
 mini_df = pd.DataFrame(mini_sheet.get_all_records())
 mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module ID"].tolist()
 batch_ids = batch_sheet["Batch_Fiber_ID"].dropna().tolist()
-uncoated_ids = uncoated_sheet["UncoatedSpool ID"].dropna().tolist()
-coated_ids = coated_sheet["CoatedSpoolID"].dropna().tolist()
-dcoating_ids = dcoating_sheet["Dcoating ID"].dropna().tolist()
+uncoated_ids = uncoated_sheet["UncoatedSpool_ID"].dropna().tolist()
+coated_ids = coated_sheet["CoatedSpool_ID"].dropna().tolist()
+dcoating_ids = dcoating_sheet["DCoating_ID"].dropna().tolist()
 
 # ---------- FORM ----------
 st.title("🧪 Mini Module Entry Form")
@@ -76,9 +76,9 @@ with st.form("mini_module_form", clear_on_submit=True):
     st.markdown(f"**Mini Module ID:** `{mini_module_id}`")
 
     batch_fiber_id = st.selectbox("Batch_Fiber_ID", batch_ids, index=batch_ids.index(prefill["Batch_Fiber_ID"]) if prefill else 0)
-    uncoated_spool_id = st.selectbox("Uncoated Spool ID", uncoated_ids, index=uncoated_ids.index(prefill["UncoatedSpool ID"]) if prefill else 0)
-    coated_spool_id = st.selectbox("Coated Spool ID", coated_ids, index=coated_ids.index(prefill["CoatedSpool ID"]) if prefill else 0)
-    dcoating_id = st.selectbox("Dcoating ID", dcoating_ids, index=dcoating_ids.index(prefill["Dcoating ID"]) if prefill else 0)
+    uncoated_spool_id = st.selectbox("UncoatedSpool_ID", uncoated_ids, index=uncoated_ids.index(prefill["UncoatedSpool_ID"]) if prefill else 0)
+    coated_spool_id = st.selectbox("CoatedSpool_ID", coated_ids, index=coated_ids.index(prefill["CoatedSpool_ID"]) if prefill else 0)
+    dcoating_id = st.selectbox("DCoating_ID", dcoating_ids, index=dcoating_ids.index(prefill["DCoating_ID"]) if prefill else 0)
 
     num_fibers = st.number_input("Number of Fibers", step=1, value=int(prefill["Number of Fibers"]) if prefill else 0)
     fiber_length = st.number_input("Fiber Length (inches)", format="%.2f", value=float(prefill["Fiber Length"]) if prefill else 0.0)
