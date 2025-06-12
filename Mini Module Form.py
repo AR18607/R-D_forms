@@ -1,3 +1,5 @@
+# 🧪 Mini Module Entry Form – Updated Version with Edits
+
 import streamlit as st
 import pandas as pd
 import gspread
@@ -9,10 +11,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_MINI_MODULE = "Mini Module Tbl"
 TAB_MODULE = "Module Tbl"
-TAB_BATCH_FIBER = "Batch Fiber Tbl"
-TAB_UNCOATED_SPOOL = "Uncoated Spool Tbl"
-TAB_COATED_SPOOL = "Coated Spool Tbl"
-TAB_DCOATING = "Dcoating Tbl"
+TAB_BATCH_FIBER = "Uncoated Fiber Data Tbl"
+TAB_UNCOATED_SPOOL = "UnCoatedSpool ID Tbl"
+TAB_COATED_SPOOL = "Coated Spool Tbl (Used)"
+TAB_DCOATING = "Dip Coating Process Tbl"
 
 # ---------- UTILS ----------
 def connect_google_sheet(sheet_name):
@@ -50,17 +52,17 @@ mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, ["Mini Module ID", "Modul
 module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
 batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch Fiber ID"])
 uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool ID"])
-coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID"])
+coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpoolID"])
 dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["Dcoating ID"])
 
 # ---------- FILTERS ----------
 module_df = pd.DataFrame(module_sheet.get_all_records())
 mini_df = pd.DataFrame(mini_sheet.get_all_records())
 mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module ID"].tolist()
-batch_ids = batch_sheet.col_values(1)[1:]
-uncoated_ids = uncoated_sheet.col_values(1)[1:]
-coated_ids = coated_sheet.col_values(1)[1:]
-dcoating_ids = dcoating_sheet.col_values(1)[1:]
+batch_ids = batch_sheet["Batch Fiber ID"].dropna().tolist()
+uncoated_ids = uncoated_sheet["UncoatedSpool ID"].dropna().tolist()
+coated_ids = coated_sheet["CoatedSpoolID"].dropna().tolist()
+dcoating_ids = dcoating_sheet["Dcoating ID"].dropna().tolist()
 
 # ---------- FORM ----------
 st.title("🧪 Mini Module Entry Form")
@@ -83,7 +85,6 @@ with st.form("mini_module_form", clear_on_submit=True):
     active_area = st.number_input("C - Active Area", format="%.2f", value=float(prefill["Active Area"]) if prefill else 0.0)
     operator_initials = st.text_input("Operator Initials", value=prefill["Operator Initials"] if prefill else "")
     auto_label = st.checkbox("Auto-generate C-Module Label?", value=True)
-
     module_label = generate_c_module_label(operator_initials) if auto_label and operator_initials else st.text_input("C-Module Label", value=prefill["Module Label"] if prefill else "")
     notes = st.text_area("Notes", value=prefill["Notes"] if prefill else "")
     date_val = st.date_input("Date", value=datetime.today().date() if prefill is None else datetime.strptime(prefill["Date"], "%Y-%m-%d").date())
