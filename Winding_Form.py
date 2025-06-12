@@ -166,30 +166,22 @@ with col2:
 
 # ------------------ 30-DAY DATA REVIEW ------------------
 st.subheader("📅 Recent Entries (Last 30 Days)")
-review_tables = {
-    "Module Tbl": (module_sheet, "Module ID"),
-    "Wind Program Tbl": (wind_program_sheet, "Wind Program ID"),
-    "Wound Module Tbl": (wound_module_sheet, "Date"),
-    "Wrap per Module Tbl": (wrap_sheet, "Date"),
-    "Spools per Wind Tbl": (spool_sheet, "Date")
+review_tabs = {
+    "Module Tbl": module_sheet,
+    "Wind Program Tbl": wind_program_sheet,
+    "Wound Module Tbl": wound_module_sheet,
+    "Wrap per Module Tbl": wrap_sheet,
+    "Spools per Wind Tbl": spool_sheet,
 }
-
-for label, (ws, date_col) in review_tables.items():
+for label, ws in review_tabs.items():
+    df = pd.DataFrame(ws.get_all_records())
+    df.columns = [c.strip() for c in df.columns]
     st.markdown(f"### {label}")
-    try:
-        df = pd.DataFrame(ws.get_all_records())
-        if not df.empty:
-            df.columns = [c.strip() for c in df.columns]
-            if date_col in df.columns:
-                cutoff = pd.to_datetime(datetime.now() - timedelta(days=30))
-                df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-                df = df[df["Date"] >= cutoff]
-
-
-                st.dataframe(df.sort_values(by=date_col, ascending=False))
-            else:
-                st.dataframe(df)
-        else:
-            st.info("No recent entries.")
-    except Exception as e:
-        st.error(f"❌ Failed to load {label}: {e}")
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df[df["Date"].notna()]
+        df = df[df["Date"].dt.date >= (datetime.now().date() - timedelta(days=30))]
+    if df.empty:
+        st.info("No recent data.")
+    else:
+        st.dataframe(df)
