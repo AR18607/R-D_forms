@@ -62,7 +62,13 @@ mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module
 batch_df = pd.DataFrame(batch_sheet.get_all_records())
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 coated_df = pd.DataFrame(coated_sheet.get_all_records())
-dcoating_df = pd.DataFrame(dcoating_sheet.get_all_records())
+try:
+    dcoating_data = dcoating_sheet.get_all_records()
+    dcoating_df = pd.DataFrame(dcoating_data)
+except Exception as e:
+    st.error(f"❌ Could not load Dip Coating Process Tbl: {e}")
+    dcoating_df = pd.DataFrame(columns=["DCoating_ID"])  # fallback structure
+
 batch_df.columns = [col.strip().replace(" ", "_") for col in batch_df.columns]
 uncoated_df.columns = [col.strip().replace(" ", "_") for col in uncoated_df.columns]
 coated_df.columns = [col.strip().replace(" ", "_") for col in coated_df.columns]
