@@ -58,11 +58,17 @@ batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch_Fiber_ID"])
 uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID"])
 try:
     coated_sheet = sheet.worksheet(TAB_COATED_SPOOL)
-    coated_df = pd.DataFrame(coated_sheet.get_all_records())
-    coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist()
+    coated_data = coated_sheet.get_all_records()
+    if coated_data:
+        coated_df = pd.DataFrame(coated_data)
+        coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist()
+    else:
+        st.warning("⚠️ 'Coated Spool Tbl (Used)' is empty.")
+        coated_ids = []
 except gspread.exceptions.WorksheetNotFound:
     st.warning("⚠️ 'Coated Spool Tbl (Used)' not found. Skipping dropdown.")
     coated_ids = []
+
   # ✅ FIXED HEADERS
 dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, [
     "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
