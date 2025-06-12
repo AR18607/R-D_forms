@@ -54,6 +54,7 @@ module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type",
 batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch_Fiber_ID"])
 uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID"])
 coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID"])
+dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["DCoating_ID"])  # ✅ <--- ADD THIS LINE BACK
 
 # Handle DCoating sheet with duplicate/blank header fix
 try:
