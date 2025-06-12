@@ -56,7 +56,14 @@ mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, [
 module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
 batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch_Fiber_ID"])
 uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID"])
-coated_sheet = get_or_create_tab(sheet, TAB_COATED_SPOOL, ["CoatedSpool_ID", "UnCoatedSpool_ID"])  # ✅ FIXED HEADERS
+try:
+    coated_sheet = sheet.worksheet(TAB_COATED_SPOOL)
+    coated_df = pd.DataFrame(coated_sheet.get_all_records())
+    coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist()
+except gspread.exceptions.WorksheetNotFound:
+    st.warning("⚠️ 'Coated Spool Tbl (Used)' not found. Skipping dropdown.")
+    coated_ids = []
+  # ✅ FIXED HEADERS
 dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, [
     "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
     "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
