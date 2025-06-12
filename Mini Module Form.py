@@ -59,10 +59,15 @@ dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, ["DCoating_ID"])
 module_df = pd.DataFrame(module_sheet.get_all_records())
 mini_df = pd.DataFrame(mini_sheet.get_all_records())
 mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module ID"].tolist()
-batch_ids = batch_sheet["Batch_Fiber_ID"].dropna().tolist()
-uncoated_ids = uncoated_sheet["UncoatedSpool_ID"].dropna().tolist()
-coated_ids = coated_sheet["CoatedSpool_ID"].dropna().tolist()
-dcoating_ids = dcoating_sheet["DCoating_ID"].dropna().tolist()
+batch_df = pd.DataFrame(batch_sheet.get_all_records())
+uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
+coated_df = pd.DataFrame(coated_sheet.get_all_records())
+dcoating_df = pd.DataFrame(dcoating_sheet.get_all_records())
+
+batch_ids = batch_df["Batch_Fiber_ID"].dropna().tolist() if "Batch_Fiber_ID" in batch_df else []
+uncoated_ids = uncoated_df["UncoatedSpool_ID"].dropna().tolist() if "UncoatedSpool_ID" in uncoated_df else []
+coated_ids = coated_df["CoatedSpool_ID"].dropna().tolist() if "CoatedSpool_ID" in coated_df else []
+dcoating_ids = dcoating_df["DCoating_ID"].dropna().tolist() if "DCoating_ID" in dcoating_df else []
 
 # ---------- FORM ----------
 st.title("🧪 Mini Module Entry Form")
