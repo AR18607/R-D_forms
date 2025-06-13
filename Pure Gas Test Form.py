@@ -59,7 +59,12 @@ def module_label(row):
         return f"{mid} | Wound | {wid[0] if wid.size > 0 else '—'}"
 
 module_choices = module_df["Module ID"].tolist()
-module_display = {mid: module_label(row) for mid, row in module_df.set_index("Module ID").iterrows()}
+# Build display labels without setting index
+module_display = {
+    row["Module ID"]: module_label(row)
+    for _, row in module_df.iterrows()
+}
+
 
 # -------- STREAMLIT FORM --------
 st.title("🧪 Pure Gas Test Form")
