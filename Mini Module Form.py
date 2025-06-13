@@ -11,7 +11,7 @@ TAB_MINI_MODULE = "Mini Module Tbl"
 TAB_MODULE = "Module Tbl"
 TAB_BATCH_FIBER = "Uncoated Fiber Data Tbl"
 TAB_UNCOATED_SPOOL = "UnCoatedSpool ID Tbl"
-TAB_COATED_SPOOL = "Coated Spool Tbl (Used)"
+TAB_COATED_SPOOL = "Coated Spool Tbl"
 TAB_DCOATING = "Dip Coating Process Tbl"
 
 # ---------- UTILS ----------
