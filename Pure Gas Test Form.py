@@ -60,7 +60,8 @@ def get_display_label(row):
         match = mini_df[mini_df["Module ID"] == mid]
         label = match["Module Label"].values[0] if not match.empty else "—"
     elif mtype == "wound":
-        match = wound_df[wound_df["Module ID"] == mid]
+        match = wound_df[wound_df["Module ID (FK)"] == mid]
+
         label = match["Wound Module ID"].values[0] if not match.empty else "—"
     else:
         label = "—"
