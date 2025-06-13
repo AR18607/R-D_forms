@@ -63,10 +63,10 @@ try:
         coated_df = pd.DataFrame(coated_data)
         coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist()
     else:
-        st.warning("⚠️ 'Coated Spool Tbl (Used)' is empty.")
+        st.warning("⚠️ 'Coated Spool Tbl' is empty.")
         coated_ids = []
 except gspread.exceptions.WorksheetNotFound:
-    st.warning("⚠️ 'Coated Spool Tbl (Used)' not found. Skipping dropdown.")
+    st.warning("⚠️ 'Coated Spool Tbl' not found. Skipping dropdown.")
     coated_ids = []
 
   # ✅ FIXED HEADERS
@@ -111,7 +111,7 @@ with st.form("mini_module_form", clear_on_submit=True):
             coated_ids,
             index=coated_ids.index(prefill["CoatedSpool_ID"]) if prefill and prefill["CoatedSpool_ID"] in coated_ids else 0)
     else:
-        st.warning("⚠️ No Coated Spool IDs found. Please add them to the 'Coated Spool Tbl (Used)' sheet.")
+        st.warning("⚠️ No Coated Spool IDs found. Please add them to the 'Coated Spool Tbl' sheet.")
         coated_spool_id = ""
 
     dcoating_id = st.selectbox("DCoating_ID", dcoating_ids, index=dcoating_ids.index(prefill["DCoating_ID"]) if prefill and prefill["DCoating_ID"] in dcoating_ids else 0)
