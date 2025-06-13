@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import json
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-import json
 
 # ---------- CONFIG ----------
 GOOGLE_SHEET_NAME = "R&D Data Form"
@@ -43,7 +43,7 @@ mixed_gas_sheet = get_or_create_tab(spreadsheet, TAB_MIXED_GAS, [
     "Retentate Pressure", "Retentate Flow", "Retentate CO2 Comp", "Permeate Pressure", 
     "Permeate Flow", "Permeate CO2 Composition", "Permeate O2 Composition", 
     "Ambient Temperature", "CO2 Analyzer ID", "Test Rig", "Operator Initials", "Notes", "Passed",
-    "C-CO2 Perm", "C - N2 perm", "C - Selectivity", "C - CO2 Flux", "C - stage cut"
+    "Module Area", "C-CO2 Perm", "C-N2 Perm", "C-Selectivity", "C-CO2 Flux", "C-stage cut"
 ])
 module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
 existing_module_ids = module_sheet.col_values(1)[1:]
@@ -69,17 +69,22 @@ with st.form("mixed_gas_form"):
     permeate_o2 = st.number_input("Permeate O2 Composition (%)", format="%.2f")
     ambient_temp = st.number_input("Ambient Temperature (°C)", format="%.2f")
 
+    module_area = st.number_input("Module Area (cm²)", min_value=0.001, format="%.3f")
+
     analyzer_id = st.text_input("CO2 Analyzer ID")
     test_rig = st.multiselect("Test Rig (Select all that apply)", ["TR-1", "TR-2", "TR-3", "Other"])
     initials = st.text_input("Operator Initials")
     notes = st.text_area("Notes")
     passed = st.radio("Passed?", ["Yes", "No"]) == "Yes"
 
-    c_co2_perm = st.number_input("C - CO2 Permeance", format="%.2f")
-    c_n2_perm = st.number_input("C - N2 Permeance", format="%.2f")
-    c_selectivity = st.number_input("C - Selectivity", format="%.2f")
-    c_flux = st.number_input("C - CO2 Flux", format="%.2f")
-    c_stage_cut = st.number_input("C - Stage Cut", format="%.2f")
+    # Manual Permeances (until formulas are finalized)
+    c_co2_perm = st.number_input("C - CO2 Permeance", format="%.4f")
+    c_n2_perm = st.number_input("C - N2 Permeance", format="%.4f")
+
+    # Auto-calculated values
+    c_selectivity = round(c_co2_perm / c_n2_perm, 6) if c_n2_perm else 0
+    c_flux = round(permeate_flow / module_area, 6) if module_area else 0
+    c_stage_cut = round(permeate_flow / feed_pressure, 6) if feed_pressure else 0
 
     submitted = st.form_submit_button("🚀 Submit Mixed Gas Test")
 
@@ -91,7 +96,8 @@ if submitted:
             retentate_pressure, retentate_flow, retentate_co2, permeate_pressure,
             permeate_flow, permeate_co2, permeate_o2, ambient_temp, analyzer_id,
             ", ".join(test_rig), initials, notes, passed,
-            c_co2_perm, c_n2_perm, c_selectivity, c_flux, c_stage_cut
+            module_area, round(c_co2_perm, 6), round(c_n2_perm, 6),
+            c_selectivity, c_flux, c_stage_cut
         ])
         st.success("✅ Mixed Gas Test record saved successfully!")
     except Exception as e:
