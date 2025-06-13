@@ -2,102 +2,115 @@ import streamlit as st
 import pandas as pd
 import gspread
 import json
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
-from uuid import uuid4
+from oauth2client.service_account import ServiceAccountCredentials
 
-# ---------------- CONFIGURATION ----------------
+# ---------- CONFIG ----------
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_MODULE = "Module Tbl"
+TAB_WOUND = "Wound Module Tbl"
+TAB_MINI = "Mini Module Tbl"
 TAB_PRESSURE_TEST = "Pressure Test Tbl"
 
-# ---------------- CONNECTION FUNCTIONS ----------------
+# ---------- UTILS ----------
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(
         json.loads(st.secrets["gcp_service_account"]), scope)
-    client = gspread.authorize(creds)
-    return client.open(sheet_name)
+    return gspread.authorize(creds).open(sheet_name)
 
-def get_or_create_tab(spreadsheet, tab_name, headers):
+def get_or_create_tab(sheet, name, headers):
     try:
-        worksheet = spreadsheet.worksheet(tab_name)
+        tab = sheet.worksheet(name)
+        if not tab.get_all_values():
+            tab.insert_row(headers, 1)
     except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
-        worksheet.insert_row(headers, 1)
-    return worksheet
+        tab = sheet.add_worksheet(title=name, rows="1000", cols="50")
+        tab.insert_row(headers, 1)
+    return tab
 
-def get_last_id(worksheet, id_prefix):
-    records = worksheet.col_values(1)[1:]  # Skip header
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
-    next_num = max(nums) + 1 if nums else 1
-    return f"{id_prefix}-{str(next_num).zfill(3)}"
+def get_last_id(sheet, prefix):
+    ids = sheet.col_values(1)[1:]
+    nums = [int(i.split("-")[-1]) for i in ids if i.startswith(prefix)]
+    return f"{prefix}-{str(max(nums)+1).zfill(3)}" if nums else f"{prefix}-001"
 
 def filter_last_7_days(df, datetime_col):
-    today = datetime.now()
     df[datetime_col] = pd.to_datetime(df[datetime_col], errors='coerce')
-    return df[df[datetime_col] >= (today - timedelta(days=7))]
+    return df[df[datetime_col] >= datetime.now() - timedelta(days=7)]
 
-# ---------------- MAIN APP ----------------
-st.title("🧪 Pressure Test Form (Multi-Measurement)")
-
-# Connect to Google Sheets
-spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
-module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
-pressure_test_sheet = get_or_create_tab(spreadsheet, TAB_PRESSURE_TEST, [
-    "Pressure Test ID", "Module ID", "Feed Pressure", "Permeate Flow", "Pressure Test DateTime",
+# ---------- INIT ----------
+sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
+wound_df = pd.DataFrame(sheet.worksheet(TAB_WOUND).get_all_records())
+mini_df = pd.DataFrame(sheet.worksheet(TAB_MINI).get_all_records())
+pressure_sheet = get_or_create_tab(sheet, TAB_PRESSURE_TEST, [
+    "Pressure Test ID", "Module ID", "Module Type", "Display Label",
+    "Feed Pressure", "Permeate Flow", "Pressure Test DateTime",
     "Operator Initials", "Notes", "Passed"
 ])
 
-# Module ID dropdown
-existing_module_ids = module_sheet.col_values(1)[1:]
-module_id = st.selectbox("Module ID", existing_module_ids)
+# ---------- MODULE DISPLAY ----------
+module_df = pd.DataFrame(module_sheet.get_all_records())
 
-# Other info (pre-submit)
-operator_initials = st.text_input("Operator Initials")
-notes = st.text_area("Notes")
-passed = st.selectbox("Passed?", ["Yes", "No"])
-test_date = st.date_input("Date", value=datetime.today())
+def get_display_label(row):
+    mid = row["Module ID"]
+    mtype = row["Module Type"].strip().lower()
+    if mtype == "mini":
+        match = mini_df[mini_df["Module ID"] == mid]
+        label = match["Module Label"].values[0] if not match.empty else "—"
+    elif mtype == "wound":
+        match = wound_df[wound_df["Module ID (FK)"] == mid]
+        label = match["Wound Module ID"].values[0] if not match.empty else "—"
+    else:
+        label = "—"
+    return f"{mid} | {mtype.capitalize()} | {label}"
 
-# Initialize session state for measurements
-if "measurements" not in st.session_state:
-    st.session_state.measurements = []
+module_df["Display"] = module_df.apply(get_display_label, axis=1)
+module_map = dict(zip(module_df["Display"], zip(module_df["Module ID"], module_df["Module Type"])))
 
-st.markdown("### ➕ Add Multiple Pressure Measurements")
-if st.button("➕ Add Measurement"):
-    st.session_state.measurements.append({"feed_pressure": 0.0, "permeate_flow": 0.0})
+# ---------- FORM ----------
+st.title("🧪 Pressure Test Form (Multi-Measurement)")
+with st.form("pressure_form", clear_on_submit=True):
+    module_display = st.selectbox("Module ID", list(module_map.keys()))
+    module_id, module_type = module_map[module_display]
+    initials = st.text_input("Operator Initials")
+    notes = st.text_area("Notes")
+    passed = st.selectbox("Passed?", ["Yes", "No"])
+    test_date = st.date_input("Date", value=datetime.today())
 
-# Input fields for each measurement
-for i, m in enumerate(st.session_state.measurements):
-    st.markdown(f"**Measurement {i+1}**")
-    m["feed_pressure"] = st.number_input(f"Feed Pressure (Measurement {i+1})", key=f"fp_{i}")
-    m["permeate_flow"] = st.number_input(f"Permeate Flow (Measurement {i+1})", key=f"pf_{i}")
+    st.markdown("### ➕ Add Multiple Pressure Measurements")
+    num_measurements = st.number_input("How many measurements?", min_value=1, value=2, step=1)
 
-# Submit all measurements
-if st.button("✅ Submit All Measurements"):
+    measurements = []
+    for i in range(num_measurements):
+        st.markdown(f"**Measurement {i+1}**")
+        feed = st.number_input(f"Feed Pressure {i+1}", key=f"fp_{i}")
+        flow = st.number_input(f"Permeate Flow {i+1}", key=f"pf_{i}")
+        measurements.append((feed, flow))
+
+    submitted = st.form_submit_button("💾 Submit")
+
+# ---------- SAVE ----------
+if submitted:
     try:
-        for m in st.session_state.measurements:
+        for feed, flow in measurements:
+            pt_id = get_last_id(pressure_sheet, "PT")
             test_time = datetime.now().time()
-            test_datetime = datetime.combine(test_date, test_time)
-            pt_id = get_last_id(pressure_test_sheet, "PT")
-            pressure_test_sheet.append_row([
-                pt_id, module_id, m["feed_pressure"], m["permeate_flow"],
-                str(test_datetime), operator_initials, notes, passed
+            test_dt = datetime.combine(test_date, test_time)
+            pressure_sheet.append_row([
+                pt_id, module_id, module_type, module_display,
+                feed, flow, str(test_dt),
+                initials, notes, passed
             ])
         st.success("✅ All measurements saved.")
-        st.session_state.measurements = []
     except Exception as e:
         st.error(f"❌ Error saving measurements: {e}")
 
-# ---------------- 7-DAY REVIEW ----------------
+# ---------- 7-DAY REVIEW ----------
 st.subheader("📅 7-Day Review")
 try:
-    records = pressure_test_sheet.get_all_records()
-    if records:
-        df = pd.DataFrame(records)
-        df = filter_last_7_days(df, "Pressure Test DateTime")
-        st.dataframe(df if not df.empty else "No records in the last 7 days.")
-    else:
-        st.info("No data found.")
+    df = pd.DataFrame(pressure_sheet.get_all_records())
+    df = filter_last_7_days(df, "Pressure Test DateTime")
+    st.dataframe(df if not df.empty else "No records in the last 7 days.")
 except Exception as e:
     st.error(f"❌ Could not load review table: {e}")
