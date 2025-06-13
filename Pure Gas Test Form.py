@@ -1,3 +1,5 @@
+# Paste this inside your Streamlit app script file
+
 import streamlit as st
 import pandas as pd
 import gspread
@@ -5,147 +7,125 @@ import json
 from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 
-# -------- CONFIG --------
+# ----------------- CONFIG -----------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
-TAB_PURE_GAS = "Pure Gas Test Tbl"
+TAB_PURE_GAS_TEST = "Pure Gas Test Tbl"
 TAB_MODULE = "Module Tbl"
-TAB_MINI = "Mini Module Tbl"
 TAB_WOUND = "Wound Module Tbl"
+TAB_MINI = "Mini Module Tbl"
 
-# -------- UTILS --------
-
+# ----------------- UTILITY FUNCTIONS -----------------
 def connect_google_sheet(sheet_name):
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(
-            json.loads(st.secrets["gcp_service_account"]), scope)
-        client = gspread.authorize(creds)
-        return client.open(sheet_name)
-    except gspread.exceptions.APIError as e:
-        st.error("❌ Google API error while connecting to the sheet.")
-        st.error(e)
-        raise
-    except Exception as e:
-        st.error("❌ General error during Google Sheet connection.")
-        st.error(e)
-        raise
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
+    return gspread.authorize(creds).open(sheet_name)
 
-
-def get_or_create_tab(sheet, name, headers):
+def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
-        ws = sheet.worksheet(name)
+        ws = spreadsheet.worksheet(tab_name)
+        if not ws.get_all_values():
+            ws.insert_row(headers, 1)
     except gspread.exceptions.WorksheetNotFound:
-        ws = sheet.add_worksheet(name, rows="1000", cols="50")
+        ws = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
         ws.insert_row(headers, 1)
     return ws
 
-def get_last_id(worksheet, prefix):
-    ids = worksheet.col_values(1)[1:]
-    nums = [int(i.split('-')[-1]) for i in ids if i.startswith(prefix)]
+def get_last_id(ws, prefix):
+    ids = ws.col_values(1)[1:]
+    nums = [int(x.split("-")[-1]) for x in ids if x.startswith(prefix)]
     return f"{prefix}-{str(max(nums)+1 if nums else 1).zfill(3)}"
 
-def calculate_permeance(flow, area_cm2, dp_psi):
-    dp_cmhg = dp_psi * 5.174
-    flow_mL_s = flow / 60
-    return round(flow_mL_s / area_cm2 / dp_cmhg, 6) if area_cm2 and dp_cmhg else 0
+def calculate_permeance(flow_mL_min, area_cm2, dp_cmhg):
+    if area_cm2 <= 0 or dp_cmhg <= 0:
+        return 0
+    flow_mL_s = flow_mL_min / 60
+    return flow_mL_s * (1 / area_cm2) * (1 / dp_cmhg)
 
-# -------- INIT SHEETS --------
+# ----------------- LOAD SHEETS -----------------
 sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
-pure_sheet = get_or_create_tab(sheet, TAB_PURE_GAS, [
-    "Pure Gas Test ID", "Test Date", "Module ID", "Module Type", "Wound/Label", "Gas",
-    "Feed Pressure (psi)", "Perm Pressure (psi)", "Flow (mL/min)", "Permeance", 
-    "Selectivity", "Operator", "Notes", "Passed?"
+pure_sheet = get_or_create_tab(sheet, TAB_PURE_GAS_TEST, [
+    "Pure Gas Test ID", "Pure Gas Test Date", "Module ID", "Gas",
+    "Pressure", "Flow", "Operator Initials", "Notes",
+    "C-Permeance", "C-Selectivity", "Passed (y/n)?"
 ])
 module_df = pd.DataFrame(sheet.worksheet(TAB_MODULE).get_all_records())
-mini_df = pd.DataFrame(sheet.worksheet(TAB_MINI).get_all_records())
 wound_df = pd.DataFrame(sheet.worksheet(TAB_WOUND).get_all_records())
+mini_df = pd.DataFrame(sheet.worksheet(TAB_MINI).get_all_records())
 
-# -------- BUILD MODULE OPTIONS --------
+# ----------------- MODULE LABEL MAPPING -----------------
 def module_label(row):
-    mtype = row["Module Type"]
     mid = row["Module ID"]
-    if mtype.lower() == "mini":
-        label = mini_df[mini_df["Module ID"] == mid]["Module Label"].values
-        return f"{mid} | Mini | {label[0] if label.size > 0 else '—'}"
+    if row["Module Type"].lower() == "mini":
+        label = mini_df[mini_df["Module ID (FK)"] == mid]["Module Label"].values
+        return f"{mid} | Mini | {label[0] if len(label) else '—'}"
     else:
         wid = wound_df[wound_df["Module ID (FK)"] == mid]["Wound Module ID"].values
+        return f"{mid} | Wound | {wid[0] if len(wid) else '—'}"
 
-        return f"{mid} | Wound | {wid[0] if wid.size > 0 else '—'}"
+module_options = {
+    row["Module ID"]: module_label(row)
+    for _, row in module_df.iterrows()
+}
+reverse_module_lookup = {v: k for k, v in module_options.items()}
 
-module_choices = module_df["Module ID"].tolist()
-# Build display labels without setting index
-module_display = {row["Module ID"]: module_label(row) for _, row in module_df.iterrows()}
-
-
-
-# -------- STREAMLIT FORM --------
+# ----------------- STREAMLIT UI -----------------
 st.title("🧪 Pure Gas Test Form")
-st.markdown("You can enter multiple gas readings per module. Selectivity and pass/fail will be computed automatically.")
-
 with st.form("pure_gas_test_form", clear_on_submit=True):
-    pure_id = get_last_id(pure_sheet, "PGT")
-    st.markdown(f"**Pure Gas Test ID:** `{pure_id}`")
-    test_date = st.date_input("Test Date", value=datetime.today())
-    selected_module = st.selectbox("Select Module", module_choices, format_func=lambda x: module_display[x])
-    operator = st.text_input("Operator Initials")
+    test_id = get_last_id(pure_sheet, "PGT")
+    st.markdown(f"**Pure Gas Test ID:** `{test_id}`")
+
+    test_date = st.date_input("Pure Gas Test Date", value=datetime.today())
+    selected_mod_display = st.selectbox("Select Module", list(module_options.values()))
+    operator_initials = st.text_input("Operator Initials")
     notes = st.text_area("Notes")
+    module_area = st.number_input("Module Area (cm²)", value=0.01, format="%.4f", min_value=0.0001)
 
-    st.subheader("➕ Add Gas Readings")
-    num_rows = st.number_input("How many gas readings?", min_value=2, max_value=10, value=2)
+    num_readings = st.number_input("Number of Gas Readings", value=2, min_value=1, step=1)
     readings = []
+    for i in range(num_readings):
+        st.markdown(f"### Gas Reading {i+1}")
+        gas = st.selectbox(f"Gas {i+1}", ["CO2", "N2", "O2"], key=f"gas{i}")
+        pressure = st.number_input(f"Feed Pressure (psi) {i+1}", key=f"p{i}")
+        perm_pressure = st.number_input(f"Perm Pressure (psi) {i+1}", key=f"pp{i}")
+        flow = st.number_input(f"Flow (mL/min) {i+1}", key=f"f{i}")
+        readings.append((gas, pressure, perm_pressure, flow))
 
-    for i in range(int(num_rows)):
-        st.markdown(f"**Reading {i+1}**")
-        cols = st.columns(4)
-        gas = cols[0].selectbox(f"Gas {i+1}", ["CO2", "N2", "O2"], key=f"gas{i}")
-        feed = cols[1].number_input(f"Feed Pressure (psi) {i+1}", key=f"feed{i}")
-        perm = cols[2].number_input(f"Perm Pressure (psi) {i+1}", key=f"perm{i}")
-        flow = cols[3].number_input(f"Flow (mL/min) {i+1}", key=f"flow{i}")
-        readings.append((gas, feed, perm, flow))
+    submit = st.form_submit_button("Submit")
 
-    area = st.number_input("Module Area (cm²)", min_value=0.01)
-
-    submit = st.form_submit_button("💾 Submit")
-
-# -------- SAVE --------
+# ----------------- SAVE LOGIC -----------------
 if submit:
-    results = []
-    permeance_map = {}
+    gas_results = []
+    co2_perm, n2_perm = None, None
 
-    for gas, feed, perm, flow in readings:
-        dp = feed - perm
-        perm_val = calculate_permeance(flow, area, dp)
-        permeance_map[gas] = perm_val
-        results.append([pure_id, str(test_date), selected_module,
-                        module_df[module_df["Module ID"] == selected_module]["Module Type"].values[0],
-                        module_label(module_df[module_df["Module ID"] == selected_module].iloc[0]),
-                        gas, feed, perm, flow, perm_val, "", operator, notes, ""])
+    for gas, p1, p2, f in readings:
+        dp = (p1 - p2) * 5.174  # psi → cmHg
+        permeance = round(calculate_permeance(f, module_area, dp), 4)
+        gas_results.append((gas, p1, f, permeance))
+        if gas == "CO2":
+            co2_perm = permeance
+        elif gas == "N2":
+            n2_perm = permeance
 
-    # Compute selectivity if both gases are present
-    if "CO2" in permeance_map and "N2" in permeance_map and permeance_map["N2"] > 0:
-        selectivity = round(permeance_map["CO2"] / permeance_map["N2"], 4)
-        passed = "Yes" if selectivity >= 10 else "No"
-    else:
-        selectivity = ""
-        passed = "No"
+    selectivity = round(co2_perm / n2_perm, 4) if co2_perm and n2_perm else 0
+    passed = "Yes" if selectivity >= 20 else "No"
 
-    # Fill selectivity and pass/fail in each row
-    for row in results:
-        row[10] = selectivity
-        row[13] = passed
+    mod_id = reverse_module_lookup[selected_mod_display]
+    for gas, p, f, perm in gas_results:
+        pure_sheet.append_row([
+            test_id, str(test_date), mod_id, gas,
+            p, f, operator_initials, notes,
+            perm,
+            selectivity if gas == "CO2" else "",
+            passed if gas == "CO2" else ""
+        ])
+    st.success(f"✅ Submitted {len(gas_results)} readings. Selectivity: `{selectivity}`. Passed: {passed}")
 
-    # Save
-    for row in results:
-        pure_sheet.append_row(row)
-
-    st.success(f"✅ Submitted {len(results)} gas readings with selectivity: `{selectivity}` and Pass: `{passed}`")
-
-# -------- LAST 7 DAYS --------
-st.subheader("📅 Last 7 Days of Pure Gas Tests")
-pg_df = pd.DataFrame(pure_sheet.get_all_records())
-if not pg_df.empty:
-    pg_df["Test Date"] = pd.to_datetime(pg_df["Test Date"], errors="coerce")
-    recent = pg_df[pg_df["Test Date"] >= datetime.today() - timedelta(days=7)]
-    st.dataframe(recent if not recent.empty else pd.DataFrame([{"Note": "No recent entries."}]))
-else:
-    st.info("No test entries yet.")
+# ----------------- LAST 7 DAYS -----------------
+st.markdown("### 📅 Last 7 Days of Pure Gas Tests")
+try:
+    df = pd.DataFrame(pure_sheet.get_all_records())
+    df["Pure Gas Test Date"] = pd.to_datetime(df["Pure Gas Test Date"], errors="coerce")
+    recent_df = df[df["Pure Gas Test Date"] >= datetime.today() - timedelta(days=7)]
+    st.dataframe(recent_df)
+except Exception as e:
+    st.error(f"Error loading table: {e}")
