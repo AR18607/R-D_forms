@@ -47,10 +47,11 @@ def compute_permeance(flow_mL_min, area_cm2, feed_psi, perm_psi):
 # --- SETUP ---
 sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 pure_sheet = get_or_create_tab(sheet, TAB_PURE_GAS, [
-    "Pure Gas Test ID", "Test Date", "Module ID", "Module Type", "Display Label", "Gas",
-    "Feed Pressure (psi)", "Perm Pressure (psi)", "Flow (mL/min)", "Permeance",
-    "Selectivity", "Operator Initials", "Notes", "Passed (y/n)?"
+    "Pure Gas Test ID", "Test Date", "Module ID", "Module Type", "Display Module Label", "Gas",
+    "Feed Pressure (psi)", "Perm Pressure (psi)", "Flow (mL/min)", "Operator Initials", "Notes",
+    "Permeance", "Selectivity", "Passed (y/n)?"
 ])
+
 module_df = pd.DataFrame(sheet.worksheet(TAB_MODULE).get_all_records())
 wound_df = pd.DataFrame(sheet.worksheet(TAB_WOUND).get_all_records())
 mini_df = pd.DataFrame(sheet.worksheet(TAB_MINI).get_all_records())
@@ -115,16 +116,18 @@ if submitted:
         if r["Gas"] == "N2": n2_perm = perm
         data_rows.append([
             pg_id, str(test_date), module_id, module_type, module_display, r["Gas"],
-            r["Feed"], r["Perm"], r["Flow"], round(perm, 6), "", initials, notes, ""
-        ])
+            r["Feed"], r["Perm"], r["Flow"], initials, notes, round(perm, 6), "", ""
+            ])
+
 
     selectivity = round(co2_perm / n2_perm, 6) if n2_perm else 0
     passed = "Yes" if co2_perm and n2_perm else "No"
 
     # Update each row's selectivity and pass result
     for row in data_rows:
-        row[10] = selectivity
+        row[12] = selectivity
         row[13] = passed
+
 
     try:
         for row in data_rows:
