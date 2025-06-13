@@ -16,8 +16,11 @@ TAB_MINI = "Mini Module Tbl"
 # --- UTILS ---
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
+    json_key = json.loads(st.secrets["gcp_service_account"])
+    json_key["private_key"] = json_key["private_key"].replace("\\n", "\n")
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(json_key, scope)
     return gspread.authorize(creds).open(sheet_name)
+
 
 def get_or_create_tab(sheet, name, headers):
     try:
