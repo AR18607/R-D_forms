@@ -13,10 +13,23 @@ TAB_MINI = "Mini Module Tbl"
 TAB_WOUND = "Wound Module Tbl"
 
 # -------- UTILS --------
+
 def connect_google_sheet(sheet_name):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
-    return gspread.authorize(creds).open(sheet_name)
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            json.loads(st.secrets["gcp_service_account"]), scope)
+        client = gspread.authorize(creds)
+        return client.open(sheet_name)
+    except gspread.exceptions.APIError as e:
+        st.error("❌ Google API error while connecting to the sheet.")
+        st.error(e)
+        raise
+    except Exception as e:
+        st.error("❌ General error during Google Sheet connection.")
+        st.error(e)
+        raise
+
 
 def get_or_create_tab(sheet, name, headers):
     try:
@@ -55,15 +68,14 @@ def module_label(row):
         label = mini_df[mini_df["Module ID"] == mid]["Module Label"].values
         return f"{mid} | Mini | {label[0] if label.size > 0 else '—'}"
     else:
-        wid = wound_df[wound_df["Module ID"] == mid]["Wound Module ID"].values
+        wid = wound_df[wound_df["Module ID (FK)"] == mid]["Wound Module ID"].values
+
         return f"{mid} | Wound | {wid[0] if wid.size > 0 else '—'}"
 
 module_choices = module_df["Module ID"].tolist()
 # Build display labels without setting index
-module_display = {
-    row["Module ID"]: module_label(row)
-    for _, row in module_df.iterrows()
-}
+module_display = {row["Module ID"]: module_label(row) for _, row in module_df.iterrows()}
+
 
 
 # -------- STREAMLIT FORM --------
