@@ -73,7 +73,8 @@ mini_df = pd.DataFrame(sheet.worksheet(TAB_MINI).get_all_records())
 
 # === DISPLAY SETUP ===
 module_df["Display"], module_df["Type"], module_df["Label"] = zip(*module_df.apply(lambda row: get_display_label(row, wound_df, mini_df), axis=1))
-module_options = dict(zip(module_df["Display"], module_df["Module ID"]))
+module_df["Display_with_type"] = module_df.apply(lambda row: f"{row['Module ID']} | {row['Type'].capitalize()} | {row['Label']}", axis=1)
+module_options = dict(zip(module_df["Display_with_type"], module_df["Module ID"]))
 
 # === FORM STATE ===
 if "previewed" not in st.session_state:
@@ -88,7 +89,7 @@ with st.form("mixed_form"):
 
     module_display = st.selectbox("Module", list(module_options.keys()))
     module_id = module_options[module_display]
-    selected_row = module_df[module_df["Display"] == module_display].iloc[0]
+    selected_row = module_df[module_df["Display_with_type"] == module_display].iloc[0]
     module_type = selected_row["Type"]
     label = selected_row["Label"]
 
