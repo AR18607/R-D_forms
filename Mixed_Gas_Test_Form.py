@@ -127,11 +127,12 @@ if submit:
 st.subheader("📅 Last 7 Days of Mixed Gas Tests")
 try:
     df = pd.DataFrame(mixed_sheet.get_all_records())
-    df["Test Date"] = pd.to_datetime(df["Test Date"], errors="coerce")
-    recent = df[df["Test Date"] >= datetime.today() - timedelta(days=7)]
+    df["Mixed Gas Test Date"] = pd.to_datetime(df["Mixed Gas Test Date"], errors="coerce")
+    recent = df[df["Mixed Gas Test Date"] >= datetime.today() - timedelta(days=7)]
     if not recent.empty:
         st.dataframe(recent)
     else:
         st.info("No data in the last 7 days.")
 except Exception as e:
     st.error(f"❌ Could not load recent data: {e}")
+
