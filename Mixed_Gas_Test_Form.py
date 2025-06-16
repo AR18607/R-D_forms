@@ -96,7 +96,7 @@ with st.form("mixed_form", clear_on_submit=True):
     notes = st.text_area("Notes")
     passed = st.radio("Passed?", ["Yes", "No"])
 
-    # Calculations before submission
+    # Calculated values (live preview before submit)
     selectivity = round((p_co2 / r_co2), 6) if r_co2 else 0
     co2_flux = round((p_flow / area), 6) if area else 0
     stage_cut = round((p_flow / feed), 6) if feed else 0
@@ -105,6 +105,7 @@ with st.form("mixed_form", clear_on_submit=True):
     st.write("**C - Selectivity:**", selectivity)
     st.write("**C - CO2 Flux:**", co2_flux)
     st.write("**C - Stage Cut:**", stage_cut)
+
 
     submit = st.form_submit_button("🚀 Submit Mixed Gas Test")
 
