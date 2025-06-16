@@ -123,7 +123,30 @@ with st.form("mixed_form", clear_on_submit=True):
     st.write("**C - CO2 Flux:**", co2_flux)
     st.write("**C - Stage Cut:**", stage_cut)
 
-    submit = st.form_submit_button(":rocket: Submit Mixed Gas Test")
+    preview = st.form_submit_button("🔍 Preview Calculations")
+    submit = False  # Default
+
+if preview:
+    # === CALCULATIONS ===
+    if area > 0 and feed > 0 and r_co2 > 0:
+        co2_perm = round((p_co2 / 100) * p_flow / area, 6)
+        n2_perm = round(((100 - p_co2) / 100) * p_flow / area, 6)
+        selectivity = round(co2_perm / n2_perm, 6) if n2_perm != 0 else 0.0
+        co2_flux = round(p_flow / area, 6)
+        stage_cut = round(p_flow / feed, 6)
+    else:
+        co2_perm = n2_perm = selectivity = co2_flux = stage_cut = 0.0
+
+    st.markdown("### :bulb: Calculated Values")
+    st.write("**C - CO2 Perm:**", co2_perm)
+    st.write("**C - N2 Perm:**", n2_perm)
+    st.write("**C - Selectivity:**", selectivity)
+    st.write("**C - CO2 Flux:**", co2_flux)
+    st.write("**C - Stage Cut:**", stage_cut)
+
+    # Show submit button after preview
+    submit = st.form_submit_button("🚀 Submit Mixed Gas Test")
+
 
 # === SUBMIT TO SHEET ===
 if submit:
