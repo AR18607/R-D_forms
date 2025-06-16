@@ -81,7 +81,7 @@ with st.form("mixed_form", clear_on_submit=True):
     test_id = get_last_id(mixed_sheet, "MIXG")
     st.markdown(f"**Test ID:** `{test_id}`")
     test_date = st.date_input("Test Date", datetime.today())
-    
+
     module_display = st.selectbox("Module", list(module_options.keys()))
     module_id = module_options[module_display]
     selected_row = module_df[module_df["Display"] == module_display].iloc[0]
@@ -107,10 +107,10 @@ with st.form("mixed_form", clear_on_submit=True):
     passed = st.radio("Passed?", ["Yes", "No"])
 
     # === CALCULATIONS ===
-    if r_co2 and area and feed:
+    if area > 0 and feed > 0 and r_co2 > 0:
         co2_perm = round((p_co2 / 100) * p_flow / area, 6)
         n2_perm = round(((100 - p_co2) / 100) * p_flow / area, 6)
-        selectivity = round((p_co2 / r_co2), 6)
+        selectivity = round(co2_perm / n2_perm, 6) if n2_perm != 0 else 0.0
         co2_flux = round(p_flow / area, 6)
         stage_cut = round(p_flow / feed, 6)
     else:
