@@ -56,7 +56,7 @@ def get_display_label(row, wound_df, mini_df):
         label = wound_df[wound_df["Module ID (FK)"] == mid]["Wound Module ID"].values[0] if not wound_df[wound_df["Module ID (FK)"] == mid].empty else "—"
     else:
         label = "—"
-    return f"{mid} | {mtype.capitalize()} | {label}", mtype, label
+    return mtype, label
 
 # === SHEET SETUP ===
 sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
@@ -71,10 +71,15 @@ module_df = pd.DataFrame(sheet.worksheet(TAB_MODULE).get_all_records())
 wound_df = pd.DataFrame(sheet.worksheet(TAB_WOUND).get_all_records())
 mini_df = pd.DataFrame(sheet.worksheet(TAB_MINI).get_all_records())
 
-# === DISPLAY SETUP ===
-module_df["Display"], module_df["Type"], module_df["Label"] = zip(*module_df.apply(lambda row: get_display_label(row, wound_df, mini_df), axis=1))
-module_df["Display_with_type"] = module_df.apply(lambda row: f"{row['Module ID']} | {row['Type'].capitalize()} | {row['Label']}", axis=1)
-module_options = dict(zip(module_df["Display_with_type"], module_df["Module ID"]))
+# === BUILD MODULE DROPDOWN ===
+module_rows = []
+for _, row in module_df.iterrows():
+    mtype, label = get_display_label(row, wound_df, mini_df)
+    display = f"{row['Module ID']} | {mtype.capitalize()} | {label}"
+    module_rows.append({"display": display, "id": row["Module ID"], "type": mtype, "label": label})
+
+module_display_options = [r["display"] for r in module_rows]
+module_display_map = {r["display"]: r for r in module_rows}
 
 # === FORM STATE ===
 if "previewed" not in st.session_state:
@@ -87,11 +92,11 @@ with st.form("mixed_form"):
     st.markdown(f"**Test ID:** `{test_id}`")
     test_date = st.date_input("Test Date", datetime.today())
 
-    module_display = st.selectbox("Module", list(module_options.keys()))
-    module_id = module_options[module_display]
-    selected_row = module_df[module_df["Display_with_type"] == module_display].iloc[0]
-    module_type = selected_row["Type"]
-    label = selected_row["Label"]
+    module_display = st.selectbox("Module", module_display_options)
+    selected_module = module_display_map[module_display]
+    module_id = selected_module["id"]
+    module_type = selected_module["type"]
+    label = selected_module["label"]
 
     st.write(f"**Module Type:** {module_type.capitalize()}")
 
@@ -141,7 +146,7 @@ if st.session_state.previewed:
 if submit and st.session_state.previewed:
     try:
         mixed_sheet.append_row([
-            test_id, str(test_date), module_id, module_type, temp, feed,
+            test_id, str(test_date), module_id, module_type.capitalize(), temp, feed,
             r_press, r_flow, r_co2, p_press, p_flow,
             p_co2, p_o2, amb_temp, analyzer, rig, initials,
             notes, passed, co2_perm, n2_perm, selectivity, co2_flux, stage_cut
