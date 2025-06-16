@@ -77,7 +77,7 @@ module_options = dict(zip(module_df["Display"], module_df["Module ID"]))
 
 # === FORM ===
 st.title(":test_tube: Mixed Gas Test Form")
-with st.form("mixed_form", clear_on_submit=True):
+with st.form("mixed_form", clear_on_submit=False):
     test_id = get_last_id(mixed_sheet, "MIXG")
     st.markdown(f"**Test ID:** `{test_id}`")
     test_date = st.date_input("Test Date", datetime.today())
@@ -106,28 +106,12 @@ with st.form("mixed_form", clear_on_submit=True):
     notes = st.text_area("Notes")
     passed = st.radio("Passed?", ["Yes", "No"])
 
-    # === CALCULATIONS ===
-    if area > 0 and feed > 0 and r_co2 > 0:
-        co2_perm = round((p_co2 / 100) * p_flow / area, 6)
-        n2_perm = round(((100 - p_co2) / 100) * p_flow / area, 6)
-        selectivity = round(co2_perm / n2_perm, 6) if n2_perm != 0 else 0.0
-        co2_flux = round(p_flow / area, 6)
-        stage_cut = round(p_flow / feed, 6)
-    else:
-        co2_perm = n2_perm = selectivity = co2_flux = stage_cut = 0.0
+    show_preview = st.checkbox("🔍 Preview Calculated Values")
 
-    st.markdown("### :bulb: Calculated Values (before submission)")
-    st.write("**C - CO2 Perm:**", co2_perm)
-    st.write("**C - N2 Perm:**", n2_perm)
-    st.write("**C - Selectivity:**", selectivity)
-    st.write("**C - CO2 Flux:**", co2_flux)
-    st.write("**C - Stage Cut:**", stage_cut)
+    submit = st.form_submit_button("🚀 Submit Mixed Gas Test")
 
-    preview = st.form_submit_button("🔍 Preview Calculations")
-    submit = False  # Default
-
-if preview:
-    # === CALCULATIONS ===
+# === CALCULATIONS OUTSIDE THE FORM ===
+if show_preview:
     if area > 0 and feed > 0 and r_co2 > 0:
         co2_perm = round((p_co2 / 100) * p_flow / area, 6)
         n2_perm = round(((100 - p_co2) / 100) * p_flow / area, 6)
@@ -144,13 +128,18 @@ if preview:
     st.write("**C - CO2 Flux:**", co2_flux)
     st.write("**C - Stage Cut:**", stage_cut)
 
-    # Show submit button after preview
-    submit = st.form_submit_button("🚀 Submit Mixed Gas Test")
-
-
 # === SUBMIT TO SHEET ===
 if submit:
     try:
+        if area > 0 and feed > 0 and r_co2 > 0:
+            co2_perm = round((p_co2 / 100) * p_flow / area, 6)
+            n2_perm = round(((100 - p_co2) / 100) * p_flow / area, 6)
+            selectivity = round(co2_perm / n2_perm, 6) if n2_perm != 0 else 0.0
+            co2_flux = round(p_flow / area, 6)
+            stage_cut = round(p_flow / feed, 6)
+        else:
+            co2_perm = n2_perm = selectivity = co2_flux = stage_cut = 0.0
+
         mixed_sheet.append_row([
             test_id, str(test_date), module_id, temp, feed,
             r_press, r_flow, r_co2, p_press, p_flow,
