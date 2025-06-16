@@ -61,7 +61,7 @@ def get_display_label(row, wound_df, mini_df):
 # === SHEET SETUP ===
 sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 mixed_sheet = get_or_create_tab(sheet, TAB_MIXED, [
-    "Mixed Gas Test ID", "Mixed Gas Test Date", "Module ID", "Temperature", "Feed Pressure",
+    "Mixed Gas Test ID", "Mixed Gas Test Date", "Module ID", "Module Type", "Temperature", "Feed Pressure",
     "Retentate Pressure", "Retentate Flow", "Retentate CO2 Comp", "Permeate Pressure",
     "Permeate Flow", "Permeate CO2 Composition", "Permeate O2 Composition", "Ambient Temperature",
     "CO2 Analyzer ID", "Test Rig", "Operator Initials", "Notes", "Passed",
@@ -75,43 +75,46 @@ mini_df = pd.DataFrame(sheet.worksheet(TAB_MINI).get_all_records())
 module_df["Display"], module_df["Type"], module_df["Label"] = zip(*module_df.apply(lambda row: get_display_label(row, wound_df, mini_df), axis=1))
 module_options = dict(zip(module_df["Display"], module_df["Module ID"]))
 
+# === FORM STATE ===
+if "previewed" not in st.session_state:
+    st.session_state.previewed = False
+
 # === FORM ===
 st.title(":test_tube: Mixed Gas Test Form")
-with st.form("mixed_form", clear_on_submit=False):
-    test_id = get_last_id(mixed_sheet, "MIXG")
-    st.markdown(f"**Test ID:** `{test_id}`")
-    test_date = st.date_input("Test Date", datetime.today())
+test_id = get_last_id(mixed_sheet, "MIXG")
+st.markdown(f"**Test ID:** `{test_id}`")
+test_date = st.date_input("Test Date", datetime.today())
 
-    module_display = st.selectbox("Module", list(module_options.keys()))
-    module_id = module_options[module_display]
-    selected_row = module_df[module_df["Display"] == module_display].iloc[0]
-    module_type = selected_row["Type"]
-    label = selected_row["Label"]
+module_display = st.selectbox("Module", list(module_options.keys()))
+module_id = module_options[module_display]
+selected_row = module_df[module_df["Display"] == module_display].iloc[0]
+module_type = selected_row["Type"]
+label = selected_row["Label"]
 
-    temp = st.number_input("Temperature (°C)", format="%.2f")
-    feed = st.number_input("Feed Pressure (psi)", format="%.2f")
-    r_press = st.number_input("Retentate Pressure (psi)", format="%.2f")
-    r_flow = st.number_input("Retentate Flow (L/min)", format="%.2f")
-    r_co2 = st.number_input("Retentate CO2 Comp (%)", format="%.2f")
-    p_press = st.number_input("Permeate Pressure (psi)", format="%.2f")
-    p_flow = st.number_input("Permeate Flow (L/min)", format="%.2f")
-    p_co2 = st.number_input("Permeate CO2 Comp (%)", format="%.2f")
-    p_o2 = st.number_input("Permeate O2 Comp (%)", format="%.2f")
-    amb_temp = st.number_input("Ambient Temperature (°C)", format="%.2f")
-    area = st.number_input("Module Area (cm²)", min_value=0.001, format="%.3f")
+st.write(f"**Module Type:** {module_type.capitalize()}")
 
-    analyzer = st.text_input("CO2 Analyzer ID")
-    rig = st.selectbox("Test Rig", ["TR-1", "TR-2", "TR-3", "Other"])
-    initials = st.text_input("Operator Initials")
-    notes = st.text_area("Notes")
-    passed = st.radio("Passed?", ["Yes", "No"])
+temp = st.number_input("Temperature (°C)", format="%.2f")
+feed = st.number_input("Feed Pressure (psi)", format="%.2f")
+r_press = st.number_input("Retentate Pressure (psi)", format="%.2f")
+r_flow = st.number_input("Retentate Flow (L/min)", format="%.2f")
+r_co2 = st.number_input("Retentate CO2 Comp (%)", format="%.2f")
+p_press = st.number_input("Permeate Pressure (psi)", format="%.2f")
+p_flow = st.number_input("Permeate Flow (L/min)", format="%.2f")
+p_co2 = st.number_input("Permeate CO2 Comp (%)", format="%.2f")
+p_o2 = st.number_input("Permeate O2 Comp (%)", format="%.2f")
+amb_temp = st.number_input("Ambient Temperature (°C)", format="%.2f")
+area = st.number_input("Module Area (cm²)", min_value=0.001, format="%.3f")
 
-    show_preview = st.checkbox("🔍 Preview Calculated Values")
+analyzer = st.text_input("CO2 Analyzer ID")
+rig = st.selectbox("Test Rig", ["TR-1", "TR-2", "TR-3", "Other"])
+initials = st.text_input("Operator Initials")
+notes = st.text_area("Notes")
+passed = st.radio("Passed?", ["Yes", "No"])
 
-    submit = st.form_submit_button("🚀 Submit Mixed Gas Test")
+if st.button("🔍 Preview Calculations"):
+    st.session_state.previewed = True
 
-# === CALCULATIONS OUTSIDE THE FORM ===
-if show_preview:
+if st.session_state.previewed:
     if area > 0 and feed > 0 and r_co2 > 0:
         co2_perm = round((p_co2 / 100) * p_flow / area, 6)
         n2_perm = round(((100 - p_co2) / 100) * p_flow / area, 6)
@@ -128,27 +131,18 @@ if show_preview:
     st.write("**C - CO2 Flux:**", co2_flux)
     st.write("**C - Stage Cut:**", stage_cut)
 
-# === SUBMIT TO SHEET ===
-if submit:
-    try:
-        if area > 0 and feed > 0 and r_co2 > 0:
-            co2_perm = round((p_co2 / 100) * p_flow / area, 6)
-            n2_perm = round(((100 - p_co2) / 100) * p_flow / area, 6)
-            selectivity = round(co2_perm / n2_perm, 6) if n2_perm != 0 else 0.0
-            co2_flux = round(p_flow / area, 6)
-            stage_cut = round(p_flow / feed, 6)
-        else:
-            co2_perm = n2_perm = selectivity = co2_flux = stage_cut = 0.0
-
-        mixed_sheet.append_row([
-            test_id, str(test_date), module_id, temp, feed,
-            r_press, r_flow, r_co2, p_press, p_flow,
-            p_co2, p_o2, amb_temp, analyzer, rig, initials,
-            notes, passed, co2_perm, n2_perm, selectivity, co2_flux, stage_cut
-        ])
-        st.success(":white_check_mark: Mixed Gas Test record saved successfully!")
-    except Exception as e:
-        st.error(f":x: Failed to save: {e}")
+    if st.button("🚀 Submit Mixed Gas Test"):
+        try:
+            mixed_sheet.append_row([
+                test_id, str(test_date), module_id, module_type, temp, feed,
+                r_press, r_flow, r_co2, p_press, p_flow,
+                p_co2, p_o2, amb_temp, analyzer, rig, initials,
+                notes, passed, co2_perm, n2_perm, selectivity, co2_flux, stage_cut
+            ])
+            st.success(":white_check_mark: Mixed Gas Test record saved successfully!")
+            st.session_state.previewed = False
+        except Exception as e:
+            st.error(f":x: Failed to save: {e}")
 
 # === LAST 7 DAYS OF TESTS ===
 st.subheader(":date: Last 7 Days of Mixed Gas Tests")
