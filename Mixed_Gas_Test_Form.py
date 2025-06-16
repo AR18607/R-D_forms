@@ -47,16 +47,17 @@ def get_last_id(sheet, prefix):
     nums = [int(i.split("-")[-1]) for i in ids if i.startswith(prefix)]
     return f"{prefix}-{str(max(nums)+1).zfill(3)}" if nums else f"{prefix}-001"
 
-def get_display_label(row, wound_df, mini_df):
-    mid = row["Module ID"]
-    mtype = row["Module Type"].strip().lower()
-    if mtype == "mini":
-        label = mini_df[mini_df["Module ID"] == mid]["Module Label"].values[0] if not mini_df[mini_df["Module ID"] == mid].empty else "—"
-    elif mtype == "wound":
-        label = wound_df[wound_df["Module ID (FK)"] == mid]["Wound Module ID"].values[0] if not wound_df[wound_df["Module ID (FK)"] == mid].empty else "—"
+def resolve_module_info(module_id):
+    if not mini_df[mini_df["Module ID"] == module_id].empty:
+        module_type = "Mini"
+        label = mini_df[mini_df["Module ID"] == module_id]["Module Label"].values[0]
+    elif not wound_df[wound_df["Module ID (FK)"] == module_id].empty:
+        module_type = "Wound"
+        label = wound_df[wound_df["Module ID (FK)"] == module_id]["Wound Module ID"].values[0]
     else:
+        module_type = "Unknown"
         label = "—"
-    return mtype, label
+    return module_type, label
 
 # === SHEET SETUP ===
 sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
@@ -74,9 +75,10 @@ mini_df = pd.DataFrame(sheet.worksheet(TAB_MINI).get_all_records())
 # === BUILD MODULE DROPDOWN ===
 module_rows = []
 for _, row in module_df.iterrows():
-    mtype, label = get_display_label(row, wound_df, mini_df)
-    display = f"{row['Module ID']} | {mtype.capitalize()} | {label}"
-    module_rows.append({"display": display, "id": row["Module ID"], "type": mtype, "label": label})
+    module_id = row["Module ID"]
+    mtype, label = resolve_module_info(module_id)
+    display = f"{module_id} | {mtype} | {label}"
+    module_rows.append({"display": display, "id": module_id, "type": mtype, "label": label})
 
 module_display_options = [r["display"] for r in module_rows]
 module_display_map = {r["display"]: r for r in module_rows}
@@ -98,7 +100,7 @@ with st.form("mixed_form"):
     module_type = selected_module["type"]
     label = selected_module["label"]
 
-    st.write(f"**Module Type:** {module_type.capitalize()}")
+    st.write(f"**Module Type:** {module_type}")
 
     temp = st.number_input("Temperature (°C)", format="%.2f")
     feed = st.number_input("Feed Pressure (psi)", format="%.2f")
@@ -146,7 +148,7 @@ if st.session_state.previewed:
 if submit and st.session_state.previewed:
     try:
         mixed_sheet.append_row([
-            test_id, str(test_date), module_id, module_type.capitalize(), temp, feed,
+            test_id, str(test_date), module_id, module_type, temp, feed,
             r_press, r_flow, r_co2, p_press, p_flow,
             p_co2, p_o2, amb_temp, analyzer, rig, initials,
             notes, passed, co2_perm, n2_perm, selectivity, co2_flux, stage_cut
