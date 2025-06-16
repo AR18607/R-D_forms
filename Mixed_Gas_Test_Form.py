@@ -6,6 +6,17 @@ import json
 from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 
+# === DISABLE ENTER KEY FORM SUBMIT ===
+st.markdown("""
+    <script>
+        document.addEventListener("keydown", function(e) {
+            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+                e.preventDefault();
+            }
+        });
+    </script>
+""", unsafe_allow_html=True)
+
 # === CONFIG ===
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_MODULE = "Module Tbl"
@@ -50,11 +61,11 @@ def get_display_label(row, wound_df, mini_df):
 # === SHEET SETUP ===
 sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 mixed_sheet = get_or_create_tab(sheet, TAB_MIXED, [
-    "Mixed Gas Test ID", "Test Date", "Module ID", "Module Type", "Label",
-    "Temperature", "Feed Pressure", "Retentate Pressure", "Retentate Flow",
-    "Retentate CO2 Comp", "Permeate Pressure", "Permeate Flow", "Permeate CO2 Comp",
-    "Permeate O2 Comp", "Ambient Temperature", "Module Area", "Analyzer ID",
-    "Test Rig", "Operator Initials", "Notes", "Passed", "C-Selectivity", "C-CO2 Flux", "C-Stage Cut"
+    "Mixed Gas Test ID", "Mixed Gas Test Date", "Module ID", "Temperature", "Feed Pressure",
+    "Retentate Pressure", "Retentate Flow", "Retentate CO2 Comp", "Permeate Pressure",
+    "Permeate Flow", "Permeate CO2 Composition", "Permeate O2 Composition", "Ambient Temperature",
+    "CO2 Analyzer ID", "Test Rig", "Operator Initials", "Notes", "Passed",
+    "C-CO2 Perm", "C - N2 perm", "C - Selectivity", "C - CO2 Flux", "C - stage cut"
 ])
 module_df = pd.DataFrame(sheet.worksheet(TAB_MODULE).get_all_records())
 wound_df = pd.DataFrame(sheet.worksheet(TAB_WOUND).get_all_records())
@@ -65,19 +76,7 @@ module_df["Display"], module_df["Type"], module_df["Label"] = zip(*module_df.app
 module_options = dict(zip(module_df["Display"], module_df["Module ID"]))
 
 # === FORM ===
-st.title("🧪 Mixed Gas Test Form")
-
-# Prevent accidental submission on Enter (except in text areas)
-st.markdown("""
-    <script>
-        document.addEventListener("keydown", function(e) {
-            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
-                e.preventDefault();
-            }
-        });
-    </script>
-""", unsafe_allow_html=True)
-
+st.title(":test_tube: Mixed Gas Test Form")
 with st.form("mixed_form", clear_on_submit=True):
     test_id = get_last_id(mixed_sheet, "MIXG")
     st.markdown(f"**Test ID:** `{test_id}`")
@@ -94,7 +93,6 @@ with st.form("mixed_form", clear_on_submit=True):
     r_press = st.number_input("Retentate Pressure (psi)", format="%.2f")
     r_flow = st.number_input("Retentate Flow (L/min)", format="%.2f")
     r_co2 = st.number_input("Retentate CO2 Comp (%)", format="%.2f")
-
     p_press = st.number_input("Permeate Pressure (psi)", format="%.2f")
     p_flow = st.number_input("Permeate Flow (L/min)", format="%.2f")
     p_co2 = st.number_input("Permeate CO2 Comp (%)", format="%.2f")
@@ -108,39 +106,40 @@ with st.form("mixed_form", clear_on_submit=True):
     notes = st.text_area("Notes")
     passed = st.radio("Passed?", ["Yes", "No"])
 
-    # --- LIVE CALCULATIONS PREVIEW ---
-    st.markdown("### 💡 Calculated Values (before submission)")
-  
+    # === CALCULATIONS ===
+    if r_co2 and area and feed:
+        co2_perm = round((p_co2 / 100) * p_flow / area, 6)
+        n2_perm = round(((100 - p_co2) / 100) * p_flow / area, 6)
+        selectivity = round((p_co2 / r_co2), 6)
+        co2_flux = round(p_flow / area, 6)
+        stage_cut = round(p_flow / feed, 6)
+    else:
+        co2_perm = n2_perm = selectivity = co2_flux = stage_cut = 0.0
 
-    # Live calculated values
-    selectivity = round((p_co2 / r_co2), 6) if r_co2 else 0
-    co2_flux = round((p_flow / area), 6) if area else 0
-    stage_cut = round((p_flow / feed), 6) if feed else 0
-
+    st.markdown("### :bulb: Calculated Values (before submission)")
+    st.write("**C - CO2 Perm:**", co2_perm)
+    st.write("**C - N2 Perm:**", n2_perm)
     st.write("**C - Selectivity:**", selectivity)
     st.write("**C - CO2 Flux:**", co2_flux)
     st.write("**C - Stage Cut:**", stage_cut)
 
+    submit = st.form_submit_button(":rocket: Submit Mixed Gas Test")
 
-
-    submit = st.form_submit_button("🚀 Submit Mixed Gas Test")
-
-# === SUBMIT ===
+# === SUBMIT TO SHEET ===
 if submit:
     try:
         mixed_sheet.append_row([
-            test_id, str(test_date), module_id, module_type, label,
-            temp, feed, r_press, r_flow, r_co2,
-            p_press, p_flow, p_co2, p_o2, amb_temp, area,
-            analyzer, rig, initials, notes, passed,
-            selectivity, co2_flux, stage_cut
+            test_id, str(test_date), module_id, temp, feed,
+            r_press, r_flow, r_co2, p_press, p_flow,
+            p_co2, p_o2, amb_temp, analyzer, rig, initials,
+            notes, passed, co2_perm, n2_perm, selectivity, co2_flux, stage_cut
         ])
-        st.success("✅ Mixed Gas Test record saved successfully!")
+        st.success(":white_check_mark: Mixed Gas Test record saved successfully!")
     except Exception as e:
-        st.error(f"❌ Failed to save: {e}")
+        st.error(f":x: Failed to save: {e}")
 
-# === LAST 7 DAYS ===
-st.subheader("📅 Last 7 Days of Mixed Gas Tests")
+# === LAST 7 DAYS OF TESTS ===
+st.subheader(":date: Last 7 Days of Mixed Gas Tests")
 try:
     df = pd.DataFrame(mixed_sheet.get_all_records())
     df["Mixed Gas Test Date"] = pd.to_datetime(df["Mixed Gas Test Date"], errors="coerce")
@@ -150,5 +149,4 @@ try:
     else:
         st.info("No data in the last 7 days.")
 except Exception as e:
-    st.error(f"❌ Could not load recent data: {e}")
-
+    st.error(f":x: Could not load recent data: {e}")
