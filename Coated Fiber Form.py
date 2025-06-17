@@ -42,7 +42,7 @@ def get_next_id(worksheet, id_column):
 def get_last_7_days_df(ws, date_col_name):
     df = pd.DataFrame(ws.get_all_records())
     if not df.empty:
-        df.columns = df.columns.str.strip()  # sanitize headers
+        df.columns = df.columns.str.strip()
         if date_col_name in df.columns:
             df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce")
             return df[df[date_col_name] >= datetime.today() - timedelta(days=7)]
@@ -50,20 +50,23 @@ def get_last_7_days_df(ws, date_col_name):
 
 # === COATED SPOOL FORM ===
 st.header("Coated Spool Entry")
-cs_headers = ["CoatedSpool_ID", "UncoatedSpool_ID", "Date"]
+cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"])
+uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length", "Date_Time"])
 uncoated_records = uncoated_sheet.get_all_records()
-uncoated_ids = [str(r.get("UncoatedSpool_ID", "")).strip() for r in uncoated_records if r.get("UncoatedSpool_ID")]
+uncoated_ids = [str(r.get("UnCoatedSpool_ID", "")).strip() for r in uncoated_records if r.get("UnCoatedSpool_ID")]
 
-with st.form("Coated Spool Form"):
-    uncoated_selected = st.selectbox("UncoatedSpool_ID", uncoated_ids if uncoated_ids else ["No options available"])
-    cs_submit = st.form_submit_button("Submit")
-    if cs_submit and uncoated_selected != "No options available":
-        cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
-        cs_sheet.append_row([cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
-        st.success(f"✅ Coated Spool ID {cs_id} submitted.")
+with st.form("coated_spool_form"):
+    if uncoated_ids:
+        uncoated_selected = st.selectbox("UnCoatedSpool_ID", uncoated_ids)
+        cs_submit = st.form_submit_button("Submit")
+        if cs_submit:
+            cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
+            cs_sheet.append_row([cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
+            st.success(f"✅ Coated Spool ID {cs_id} submitted.")
+    else:
+        st.warning("No available UnCoatedSpool_ID found.")
 
 # Show last 7 days
 st.subheader("Recent Coated Spool Entries")
@@ -81,28 +84,32 @@ fpcr_headers = [
 ]
 fpcr_sheet = get_or_create_worksheet(sheet, "Fiber per Coating Run Tbl (Coating)", fpcr_headers)
 
-pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating_ID"])
+# Load dropdowns
+pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating ID"])
 pcoating_records = pcoating_sheet.get_all_records()
-pcoating_ids = [str(r.get("PCoating_ID", "")).strip() for r in pcoating_records if r.get("PCoating_ID")]
+pcoating_ids = [str(r.get("PCoating ID", "")).strip() for r in pcoating_records if r.get("PCoating ID")]
 
 coated_records = cs_sheet.get_all_records()
 coated_ids = [str(r.get("CoatedSpool_ID", "")).strip() for r in coated_records if r.get("CoatedSpool_ID")]
 
-with st.form("Fiber Per Coating Run Form"):
-    pcoating_selected = st.selectbox("PCoating ID", pcoating_ids if pcoating_ids else ["No options available"])
-    coated_selected = st.selectbox("CoatedSpool ID", coated_ids if coated_ids else ["No options available"])
-    payout_pos = st.text_input("Payout Position")
-    length_coated = st.number_input("Length Coated (m)", min_value=0.0)
-    label = st.text_input("Label")
-    notes = st.text_area("Notes")
-    fpcr_submit = st.form_submit_button("Submit")
-    if fpcr_submit and "No options available" not in [pcoating_selected, coated_selected]:
-        fibercoat_id = get_next_id(fpcr_sheet, "FiberCoat_ID")
-        fpcr_sheet.append_row([
-            fibercoat_id, pcoating_selected, coated_selected,
-            payout_pos, length_coated, label, notes, datetime.today().strftime("%Y-%m-%d")
-        ])
-        st.success(f"✅ FiberCoat ID {fibercoat_id} submitted.")
+with st.form("fiber_coating_form"):
+    if pcoating_ids and coated_ids:
+        pcoating_selected = st.selectbox("PCoating ID", pcoating_ids)
+        coated_selected = st.selectbox("CoatedSpool ID", coated_ids)
+        payout_pos = st.text_input("Payout Position")
+        length_coated = st.number_input("Length Coated (m)", min_value=0.0)
+        label = st.text_input("Label")
+        notes = st.text_area("Notes")
+        fpcr_submit = st.form_submit_button("Submit")
+        if fpcr_submit:
+            fibercoat_id = get_next_id(fpcr_sheet, "FiberCoat_ID")
+            fpcr_sheet.append_row([
+                fibercoat_id, pcoating_selected, coated_selected,
+                payout_pos, length_coated, label, notes, datetime.today().strftime("%Y-%m-%d")
+            ])
+            st.success(f"✅ FiberCoat ID {fibercoat_id} submitted.")
+    else:
+        st.warning("Ensure both PCoating IDs and Coated Spool IDs are available.")
 
 # Show last 7 days
 st.subheader("Recent Fiber Coating Runs")
