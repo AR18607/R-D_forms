@@ -30,7 +30,10 @@ raw_data = syensqo_sheet.get_all_values()
 headers = [h.strip() for h in raw_data[0]]
 data_rows = raw_data[1:]
 syensqo_df = pd.DataFrame(data_rows, columns=headers)
+
+# Clean tracking number column
 syensqo_df["Tracking number UPS"] = syensqo_df["Tracking number UPS"].astype(str).str.strip()
+syensqo_df = syensqo_df[syensqo_df["Tracking number UPS"] != ""]
 
 # === HELPER FUNCTIONS ===
 def get_or_create_worksheet(sheet, title, headers):
@@ -66,7 +69,7 @@ if 'batch_list' not in st.session_state:
     st.session_state.batch_list = []
 
 if fiber_source == "Syensqo":
-    tracking_numbers = syensqo_df["Tracking number UPS"].dropna().unique().tolist()
+    tracking_numbers = sorted(syensqo_df["Tracking number UPS"].dropna().unique())
     selected_tracking = st.selectbox("Select Tracking Number", tracking_numbers)
     matching_rows = syensqo_df[syensqo_df["Tracking number UPS"] == selected_tracking]
 
