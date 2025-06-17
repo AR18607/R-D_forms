@@ -65,9 +65,15 @@ if 'batch_list' not in st.session_state:
     st.session_state.batch_list = []
 
 if fiber_source == "Syensqo":
+    syensqo_df["Tracking number UPS"] = syensqo_df["Tracking number UPS"].astype(str).str.strip()
     tracking_numbers = syensqo_df["Tracking number UPS"].dropna().unique().tolist()
     selected_tracking = st.selectbox("Select Tracking Number", tracking_numbers)
-    selected_row = syensqo_df[syensqo_df["Tracking number UPS"] == selected_tracking].iloc[0]
+
+if selected_tracking:
+    matching_rows = syensqo_df[syensqo_df["Tracking number UPS"].astype(str).str.strip() == selected_tracking]
+    if not matching_rows.empty:
+        selected_row = matching_rows.iloc[0]
+
 
     batch_fiber_id = get_next_id(ufd_sheet, "Batch_Fiber_ID")
     st.markdown(f"**Next Batch_Fiber_ID:** `{batch_fiber_id}`")
