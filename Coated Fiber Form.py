@@ -35,7 +35,7 @@ def get_or_create_worksheet(sheet, title, headers):
 def get_next_id(worksheet, id_column):
     records = worksheet.get_all_records()
     if records:
-        last_id = max([int(r[id_column]) for r in records if str(r[id_column]).isdigit()])
+        last_id = max([int(r[id_column]) for r in records if str(r.get(id_column, '')).isdigit()])
         return last_id + 1
     return 1
 
@@ -48,15 +48,15 @@ def get_last_7_days_df(ws, date_col_name):
 
 # === COATED SPOOL FORM ===
 st.header("Coated Spool Entry")
-cs_headers = ["CoatedSpool_ID", "UncoatedSpool_ID", "Date"]
+cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length"])
+uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
 uncoated_records = uncoated_sheet.get_all_records()
-uncoated_ids = [str(r["UncoatedSpool_ID"]) for r in uncoated_records]
+uncoated_ids = [str(r["UnCoatedSpool_ID"]) for r in uncoated_records if "UnCoatedSpool_ID" in r]
 
 with st.form("Coated Spool Form"):
-    uncoated_selected = st.selectbox("UncoatedSpool_ID", uncoated_ids)
+    uncoated_selected = st.selectbox("UnCoatedSpool_ID", uncoated_ids)
     cs_submit = st.form_submit_button("Submit")
     if cs_submit:
         cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
@@ -80,8 +80,10 @@ fpcr_headers = [
 fpcr_sheet = get_or_create_worksheet(sheet, "Fiber per Coating Run Tbl (Coating)", fpcr_headers)
 
 pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating_ID"])
-pcoating_ids = [str(r["PCoating_ID"]) for r in pcoating_sheet.get_all_records()]
-coated_ids = [str(r["CoatedSpool_ID"]) for r in cs_sheet.get_all_records()]
+pcoating_records = pcoating_sheet.get_all_records()
+pcoating_ids = [str(r["PCoating_ID"]) for r in pcoating_records if "PCoating_ID" in r]
+coated_records = cs_sheet.get_all_records()
+coated_ids = [str(r["CoatedSpool_ID"]) for r in coated_records if "CoatedSpool_ID" in r]
 
 with st.form("Fiber Per Coating Run Form"):
     pcoating_selected = st.selectbox("PCoating ID", pcoating_ids)
