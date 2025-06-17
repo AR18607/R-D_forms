@@ -139,3 +139,121 @@ if st.session_state.batch_list:
             ufd_sheet.append_row(row, value_input_option="USER_ENTERED")
         st.success(f"✅ {len(st.session_state.batch_list)} batches submitted successfully.")
         st.session_state.batch_list.clear()
+
+# ------------------ As Received UnCoatedSpools Tbl ------------------ #
+st.header("As Received UnCoatedSpools Entry")
+
+ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes", "Date_Time"]
+ar_sheet = get_or_create_worksheet(spreadsheet, "As Received UnCoatedSpools Tbl", ar_headers)
+
+# Fetch existing UncoatedSpool_IDs and Batch_Fiber_IDs for dropdowns
+usid_headers = ["UncoatedSpool_ID", "Notes", "Date_Time"]
+usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", usid_headers)
+
+uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_all_records()]
+batch_fiber_ids = [record["Batch_Fiber_ID"] for record in ufd_sheet.get_all_records()]
+
+with st.form("As Received UnCoatedSpools Form"):
+    selected_uncoated_spool_id = st.selectbox("UncoatedSpool ID", uncoated_spool_ids)
+    selected_batch_fiber_id = st.selectbox("Batch Fiber ID", batch_fiber_ids)
+    notes = st.text_area("Notes")
+
+    submitted = st.form_submit_button("Submit")
+    if submitted:
+        received_spool_pk = get_next_id(ar_sheet, "Received_Spool_PK")
+        ar_sheet.append_row([received_spool_pk, selected_uncoated_spool_id, selected_batch_fiber_id, notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+        st.success(f"As Received UnCoatedSpool with PK {received_spool_pk} submitted successfully!")
+
+# ------------------ Combined Spools Tbl ------------------ #
+st.header("Combined Spools Entry")
+
+cs_headers = ["Combined_SpoolsPK", "UncoatedSpool_ID", "Received_Spool_PK", "Date_Time"]
+cs_sheet = get_or_create_worksheet(spreadsheet, "Combined Spools Tbl", cs_headers)
+
+# Fetch existing Received_Spool_PKs for dropdown
+received_spool_pks = [record["Received_Spool_PK"] for record in ar_sheet.get_all_records()]
+
+with st.form("Combined Spools Form"):
+    selected_uncoated_spool_id = st.selectbox("UncoatedSpool ID", uncoated_spool_ids)
+    selected_received_spool_pk = st.selectbox("Received Spool PK", received_spool_pks)
+
+    submitted = st.form_submit_button("Submit")
+    if submitted:
+        combined_spools_pk = get_next_id(cs_sheet, "Combined_SpoolsPK")
+        cs_sheet.append_row([combined_spools_pk, selected_uncoated_spool_id, selected_received_spool_pk, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+        st.success(f"Combined Spool with PK {combined_spools_pk} submitted successfully!")
+
+# ------------------ Ardent Fiber Dimension QC Tbl ------------------ #
+st.header("Ardent Fiber Dimension QC Entry")
+
+qc_headers = [
+    "Ardent_QC_ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "Ardent_QC_Inside_Diameter",
+    "Ardent_QC_Outside_Diameter", "Measured_Concentricity", "Wall_Thickness",
+    "Operator_Initials", "Notes", "Date_Time", "Inside_Circularity", "Outside_Circularity"
+]
+qc_sheet = get_or_create_worksheet(spreadsheet, "Ardent Fiber Dimension QC Tbl", qc_headers)
+
+with st.form("Ardent Fiber Dimension QC Form"):
+    selected_batch_fiber_id = st.selectbox("Batch Fiber ID", batch_fiber_ids)
+    selected_uncoated_spool_id = st.selectbox("UncoatedSpool ID", uncoated_spool_ids)
+    ardent_qc_inside_diameter = st.number_input("Ardent QC Inside Diameter (um)", min_value=0)
+    ardent_qc_outside_diameter = st.number_input("Ardent QC Outside Diameter (um)", min_value=0)
+    measured_concentricity = st.number_input("Measured Concentricity (%)", min_value=0)
+    wall_thickness = st.number_input("Wall Thickness (um)", min_value=0)
+    operator_initials = st.text_input("Operator Initials")
+    notes = st.text_area("Notes")
+    date_time = st.date_input("Date")
+    inside_circularity = st.number_input("Inside Circularity", min_value=0.0)
+    outside_circularity = st.number_input("Outside Circularity", min_value=0.0)
+
+    submitted = st.form_submit_button("Submit")
+    if submitted:
+        ardent_qc_id = get_next_id(qc_sheet, "Ardent_QC_ID")
+        qc_sheet.append_row([
+            ardent_qc_id, selected_batch_fiber_id, selected_uncoated_spool_id,
+            ardent_qc_inside_diameter, ardent_qc_outside_diameter, measured_concentricity,
+            wall_thickness, operator_initials, notes, date_time.strftime("%Y-%m-%d"),
+            inside_circularity, outside_circularity
+        ])
+        st.success(f"Ardent Fiber QC Entry with ID {ardent_qc_id} submitted successfully!")
+
+# ------------------ 7-DAYS DATA PREVIEW FOR ALL TABLES ------------------
+st.markdown("## 📅 Last 7 Days Data Preview")
+
+def parse_date(date_str):
+    formats = ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"]
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str.strip(), fmt)
+        except Exception:
+            continue
+    return None
+
+def filter_last_7_days(records, date_key):
+    today = datetime.today()
+    filtered_records = []
+    for record in records:
+        date_str = record.get(date_key, "").strip()
+        parsed = parse_date(date_str)
+        if parsed and parsed.date() >= (today - timedelta(days=7)).date():
+            filtered_records.append(record)
+    return filtered_records
+
+def safe_preview(title, records, date_col):
+    st.markdown(f"### {title}")
+    filtered = filter_last_7_days(records, date_col)
+    if filtered:
+        st.dataframe(pd.DataFrame(filtered))
+    else:
+        st.write("No records in the last 7 days.")
+
+# Preview all tables
+safe_preview("🧪 Uncoated Fiber Data", ufd_sheet.get_all_records(), "Date_Time")
+safe_preview("🧵 UnCoatedSpool ID", usid_sheet.get_all_records(), "Date_Time")
+safe_preview("📦 As Received UncoatedSpools", ar_sheet.get_all_records(), "Date_Time")
+safe_preview("🔗 Combined Spools", cs_sheet.get_all_records(), "Date_Time")
+safe_preview("🧪 Ardent Fiber Dimension QC", qc_sheet.get_all_records(), "Date_Time")
+
+
+
+
