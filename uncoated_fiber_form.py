@@ -56,12 +56,14 @@ def get_next_id(worksheet, id_column):
 
 def parse_float(val):
     try:
+        val = str(val).replace(",", "").replace("%", "").strip()
         return float(val)
     except:
         return 0.0
 
 def parse_int(val):
     try:
+        val = str(val).replace(",", "").replace("%", "").strip()
         return int(float(val))
     except:
         return 0
@@ -90,6 +92,7 @@ if fiber_source == "Syensqo":
 
     if not matching_rows.empty:
         selected_row = matching_rows.iloc[0]
+        st.write("Selected Row:", selected_row.to_dict())  # DEBUG
 
         batch_fiber_id = get_next_id(ufd_sheet, "Batch_Fiber_ID")
         st.markdown(f"**Next Batch_Fiber_ID:** `{batch_fiber_id}`")
