@@ -76,12 +76,19 @@ if fiber_source == "Syensqo":
 
     if add_btn:
         row_data = [
-            batch_fiber_id, selected_row.get("Batch ID", ""), selected_row.get("Inside Diameter Avg", 0),
-            selected_row.get("Inside Diameter Stdev", 0), selected_row.get("Outside Diameter Avg", 0),
-            selected_row.get("Outside Diameter Stdev", 0), selected_row.get("Reported concentricity", 0),
-            selected_row.get("Batch Length (m)", 0), datetime.today().strftime("%Y-%m-%d"),
-            selected_row.get("Tracking number UPS", ""), "Syensqo", 0.0, 0.0, 0, 0, 0, 0, 0.0, 0.0, 0, 0,
-            notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            batch_fiber_id,
+            selected_row.get("Batch ID", ""),
+            selected_row.get("Inside Diameter Avg", 0),
+            selected_row.get("Inside Diameter Stdev", 0),
+            selected_row.get("Outside Diameter Avg", 0),
+            selected_row.get("Outside Diameter Stdev", 0),
+            selected_row.get("Reported concentricity", 0),
+            selected_row.get("Batch length (m)", 0),
+            selected_row.get("Shipment date", datetime.today().strftime("%Y-%m-%d")),
+            selected_row.get("Tracking number UPS", ""),
+            "Syensqo", 0.0, 0.0, 0, 0, 0, 0, 0.0, 0.0, 0, 0,
+            notes,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ]
         st.session_state.batch_list.append(row_data)
         st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
