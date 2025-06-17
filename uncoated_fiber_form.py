@@ -81,10 +81,10 @@ if fiber_source == "Syensqo":
 
         with st.form("syensqo_entry_form"):
             supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_tracking)
-            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=float(selected_row.get("Inside Diameter (um) avg", 0)))
-            inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=float(selected_row.get("Inside Diameter (um) StDev", 0)))
-            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=float(selected_row.get("Outside Diameter (um) Avg", 0)))
-            outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=float(selected_row.get("Outside Diameter (um) StDev", 0)))
+            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=float(selected_row.get("Inside Diameter (um)", 0)))
+            inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=float(selected_row.get("Inside Diameter (um) SD", 0)))
+            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=float(selected_row.get("Outside Diameter (um)", 0)))
+            outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=float(selected_row.get("Outside Diameter (um) SD", 0)))
             reported_concentricity = st.number_input("Reported Concentricity (%)", value=float(selected_row.get("Reported Concentricity (%)", 0)))
             batch_length = st.number_input("Batch Length (m)", value=float(selected_row.get("Batch Length (m)", 0)))
             shipment_date = st.date_input("Shipment Date", value=datetime.today())
