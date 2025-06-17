@@ -58,7 +58,7 @@ uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 uncoated_df.columns = uncoated_df.columns.str.strip()
 
 # Get used and available UnCoatedSpool_IDs
-used_uncoated = set(str(uid).strip() for uid in cs_sheet.col_values(2)[1:])  # Skip header
+used_uncoated = set(str(uid).strip() for uid in cs_sheet.col_values(2)[1:] if uid.strip())  # Skip header and ignore blanks
 if "UnCoatedSpool_ID" in uncoated_df.columns:
     available_uncoated_ids = sorted([str(uid).strip() for uid in uncoated_df["UnCoatedSpool_ID"] if str(uid).strip() not in used_uncoated])
 else:
@@ -80,9 +80,10 @@ with st.form("coated_spool_form"):
 st.subheader("Recent Coated Spool Entries")
 recent_cs = get_last_7_days_df(cs_sheet, "Date")
 if not recent_cs.empty:
-    st.dataframe(recent_cs)
+    st.dataframe(recent_cs[["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]])
 else:
     st.info("No recent Coated Spool entries in the last 7 days.")
+
 
 # === FIBER PER COATING RUN FORM ===
 st.header("Fiber Per Coating Run Entry")
