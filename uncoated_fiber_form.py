@@ -21,7 +21,8 @@ st.markdown("""
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
 client = gspread.authorize(creds)
-spreadsheet = client.open("R&D Data Form")
+sheet_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
+spreadsheet = client.open_by_url(sheet_url)
 
 # === LOAD SYENSQO SHEET ===
 syensqo_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
