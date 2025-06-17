@@ -44,7 +44,7 @@ st.header("Coated Spool Entry")
 cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(spreadsheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length"])
+uncoated_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 cs_df = pd.DataFrame(cs_sheet.get_all_records())
 
@@ -58,10 +58,10 @@ st.markdown(f"**Next CoatedSpool_ID will be:** `{next_id}`")
 # All available IDs labeled with usage
 used_ids = set(cs_df["UnCoatedSpool_ID"].astype(str)) if not cs_df.empty and "UnCoatedSpool_ID" in cs_df.columns else set()
 uncoated_choices = []
-if "UncoatedSpool_ID" in uncoated_df.columns:
+if "UnCoatedSpool_ID" in uncoated_df.columns:
     for _, row in uncoated_df.iterrows():
         try:
-            uid = str(row["UncoatedSpool_ID"]).strip()
+            uid = str(row["UnCoatedSpool_ID"]).strip()
             label = f"{uid} ({'used' if uid in used_ids else 'not used'})"
             uncoated_choices.append((label, uid))
         except KeyError:
@@ -77,7 +77,7 @@ with st.form("Coated Spool Form"):
             cs_sheet.append_row([next_id, selected_id, datetime.today().strftime("%Y-%m-%d")])
             st.success(f"Coated Spool with ID {next_id} submitted successfully!")
     else:
-        st.warning("No UnCoatedSpool_IDs found.")
+        st.warning("No UnCoatedSpool_IDs found. Please add a new entry in the 'UnCoatedSpool ID Tbl' sheet.")
 
 # Show last 7 days
 st.subheader("Recent Coated Spool Entries")
