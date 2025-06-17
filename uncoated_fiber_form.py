@@ -103,7 +103,13 @@ if fiber_source == "Syensqo":
             outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=0.0)
             reported_concentricity = st.number_input("Reported Concentricity (%)", value=0.0)
             batch_length = st.number_input("Batch Length (m)", value=parse_float(selected_row.get("Batch length (m)", 0)))
-            shipment_date = st.date_input("Shipment Date", value=datetime.today())
+            shipment_date_val = selected_row.get("Shipment date", "")
+            try:
+                parsed_date = datetime.strptime(shipment_date_val, "%m/%d/%Y")
+            except:
+                parsed_date = datetime.today()
+                shipment_date = st.date_input("Shipment Date", value=parsed_date)
+
             average_t_od = st.number_input("Average t/OD", value=0.0)
             minimum_t_od = st.number_input("Minimum t/OD", value=0.0)
             min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=0.0)
@@ -144,6 +150,9 @@ if st.session_state.batch_list:
 st.header("As Received UnCoatedSpools Entry")
 ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes", "Date_Time"]
 ar_sheet = get_or_create_worksheet(spreadsheet, "As Received UnCoatedSpools Tbl", ar_headers)
+
+usid_headers = ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"]
+usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", usid_headers)
 
 uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_all_records()]
 batch_fiber_ids = [record["Batch_Fiber_ID"] for record in spreadsheet.worksheet("Uncoated Fiber Data Tbl").get_all_records()]
