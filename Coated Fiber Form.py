@@ -45,49 +45,46 @@ cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(spreadsheet, "Coated Spool Tbl", cs_headers)
 
 uncoated_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
-uncoated_records_raw = uncoated_sheet.get_all_records()
-cs_records_raw = cs_sheet.get_all_records()
+uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
+cs_df = pd.DataFrame(cs_sheet.get_all_records())
 
-used_ids = set(str(record.get("UnCoatedSpool_ID", "")).strip() for record in cs_records_raw if record.get("UnCoatedSpool_ID"))
+uncoated_df.columns = uncoated_df.columns.str.strip()
+cs_df.columns = cs_df.columns.str.strip()
 
-uncoated_choices = []
-for record in uncoated_records_raw:
-    record = {k.strip(): v for k, v in record.items()}
-    id_str = str(record.get("UnCoatedSpool_ID", "")).strip()
-    if id_str:
-        status = "used" if id_str in used_ids else "not used"
-        label = f"{id_str} ({status})"
-        uncoated_choices.append((label, id_str))
+# Show current ID to be created
+next_id = get_next_id(cs_sheet, "CoatedSpool_ID")
+st.markdown(f"**Next CoatedSpool_ID will be:** `{next_id}`")
+
+# All available IDs labeled with usage
+used_ids = set(cs_df["UnCoatedSpool_ID"].astype(str)) if not cs_df.empty else set()
+uncoated_choices = [
+    (f"{str(row['UnCoatedSpool_ID'])} ({'used' if str(row['UnCoatedSpool_ID']) in used_ids else 'not used'})", str(row['UnCoatedSpool_ID']))
+    for _, row in uncoated_df.iterrows() if str(row['UnCoatedSpool_ID']).strip()
+]
 
 with st.form("Coated Spool Form"):
     if uncoated_choices:
-        options = [label for label, _ in uncoated_choices]
-        selected_label = st.selectbox("UnCoatedSpool ID", options)
+        display_labels = [label for label, _ in uncoated_choices]
+        selected_label = st.selectbox("UnCoatedSpool_ID", display_labels)
         selected_id = dict(uncoated_choices)[selected_label]
         submitted = st.form_submit_button("Submit")
         if submitted:
-            next_id = get_next_id(cs_sheet, "CoatedSpool_ID")
             cs_sheet.append_row([next_id, selected_id, datetime.today().strftime("%Y-%m-%d")])
             st.success(f"Coated Spool with ID {next_id} submitted successfully!")
     else:
-        st.warning("No available UnCoatedSpool_ID found.")
+        st.warning("No UnCoatedSpool_IDs found.")
 
 # Show last 7 days
 st.subheader("Recent Coated Spool Entries")
-records = cs_sheet.get_all_records()
-if records:
-    df = pd.DataFrame(records)
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        last_7_days = df[df["Date"] >= datetime.today() - pd.Timedelta(days=7)]
-        if not last_7_days.empty:
-            st.dataframe(last_7_days)
-        else:
-            st.info("No recent Coated Spool entries in the last 7 days.")
+if not cs_df.empty and "Date" in cs_df.columns:
+    cs_df["Date"] = pd.to_datetime(cs_df["Date"], errors="coerce")
+    last_7 = cs_df[cs_df["Date"] >= datetime.today() - pd.Timedelta(days=7)]
+    if not last_7.empty:
+        st.dataframe(last_7)
     else:
-        st.info("Date column missing in Coated Spool Tbl.")
+        st.info("No recent Coated Spool entries in the last 7 days.")
 else:
-    st.info("No records found in Coated Spool Tbl.")
+    st.info("No records or missing Date column in Coated Spool Tbl.")
 
 # === FIBER PER COATING RUN FORM ===
 st.header("Fiber Per Coating Run Entry")
