@@ -48,14 +48,18 @@ def get_last_7_days_df(ws, date_col_name):
 
 # === COATED SPOOL FORM ===
 st.header("Coated Spool Entry")
-cs_headers = ["CoatedSpoolID", "UnCoatedSpool_ID"]
+cs_headers = ["CoatedSpoolID", "UncoatedSpool_ID"]
 cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
-uncoated_ids = [str(r["UnCoatedSpool_ID"]) for r in uncoated_sheet.get_all_records()]
+uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length"])
+uncoated_records = uncoated_sheet.get_all_records()
+st.write("DEBUG: Uncoated sheet records", uncoated_records)  # 👈 This line will help you debug
+
+# Try to extract correct key (you can adjust this if needed)
+uncoated_ids = [str(r["UncoatedSpool_ID"]) for r in uncoated_records]
 
 with st.form("Coated Spool Form"):
-    uncoated_selected = st.selectbox("UnCoatedSpool_ID", uncoated_ids)
+    uncoated_selected = st.selectbox("UncoatedSpool_ID", uncoated_ids)
     cs_submit = st.form_submit_button("Submit")
     if cs_submit:
         cs_id = get_next_id(cs_sheet, "CoatedSpoolID")
