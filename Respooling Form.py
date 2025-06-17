@@ -12,6 +12,7 @@ GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
 # Sheet Tab Names
 TAB_RESPOOLING = "Respooling Tbl"
 TAB_COATED_SPOOL = "Coated Spool Tbl"
+TAB_UNCOATED_SPOOL = "UnCoatedSpool ID Tbl"
 
 # ---------------- FUNCTIONS ----------------
 def connect_google_sheet(sheet_name):
@@ -28,7 +29,6 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
     if not records:
@@ -44,20 +44,38 @@ def get_foreign_key_options(worksheet, id_col=1):
 st.title("🌀 Respooling Form")
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
-respooling_headers = ["Respooling ID", "CoatedSpool ID", "Length", "Date", "Initials", "Label", "Notes"]
+respooling_headers = ["Respooling ID", "Spool Type", "Spool ID", "Length List", "Date", "Initials", "Label", "Notes"]
 respooling_sheet = get_or_create_tab(spreadsheet, TAB_RESPOOLING, respooling_headers)
-coated_spool_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool ID", "Other Fields..."])
 
-coated_spool_ids = get_foreign_key_options(coated_spool_sheet)
+coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool ID", "Other Fields..."])
+uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UnCoatedSpool ID", "Other Fields..."])
 
 # ---------------- FORM ----------------
 with st.form("respooling_form"):
     st.subheader("📋 Respooling Entry")
     respooling_id = get_last_id(respooling_sheet, "RSP")
-    st.markdown(f"**Auto-generated Respooling ID:** `{respooling_id}`")
+    st.markdown(f"**Auto-generated Respooling ID:** ` {respooling_id} `")
 
-    coated_spool_id = st.selectbox("Select CoatedSpool ID", coated_spool_ids)
-    length = st.number_input("Length (m)", min_value=0.0, format="%.2f")
+    # 1. Spool Type
+    spool_type = st.selectbox("Are you respooled fiber from:", ["Coated", "Uncoated"])
+
+    # 2. Spool ID dropdown based on type
+    if spool_type == "Coated":
+        spool_ids = get_foreign_key_options(coated_sheet)
+    else:
+        spool_ids = get_foreign_key_options(uncoated_sheet)
+    selected_spool_id = st.selectbox("Select Spool ID", spool_ids)
+
+    # 3. How many spools to create?
+    num_spools = st.number_input("How many spools are you making from this fiber?", min_value=1, step=1)
+
+    # 4. Input for each spool's length
+    lengths = []
+    for i in range(int(num_spools)):
+        length = st.number_input(f"Length for Spool #{i+1} (m)", min_value=0.0, format="%.2f", key=f"len_{i}")
+        lengths.append(length)
+
+    # 5. Other details
     date = st.date_input("Date")
     initials = st.text_input("Initials")
     label = st.text_input("Label")
@@ -65,10 +83,18 @@ with st.form("respooling_form"):
 
     submit = st.form_submit_button("💾 Submit")
 
+# ---------------- SUBMIT ----------------
 if submit:
     try:
         respooling_sheet.append_row([
-            respooling_id, coated_spool_id, length, str(date), initials, label, notes
+            respooling_id,
+            spool_type,
+            selected_spool_id,
+            ", ".join([str(l) for l in lengths]),
+            str(date),
+            initials,
+            label,
+            notes
         ])
         st.success("✅ Respooling record successfully saved!")
     except Exception as e:
