@@ -41,9 +41,11 @@ def get_next_id(worksheet, id_column):
 
 def get_last_7_days_df(ws, date_col_name):
     df = pd.DataFrame(ws.get_all_records())
-    if date_col_name in df.columns:
-        df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce")
-        return df[df[date_col_name] >= datetime.today() - timedelta(days=7)]
+    if not df.empty:
+        df.columns = df.columns.str.strip()  # sanitize headers
+        if date_col_name in df.columns:
+            df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce")
+            return df[df[date_col_name] >= datetime.today() - timedelta(days=7)]
     return pd.DataFrame()
 
 # === COATED SPOOL FORM ===
