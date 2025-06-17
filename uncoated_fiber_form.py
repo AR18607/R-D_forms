@@ -140,49 +140,6 @@ if st.session_state.batch_list:
         st.success(f"✅ {len(st.session_state.batch_list)} batches submitted successfully.")
         st.session_state.batch_list.clear()
 
-# ------------------ As Received UnCoatedSpools Tbl ------------------ #
-st.header("As Received UnCoatedSpools Entry")
-
-ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes", "Date_Time"]
-ar_sheet = get_or_create_worksheet(spreadsheet, "As Received UnCoatedSpools Tbl", ar_headers)
-
-# Fetch existing UncoatedSpool_IDs and Batch_Fiber_IDs for dropdowns
-usid_headers = ["UncoatedSpool_ID", "Notes", "Date_Time"]
-usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", usid_headers)
-
-uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_all_records()]
-batch_fiber_ids = [record["Batch_Fiber_ID"] for record in ufd_sheet.get_all_records()]
-
-with st.form("As Received UnCoatedSpools Form"):
-    selected_uncoated_spool_id = st.selectbox("UncoatedSpool ID", uncoated_spool_ids)
-    selected_batch_fiber_id = st.selectbox("Batch Fiber ID", batch_fiber_ids)
-    notes = st.text_area("Notes")
-
-    submitted = st.form_submit_button("Submit")
-    if submitted:
-        received_spool_pk = get_next_id(ar_sheet, "Received_Spool_PK")
-        ar_sheet.append_row([received_spool_pk, selected_uncoated_spool_id, selected_batch_fiber_id, notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-        st.success(f"As Received UnCoatedSpool with PK {received_spool_pk} submitted successfully!")
-
-# ------------------ Combined Spools Tbl ------------------ #
-st.header("Combined Spools Entry")
-
-cs_headers = ["Combined_SpoolsPK", "UncoatedSpool_ID", "Received_Spool_PK", "Date_Time"]
-cs_sheet = get_or_create_worksheet(spreadsheet, "Combined Spools Tbl", cs_headers)
-
-# Fetch existing Received_Spool_PKs for dropdown
-received_spool_pks = [record["Received_Spool_PK"] for record in ar_sheet.get_all_records()]
-
-with st.form("Combined Spools Form"):
-    selected_uncoated_spool_id = st.selectbox("UncoatedSpool ID", uncoated_spool_ids)
-    selected_received_spool_pk = st.selectbox("Received Spool PK", received_spool_pks)
-
-    submitted = st.form_submit_button("Submit")
-    if submitted:
-        combined_spools_pk = get_next_id(cs_sheet, "Combined_SpoolsPK")
-        cs_sheet.append_row([combined_spools_pk, selected_uncoated_spool_id, selected_received_spool_pk, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-        st.success(f"Combined Spool with PK {combined_spools_pk} submitted successfully!")
-
 # === As Received UnCoatedSpools Tbl ===
 st.header("As Received UnCoatedSpools Entry")
 ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes", "Date_Time"]
