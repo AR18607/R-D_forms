@@ -118,23 +118,23 @@ if fiber_source == "Syensqo":
             notes = st.text_area("Notes")
             add_btn = st.form_submit_button("➕ Add to Batch List")
 
-        if add_btn:
-            row_data = [
-                batch_fiber_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
-                outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
-                shipment_date.strftime("%Y-%m-%d"), selected_tracking, "Syensqo", average_t_od,
-                minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
-                collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ]
-            st.session_state.batch_list.append(row_data)
-            st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
+            if add_btn:
+                row_data = [
+                    batch_fiber_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
+                    outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
+                    shipment_date.strftime("%Y-%m-%d"), selected_tracking, "Syensqo", average_t_od,
+                    minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
+                    collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ]
+                st.session_state.batch_list.append(row_data)
+                st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
 
 if st.session_state.batch_list:
     st.markdown("### 📝 Batches to be Submitted:")
     st.dataframe(pd.DataFrame(st.session_state.batch_list, columns=ufd_headers))
     if st.button("✅ Submit All Batches"):
         for row in st.session_state.batch_list:
-            ufd_sheet.append_row(row)
+            ufd_sheet.append_row(row, value_input_option="USER_ENTERED")
         st.success(f"✅ {len(st.session_state.batch_list)} batches submitted successfully.")
         st.session_state.batch_list.clear()
