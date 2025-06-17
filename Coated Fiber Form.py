@@ -57,6 +57,7 @@ uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoat
 uncoated_records = uncoated_sheet.get_all_records()
 uncoated_ids = [str(r.get("UnCoatedSpool_ID", "")).strip() for r in uncoated_records if r.get("UnCoatedSpool_ID")]
 
+
 with st.form("coated_spool_form"):
     if uncoated_ids:
         uncoated_selected = st.selectbox("UnCoatedSpool_ID", uncoated_ids)
