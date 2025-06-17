@@ -59,17 +59,15 @@ uncoated_df.columns = uncoated_df.columns.str.strip()
 
 # Get used IDs and add status label
 used_uncoated = set(str(uid).strip() for uid in cs_sheet.col_values(2)[1:] if uid.strip())
+uncoated_choices = []
 if "UnCoatedSpool_ID" in uncoated_df.columns:
-    uncoated_choices = []
     for uid in uncoated_df["UnCoatedSpool_ID"]:
         uid_str = str(uid).strip()
         label = f"{uid_str} ({'used' if uid_str in used_uncoated else 'not used'})"
         uncoated_choices.append((label, uid_str))
-else:
-    uncoated_choices = []
 
-with st.form("coated_spool_form"):
-    if uncoated_choices:
+if uncoated_choices:
+    with st.form("coated_spool_form"):
         options = [label for label, _ in uncoated_choices]
         selected_label = st.selectbox("UnCoatedSpool_ID", options)
         uncoated_selected = dict(uncoated_choices)[selected_label]
@@ -79,8 +77,8 @@ with st.form("coated_spool_form"):
         if cs_submit:
             cs_sheet.append_row([next_cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
             st.success(f"✅ Coated Spool ID {next_cs_id} submitted.")
-    else:
-        st.warning("No available UnCoatedSpool_ID found.")
+else:
+    st.warning("No available UnCoatedSpool_ID found.")
 
 # Show last 7 days
 st.subheader("Recent Coated Spool Entries")
