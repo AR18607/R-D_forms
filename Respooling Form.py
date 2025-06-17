@@ -29,6 +29,10 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
+def get_foreign_key_options(worksheet, id_col_name):
+    records = worksheet.get_all_records()
+    return [str(row[id_col_name]) for row in records if str(row[id_col_name]).strip() != ""]
+
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
     if not records:
@@ -36,9 +40,6 @@ def get_last_id(worksheet, id_prefix):
     nums = [int(r.split('-')[-1]) for r in records if r.startswith(id_prefix)]
     next_num = max(nums) + 1 if nums else 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
-
-def get_foreign_key_options(worksheet, id_col=1):
-    return worksheet.col_values(id_col)[1:]
 
 def get_recent_entries_df(sheet, headers):
     records = sheet.get_all_records()
@@ -55,8 +56,8 @@ spreadsheet = connect_google_sheet()
 
 respooling_headers = ["Respooling ID", "Spool Type", "Spool ID", "Length List", "Date", "Initials", "Label", "Notes"]
 respooling_sheet = get_or_create_tab(spreadsheet, TAB_RESPOOLING, respooling_headers)
-coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool ID"])
-uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UnCoatedSpool ID"])
+coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"])
+uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"])
 
 # ---------------- PRE-FORM SECTION ----------------
 st.subheader("📋 Respooling Entry")
@@ -64,11 +65,14 @@ st.subheader("📋 Respooling Entry")
 # Fiber type selection
 spool_type = st.selectbox("Are you respooled fiber from:", ["Coated", "Uncoated"], key="spool_type")
 
-# Load spool IDs based on fiber type
-spool_ids = get_foreign_key_options(coated_sheet if spool_type == "Coated" else uncoated_sheet)
+# Load spool IDs based on fiber type and correct column
+if spool_type == "Coated":
+    spool_ids = get_foreign_key_options(coated_sheet, "CoatedSpool_ID")
+else:
+    spool_ids = get_foreign_key_options(uncoated_sheet, "UncoatedSpool_ID")
 
 if not spool_ids:
-    st.warning(f"No spool IDs found for '{spool_type}' fiber. Please check the '{TAB_COATED_SPOOL if spool_type == 'Coated' else TAB_UNCOATED_SPOOL}' sheet.")
+    st.warning(f"No spool IDs found for '{spool_type}' fiber. Please check the appropriate sheet.")
     selected_spool_id = None
 else:
     selected_spool_id = st.selectbox("Select Spool ID", spool_ids, key="spool_id")
@@ -90,7 +94,6 @@ with st.form("respooling_form"):
     respooling_id = get_last_id(respooling_sheet, "RSP")
     st.markdown(f"**Auto-generated Respooling ID:** ` {respooling_id} `")
 
-    # Dynamic length inputs
     lengths = []
     for i in range(int(st.session_state.num_spools)):
         length = st.number_input(
