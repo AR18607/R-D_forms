@@ -44,8 +44,8 @@ def get_last_7_days_df(ws, date_col_name):
     if not df.empty:
         df.columns = df.columns.str.strip()
         if date_col_name in df.columns:
-            df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce").dt.date
-            return df[df[date_col_name] >= datetime.today().date() - timedelta(days=7)]
+            df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce")
+            return df[df[date_col_name] >= datetime.today() - timedelta(days=7)]
     return pd.DataFrame()
 
 # === COATED SPOOL FORM ===
@@ -54,14 +54,17 @@ cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
 uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length", "Date_Time"])
-uncoated_records = uncoated_sheet.get_all_records()
-uncoated_ids = [str(r.get("UnCoatedSpool_ID", "")).strip() for r in uncoated_records if r.get("UnCoatedSpool_ID")]
+uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 
-with st.form("Coated Spool Form"):
-    if uncoated_ids:
+# Get IDs that haven't yet been coated
+used_uncoated = set(cs_sheet.col_values(2)[1:])  # Skip header
+available_uncoated_ids = sorted([str(uid) for uid in uncoated_df["UnCoatedSpool_ID"] if str(uid) not in used_uncoated])
+
+with st.form("coated_spool_form"):
+    if available_uncoated_ids:
+        uncoated_selected = st.selectbox("UnCoatedSpool_ID", available_uncoated_ids)
         next_cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
         st.markdown(f"**Next CoatedSpool_ID:** `{next_cs_id}`")
-        uncoated_selected = st.selectbox("UnCoatedSpool_ID", uncoated_ids)
         cs_submit = st.form_submit_button("Submit")
         if cs_submit:
             cs_sheet.append_row([next_cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
