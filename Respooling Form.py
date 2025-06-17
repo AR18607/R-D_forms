@@ -15,12 +15,11 @@ TAB_COATED_SPOOL = "Coated Spool Tbl"
 TAB_UNCOATED_SPOOL = "UnCoatedSpool ID Tbl"
 
 # ---------------- FUNCTIONS ----------------
-def connect_google_sheet(sheet_name):
+def connect_google_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
     return client.open_by_url("https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8")
-
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
@@ -52,11 +51,10 @@ def get_recent_entries_df(sheet, headers):
 
 # ---------------- INIT ----------------
 st.title("🌀 Respooling Form")
-spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+spreadsheet = connect_google_sheet()
 
 respooling_headers = ["Respooling ID", "Spool Type", "Spool ID", "Length List", "Date", "Initials", "Label", "Notes"]
 respooling_sheet = get_or_create_tab(spreadsheet, TAB_RESPOOLING, respooling_headers)
-
 coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool ID"])
 uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UnCoatedSpool ID"])
 
@@ -66,9 +64,14 @@ st.subheader("📋 Respooling Entry")
 # Fiber type selection
 spool_type = st.selectbox("Are you respooled fiber from:", ["Coated", "Uncoated"], key="spool_type")
 
-# Load appropriate spool IDs
+# Load spool IDs based on fiber type
 spool_ids = get_foreign_key_options(coated_sheet if spool_type == "Coated" else uncoated_sheet)
-selected_spool_id = st.selectbox("Select Spool ID", spool_ids, key="spool_id")
+
+if not spool_ids:
+    st.warning(f"No spool IDs found for '{spool_type}' fiber. Please check the '{TAB_COATED_SPOOL if spool_type == 'Coated' else TAB_UNCOATED_SPOOL}' sheet.")
+    selected_spool_id = None
+else:
+    selected_spool_id = st.selectbox("Select Spool ID", spool_ids, key="spool_id")
 
 # Spool count using session state
 if "num_spools" not in st.session_state:
@@ -98,7 +101,6 @@ with st.form("respooling_form"):
         )
         lengths.append(length)
 
-    # Additional details
     date = st.date_input("Date")
     initials = st.text_input("Initials")
     label = st.text_input("Label")
@@ -107,20 +109,23 @@ with st.form("respooling_form"):
 
 # ---------------- SUBMIT ----------------
 if submit:
-    try:
-        respooling_sheet.append_row([
-            respooling_id,
-            spool_type,
-            selected_spool_id,
-            ", ".join([str(l) for l in lengths]),
-            str(date),
-            initials,
-            label,
-            notes
-        ])
-        st.success("✅ Respooling record successfully saved!")
-    except Exception as e:
-        st.error(f"❌ Error saving data: {e}")
+    if not selected_spool_id:
+        st.error("❌ Please select a valid Spool ID before submitting.")
+    else:
+        try:
+            respooling_sheet.append_row([
+                respooling_id,
+                spool_type,
+                selected_spool_id,
+                ", ".join([str(l) for l in lengths]),
+                str(date),
+                initials,
+                label,
+                notes
+            ])
+            st.success("✅ Respooling record successfully saved!")
+        except Exception as e:
+            st.error(f"❌ Error saving data: {e}")
 
 # ---------------- 7-DAY REVIEW TABLE ----------------
 st.markdown("---")
