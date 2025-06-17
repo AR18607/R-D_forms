@@ -3,10 +3,26 @@ import json
 import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, timedelta
-import pandas as pd
+from datetime import datetime
 
-# === DISABLE ENTER KEY FORM SUBMIT ===
+# Setup
+def get_or_create_worksheet(sheet, title, headers):
+    try:
+        worksheet = sheet.worksheet(title)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = sheet.add_worksheet(title=title, rows="1000", cols="50")
+        worksheet.append_row(headers)
+    return worksheet
+
+def get_next_id(worksheet, id_column):
+    records = worksheet.get_all_records()
+    if records:
+        last_id = max([int(record[id_column]) for record in records if str(record[id_column]).isdigit()])
+        return last_id + 1
+    else:
+        return 1
+
+# === STREAMLIT SETUP ===
 st.markdown("""
     <script>
         document.addEventListener("keydown", function(e) {
@@ -17,76 +33,57 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
-# === GOOGLE SHEET SETUP ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
 client = gspread.authorize(creds)
-sheet = client.open("R&D Data Form")
+spreadsheet = client.open("R&D Data Form")
 
-# === HELPERS ===
-def get_or_create_worksheet(sheet, title, headers):
-    try:
-        ws = sheet.worksheet(title)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sheet.add_worksheet(title=title, rows="1000", cols="50")
-        ws.append_row(headers)
-    return ws
-
-def get_next_id(worksheet, id_column):
-    records = worksheet.get_all_records()
-    if records:
-        last_id = max([int(r[id_column]) for r in records if str(r.get(id_column, '')).isdigit()])
-        return last_id + 1
-    return 1
-
-def get_last_7_days_df(ws, date_col_name):
-    df = pd.DataFrame(ws.get_all_records())
-    if not df.empty:
-        df.columns = df.columns.str.strip()
-        if date_col_name in df.columns:
-            df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce")
-            return df[df[date_col_name] >= datetime.today() - timedelta(days=7)]
-    return pd.DataFrame()
-
-# === COATED SPOOL FORM ===
+# ------------------ Coated Spool Tbl ------------------ #
 st.header("Coated Spool Entry")
 cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
-cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
+cs_sheet = get_or_create_worksheet(spreadsheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length", "Date_Time"])
-uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
-uncoated_df.columns = uncoated_df.columns.str.strip()
+uncoated_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
+uncoated_records = uncoated_sheet.get_all_records()
 
-# Add status label
-used_uncoated = set(str(uid).strip() for uid in cs_sheet.col_values(2)[1:] if uid.strip())
+used_ids = set(record["UnCoatedSpool_ID"] for record in cs_sheet.get_all_records())
+
 uncoated_choices = []
-if "UnCoatedSpool_ID" in uncoated_df.columns:
-    for uid in uncoated_df["UnCoatedSpool_ID"]:
-        uid_str = str(uid).strip()
-        label = f"{uid_str} ({'used' if uid_str in used_uncoated else 'not used'})"
-        uncoated_choices.append((label, uid_str))
+for record in uncoated_records:
+    id_str = str(record["UnCoatedSpool_ID"])
+    status = "used" if id_str in used_ids else "not used"
+    label = f"{id_str} ({status})"
+    uncoated_choices.append((label, id_str))
 
-with st.form("coated_spool_form"):
+with st.form("Coated Spool Form"):
     if uncoated_choices:
         options = [label for label, _ in uncoated_choices]
-        selected_label = st.selectbox("UnCoatedSpool_ID", options)
-        uncoated_selected = dict(uncoated_choices)[selected_label]
-        next_cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
-        st.markdown(f"**Next CoatedSpool_ID:** `{next_cs_id}`")
-        cs_submit = st.form_submit_button("Submit")
-        if cs_submit:
-            cs_sheet.append_row([next_cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
-            st.success(f"✅ Coated Spool ID {next_cs_id} submitted.")
+        selected_label = st.selectbox("UnCoatedSpool ID", options)
+        selected_id = dict(uncoated_choices)[selected_label]
+        submitted = st.form_submit_button("Submit")
+        if submitted:
+            next_id = get_next_id(cs_sheet, "CoatedSpool_ID")
+            cs_sheet.append_row([next_id, selected_id, datetime.today().strftime("%Y-%m-%d")])
+            st.success(f"Coated Spool with ID {next_id} submitted successfully!")
     else:
         st.warning("No available UnCoatedSpool_ID found.")
 
 # Show last 7 days
 st.subheader("Recent Coated Spool Entries")
-recent_cs = get_last_7_days_df(cs_sheet, "Date")
-if not recent_cs.empty:
-    st.dataframe(recent_cs[["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]])
+records = cs_sheet.get_all_records()
+if records:
+    df = pd.DataFrame(records)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        last_7_days = df[df["Date"] >= datetime.today() - pd.Timedelta(days=7)]
+        if not last_7_days.empty:
+            st.dataframe(last_7_days)
+        else:
+            st.info("No recent Coated Spool entries in the last 7 days.")
+    else:
+        st.info("Date column missing in Coated Spool Tbl.")
 else:
-    st.info("No recent Coated Spool entries in the last 7 days.")
+    st.info("No records found in Coated Spool Tbl.")
 
 # === FIBER PER COATING RUN FORM ===
 st.header("Fiber Per Coating Run Entry")
