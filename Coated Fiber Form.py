@@ -45,7 +45,10 @@ def get_last_7_days_df(ws, date_col_name):
         df.columns = df.columns.str.strip()
         if date_col_name in df.columns:
             df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce")
-            return df[df[date_col_name] >= datetime.today() - timedelta(days=7)]
+            today = datetime.today().date()
+            df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce").dt.date
+            return df[df[date_col_name] >= today - timedelta(days=7)]
+
     return pd.DataFrame()
 
 # === COATED SPOOL FORM ===
