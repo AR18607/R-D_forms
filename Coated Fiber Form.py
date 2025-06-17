@@ -57,23 +57,22 @@ uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoat
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 uncoated_df.columns = uncoated_df.columns.str.strip()
 
-# Get used and available UncoatedSpool_IDs
-used_uncoated = set(str(uid).strip() for uid in cs_sheet.col_values(2)[1:] if uid.strip())  # Skip header and ignore blanks
-if "UncoatedSpool_ID" in uncoated_df.columns:
-    available_uncoated_ids = sorted([
-        str(uid).strip() 
-        for uid in uncoated_df["UncoatedSpool_ID"] 
-        if str(uid).strip() not in used_uncoated
-    ])
+# Get used IDs and add status label
+used_uncoated = set(str(uid).strip() for uid in cs_sheet.col_values(2)[1:] if uid.strip())
+if "UnCoatedSpool_ID" in uncoated_df.columns:
+    uncoated_choices = []
+    for uid in uncoated_df["UnCoatedSpool_ID"]:
+        uid_str = str(uid).strip()
+        label = f"{uid_str} ({'used' if uid_str in used_uncoated else 'not used'})"
+        uncoated_choices.append((label, uid_str))
 else:
-    available_uncoated_ids = []
-
+    uncoated_choices = []
 
 with st.form("coated_spool_form"):
-    if available_uncoated_ids:
-       
-        uncoated_selected = st.selectbox("UncoatedSpool_ID", available_uncoated_ids)
-
+    if uncoated_choices:
+        options = [label for label, _ in uncoated_choices]
+        selected_label = st.selectbox("UnCoatedSpool_ID", options)
+        uncoated_selected = dict(uncoated_choices)[selected_label]
         next_cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
         st.markdown(f"**Next CoatedSpool_ID:** `{next_cs_id}`")
         cs_submit = st.form_submit_button("Submit")
@@ -90,7 +89,6 @@ if not recent_cs.empty:
     st.dataframe(recent_cs[["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]])
 else:
     st.info("No recent Coated Spool entries in the last 7 days.")
-
 
 # === FIBER PER COATING RUN FORM ===
 st.header("Fiber Per Coating Run Entry")
