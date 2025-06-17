@@ -19,7 +19,8 @@ def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
-    return client.open(sheet_name)
+    return client.open_by_url("https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8")
+
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
