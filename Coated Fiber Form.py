@@ -57,8 +57,7 @@ uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoat
 uncoated_records = uncoated_sheet.get_all_records()
 uncoated_ids = [str(r.get("UnCoatedSpool_ID", "")).strip() for r in uncoated_records if r.get("UnCoatedSpool_ID")]
 
-
-with st.form("coated_spool_form"):
+with st.form("Coated Spool Form"):
     if uncoated_ids:
         uncoated_selected = st.selectbox("UnCoatedSpool_ID", uncoated_ids)
         cs_submit = st.form_submit_button("Submit")
@@ -85,7 +84,6 @@ fpcr_headers = [
 ]
 fpcr_sheet = get_or_create_worksheet(sheet, "Fiber per Coating Run Tbl (Coating)", fpcr_headers)
 
-# Load dropdowns
 pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating ID"])
 pcoating_records = pcoating_sheet.get_all_records()
 pcoating_ids = [str(r.get("PCoating ID", "")).strip() for r in pcoating_records if r.get("PCoating ID")]
@@ -93,7 +91,7 @@ pcoating_ids = [str(r.get("PCoating ID", "")).strip() for r in pcoating_records 
 coated_records = cs_sheet.get_all_records()
 coated_ids = [str(r.get("CoatedSpool_ID", "")).strip() for r in coated_records if r.get("CoatedSpool_ID")]
 
-with st.form("fiber_coating_form"):
+with st.form("Fiber Per Coating Run Form"):
     if pcoating_ids and coated_ids:
         pcoating_selected = st.selectbox("PCoating ID", pcoating_ids)
         coated_selected = st.selectbox("CoatedSpool ID", coated_ids)
