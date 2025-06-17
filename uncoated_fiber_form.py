@@ -26,7 +26,7 @@ spreadsheet = client.open_by_url(sheet_url)
 
 # === LOAD SYENSQO SHEET ===
 syensqo_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
-syensqo_sheet = client.open_by_url(syensqo_url).worksheet("Syensqo Data")
+syensqo_sheet = client.open_by_url(syensqo_url).worksheet("Sheet1")
 syensqo_df = pd.DataFrame(syensqo_sheet.get_all_records())
 
 # === HELPER FUNCTIONS ===
