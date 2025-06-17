@@ -27,7 +27,12 @@ spreadsheet = client.open_by_url(sheet_url)
 # === LOAD SYENSQO SHEET ===
 syensqo_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
 syensqo_sheet = client.open_by_url(syensqo_url).worksheet("Sheet1")
-syensqo_df = pd.DataFrame(syensqo_sheet.get_all_records())
+#syensqo_df = pd.DataFrame(syensqo_sheet.get_all_records())
+raw_data = syensqo_sheet.get_all_values()
+headers = raw_data[0]
+data_rows = raw_data[1:]
+syensqo_df = pd.DataFrame(data_rows, columns=headers)
+
 
 # === HELPER FUNCTIONS ===
 def get_or_create_worksheet(sheet, title, headers):
