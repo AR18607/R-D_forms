@@ -44,7 +44,7 @@ def get_next_id(worksheet, id_column):
         return last_id + 1
     return 1
 
-# === MAIN FORM SETUP ===
+# === UNCOATED FIBER FORM ===
 st.header("Uncoated Fiber Data Entry")
 ufd_headers = [
     "Batch_Fiber_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
@@ -58,48 +58,38 @@ ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", ufd_
 
 fiber_source = st.selectbox("Fiber Source", ["EMI", "Syensqo", "Polymem", "Other"])
 
-data_entries = []
+if 'batch_list' not in st.session_state:
+    st.session_state.batch_list = []
 
 if fiber_source == "Syensqo":
     tracking_numbers = syensqo_df["Tracking number UPS"].dropna().unique().tolist()
     selected_tracking = st.selectbox("Select Tracking Number", tracking_numbers)
-
     selected_row = syensqo_df[syensqo_df["Tracking number UPS"] == selected_tracking].iloc[0]
 
     batch_fiber_id = get_next_id(ufd_sheet, "Batch_Fiber_ID")
     st.markdown(f"**Next Batch_Fiber_ID:** `{batch_fiber_id}`")
 
     with st.form("syensqo_entry_form"):
-        st.text_input("Supplier Batch ID", value=selected_row.get("Batch ID", ""), key="batch")
-        st.number_input("Inside Diameter Avg (um)", value=float(selected_row.get("Inside Diameter Avg", 0)), key="ida")
-        st.number_input("Inside Diameter StDev (um)", value=float(selected_row.get("Inside Diameter Stdev", 0)), key="ids")
-        st.number_input("Outside Diameter Avg (um)", value=float(selected_row.get("Outside Diameter Avg", 0)), key="oda")
-        st.number_input("Outside Diameter StDev (um)", value=float(selected_row.get("Outside Diameter Stdev", 0)), key="ods")
-        st.number_input("Reported Concentricity (%)", value=float(selected_row.get("Reported concentricity", 0)), key="rc")
-        st.number_input("Batch Length (m)", value=float(selected_row.get("Batch Length (m)", 0)), key="bl")
-        st.date_input("Shipment Date", value=datetime.today(), key="sd")
-        st.text_input("Tracking Number", value=selected_row.get("Tracking number UPS", ""), key="tn")
-        st.number_input("Average t/OD", value=0.0, key="atod")
-        st.number_input("Minimum t/OD", value=0.0, key="mtod")
-        st.number_input("Minimum Wall Thickness (um)", value=0, key="mwt")
-        st.number_input("Average Wall Thickness (um)", value=0, key="awt")
-        st.number_input("N2 Permeance (GPU)", value=0, key="n2")
-        st.number_input("Collapse Pressure (psi)", value=0, key="cp")
-        st.number_input("Kink Test 2.95 (mm)", value=0.0, key="kt295")
-        st.number_input("Kink Test 2.36 (mm)", value=0.0, key="kt236")
-        st.number_input("Order on Bobbin", value=0, key="bob")
-        st.number_input("Number of Blue Splices", value=0, key="blue")
         notes = st.text_area("Notes")
+        add_btn = st.form_submit_button("➕ Add to Batch List")
 
-        submit = st.form_submit_button("Submit")
-        if submit:
-            row_data = [
-                batch_fiber_id, selected_row.get("Batch ID", ""), selected_row.get("Inside Diameter Avg", 0),
-                selected_row.get("Inside Diameter Stdev", 0), selected_row.get("Outside Diameter Avg", 0),
-                selected_row.get("Outside Diameter Stdev", 0), selected_row.get("Reported concentricity", 0),
-                selected_row.get("Batch Length (m)", 0), datetime.today().strftime("%Y-%m-%d"),
-                selected_row.get("Tracking number UPS", ""), "Syensqo", 0.0, 0.0, 0, 0, 0, 0, 0.0, 0.0, 0, 0,
-                notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ]
-            ufd_sheet.append_row(row_data)
-            st.success(f"✅ Batch_Fiber_ID {batch_fiber_id} submitted successfully.")
+    if add_btn:
+        row_data = [
+            batch_fiber_id, selected_row.get("Batch ID", ""), selected_row.get("Inside Diameter Avg", 0),
+            selected_row.get("Inside Diameter Stdev", 0), selected_row.get("Outside Diameter Avg", 0),
+            selected_row.get("Outside Diameter Stdev", 0), selected_row.get("Reported concentricity", 0),
+            selected_row.get("Batch Length (m)", 0), datetime.today().strftime("%Y-%m-%d"),
+            selected_row.get("Tracking number UPS", ""), "Syensqo", 0.0, 0.0, 0, 0, 0, 0, 0.0, 0.0, 0, 0,
+            notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ]
+        st.session_state.batch_list.append(row_data)
+        st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
+
+if st.session_state.batch_list:
+    st.markdown("### 📝 Batches to be Submitted:")
+    st.dataframe(pd.DataFrame(st.session_state.batch_list, columns=ufd_headers))
+    if st.button("✅ Submit All Batches"):
+        for row in st.session_state.batch_list:
+            ufd_sheet.append_row(row)
+        st.success(f"✅ {len(st.session_state.batch_list)} batches submitted successfully.")
+        st.session_state.batch_list.clear()
