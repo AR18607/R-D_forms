@@ -59,43 +59,49 @@ respooling_sheet = get_or_create_tab(spreadsheet, TAB_RESPOOLING, respooling_hea
 coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool ID"])
 uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UnCoatedSpool ID"])
 
+# ---------------- PRE-FORM SECTION ----------------
+st.subheader("📋 Respooling Entry")
+
+# Fiber type selection
+spool_type = st.selectbox("Are you respooled fiber from:", ["Coated", "Uncoated"], key="spool_type")
+
+# Load appropriate spool IDs
+spool_ids = get_foreign_key_options(coated_sheet if spool_type == "Coated" else uncoated_sheet)
+selected_spool_id = st.selectbox("Select Spool ID", spool_ids, key="spool_id")
+
+# Spool count using session state
+if "num_spools" not in st.session_state:
+    st.session_state.num_spools = 1
+
+st.session_state.num_spools = st.number_input(
+    "How many spools are you making from this fiber?",
+    min_value=1,
+    step=1,
+    value=st.session_state.num_spools,
+    key="num_spools_input"
+)
+
 # ---------------- FORM ----------------
 with st.form("respooling_form"):
-    st.subheader("📋 Respooling Entry")
     respooling_id = get_last_id(respooling_sheet, "RSP")
     st.markdown(f"**Auto-generated Respooling ID:** ` {respooling_id} `")
 
-    # 1. Spool Type
-    spool_type = st.selectbox("Are you respooled fiber from:", ["Coated", "Uncoated"])
-
-    # 2. Spool ID dropdown based on type
-    if spool_type == "Coated":
-        spool_ids = get_foreign_key_options(coated_sheet)
-    else:
-        spool_ids = get_foreign_key_options(uncoated_sheet)
-    selected_spool_id = st.selectbox("Select Spool ID", spool_ids)
-
-    # 3. How many spools to create?
-    num_spools = st.number_input("How many spools are you making from this fiber?", min_value=1, step=1)
-
-    # 4. Input for each spool's length (uses dynamic keys to force re-render)
+    # Dynamic length inputs
     lengths = []
-    if num_spools:
-        for i in range(int(num_spools)):
-            length = st.number_input(
-                f"Length for Spool #{i + 1} (m)",
-                min_value=0.0,
-                format="%.2f",
-                key=f"length_input_{i}_{num_spools}"
-            )
-            lengths.append(length)
+    for i in range(int(st.session_state.num_spools)):
+        length = st.number_input(
+            f"Length for Spool #{i + 1} (m)",
+            min_value=0.0,
+            format="%.2f",
+            key=f"length_input_{i}_{st.session_state.num_spools}"
+        )
+        lengths.append(length)
 
-    # 5. Other details
+    # Additional details
     date = st.date_input("Date")
     initials = st.text_input("Initials")
     label = st.text_input("Label")
     notes = st.text_area("Notes")
-
     submit = st.form_submit_button("💾 Submit")
 
 # ---------------- SUBMIT ----------------
