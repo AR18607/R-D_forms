@@ -96,13 +96,21 @@ st.subheader("Create New UnCoatedSpool_ID Entry")
 with st.form("create_uncoated_form"):
     new_id = get_next_id(uncoated_sheet, "UncoatedSpool_ID")
     st.markdown(f"**Next UnCoatedSpool_ID:** `{new_id}`")
-    new_type = st.text_input("Type")
+    new_type = st.selectbox("Type (As received / Combined)", ["As received", "Combined"])
     new_length = st.number_input("C_Length (m)", min_value=0.0)
     new_submit = st.form_submit_button("Create UnCoatedSpool_ID")
 
     if new_submit:
         uncoated_sheet.append_row([new_id, new_type, new_length, datetime.today().strftime("%Y-%m-%d %H:%M:%S")])
         st.success(f"✅ New UnCoatedSpool_ID {new_id} created. You can now use it in the dropdown above.")
+
+# === SHOW LAST 7 DAYS OF COATED SPOOL ENTRIES ===
+st.subheader("Recent Coated Spool Entries")
+recent_cs_df = get_last_7_days_df(cs_sheet, "Date")
+if not recent_cs_df.empty:
+    st.dataframe(recent_cs_df)
+else:
+    st.info("No coated spool entries in the last 7 days.")
 
 # === FIBER PER COATING RUN FORM ===
 st.header("Fiber Per Coating Run Entry")
