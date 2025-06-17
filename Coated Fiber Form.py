@@ -80,7 +80,7 @@ fpcr_headers = [
     "FiberCoat_ID", "PCoating_ID", "CoatedSpoolID",
     "Payout_Position", "Length_Coated", "Label", "Notes", "Date"
 ]
-fpcr_sheet = get_or_create_worksheet(sheet, "Fiber per Coating Run Tbl (Coat)", fpcr_headers)
+fpcr_sheet = get_or_create_worksheet(sheet, "Fiber per Coating Run Tbl (Coating)", fpcr_headers)
 
 pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating_ID"])
 pcoating_ids = [str(r["PCoating_ID"]) for r in pcoating_sheet.get_all_records()]
