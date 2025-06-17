@@ -92,6 +92,7 @@ if fiber_source == "Syensqo":
 
     if not matching_rows.empty:
         selected_row = matching_rows.iloc[0]
+st.write("Syensqo Sheet Columns:", list(selected_row.keys()))  # DEBUG COLUMN NAMES
         st.write("Selected Row:", selected_row.to_dict())  # DEBUG
 
         batch_fiber_id = get_next_id(ufd_sheet, "Batch_Fiber_ID")
