@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 
 # ---------------- CONFIG ----------------
@@ -40,6 +40,15 @@ def get_last_id(worksheet, id_prefix):
 def get_foreign_key_options(worksheet, id_col=1):
     return worksheet.col_values(id_col)[1:]
 
+def get_recent_entries_df(sheet, headers):
+    records = sheet.get_all_records()
+    df = pd.DataFrame(records)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        cutoff_date = pd.to_datetime(datetime.today() - timedelta(days=7))
+        df = df[df["Date"] >= cutoff_date]
+    return df[headers] if not df.empty else pd.DataFrame(columns=headers)
+
 # ---------------- INIT ----------------
 st.title("🌀 Respooling Form")
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
@@ -47,8 +56,8 @@ spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 respooling_headers = ["Respooling ID", "Spool Type", "Spool ID", "Length List", "Date", "Initials", "Label", "Notes"]
 respooling_sheet = get_or_create_tab(spreadsheet, TAB_RESPOOLING, respooling_headers)
 
-coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool ID", "Other Fields..."])
-uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UnCoatedSpool ID", "Other Fields..."])
+coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool ID"])
+uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UnCoatedSpool ID"])
 
 # ---------------- FORM ----------------
 with st.form("respooling_form"):
@@ -69,11 +78,17 @@ with st.form("respooling_form"):
     # 3. How many spools to create?
     num_spools = st.number_input("How many spools are you making from this fiber?", min_value=1, step=1)
 
-    # 4. Input for each spool's length
+    # 4. Input for each spool's length (uses dynamic keys to force re-render)
     lengths = []
-    for i in range(int(num_spools)):
-        length = st.number_input(f"Length for Spool #{i+1} (m)", min_value=0.0, format="%.2f", key=f"len_{i}")
-        lengths.append(length)
+    if num_spools:
+        for i in range(int(num_spools)):
+            length = st.number_input(
+                f"Length for Spool #{i + 1} (m)",
+                min_value=0.0,
+                format="%.2f",
+                key=f"length_input_{i}_{num_spools}"
+            )
+            lengths.append(length)
 
     # 5. Other details
     date = st.date_input("Date")
@@ -99,3 +114,9 @@ if submit:
         st.success("✅ Respooling record successfully saved!")
     except Exception as e:
         st.error(f"❌ Error saving data: {e}")
+
+# ---------------- 7-DAY REVIEW TABLE ----------------
+st.markdown("---")
+st.subheader("📅 Recent Respooling Entries (Last 7 Days)")
+df_recent = get_recent_entries_df(respooling_sheet, respooling_headers)
+st.dataframe(df_recent if not df_recent.empty else pd.DataFrame(columns=respooling_headers))
