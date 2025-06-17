@@ -35,6 +35,9 @@ syensqo_df = pd.DataFrame(data_rows, columns=headers)
 syensqo_df["Tracking number UPS"] = syensqo_df["Tracking number UPS"].astype(str).str.strip()
 syensqo_df = syensqo_df[syensqo_df["Tracking number UPS"] != ""]
 
+# Strip all other column values of whitespace
+syensqo_df = syensqo_df.applymap(lambda x: str(x).strip() if isinstance(x, str) else x)
+
 # === HELPER FUNCTIONS ===
 def get_or_create_worksheet(sheet, title, headers):
     try:
@@ -50,6 +53,18 @@ def get_next_id(worksheet, id_column):
         last_id = max([int(record[id_column]) for record in records if str(record[id_column]).isdigit()])
         return last_id + 1
     return 1
+
+def parse_float(val):
+    try:
+        return float(val)
+    except:
+        return 0.0
+
+def parse_int(val):
+    try:
+        return int(float(val))
+    except:
+        return 0
 
 # === UNCOATED FIBER FORM ===
 st.header("Uncoated Fiber Data Entry")
@@ -81,23 +96,23 @@ if fiber_source == "Syensqo":
 
         with st.form("syensqo_entry_form"):
             supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_tracking)
-            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=float(selected_row.get("Inside Diameter (um)", 0)))
-            inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=float(selected_row.get("Inside Diameter (um) SD", 0)))
-            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=float(selected_row.get("Outside Diameter (um)", 0)))
-            outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=float(selected_row.get("Outside Diameter (um) SD", 0)))
-            reported_concentricity = st.number_input("Reported Concentricity (%)", value=float(selected_row.get("Reported Concentricity (%)", 0)))
-            batch_length = st.number_input("Batch Length (m)", value=float(selected_row.get("Batch Length (m)", 0)))
+            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=parse_float(selected_row.get("Inside Diameter (um)", 0)))
+            inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=parse_float(selected_row.get("Inside Diameter (um) SD", 0)))
+            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=parse_float(selected_row.get("Outside Diameter (um)", 0)))
+            outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=parse_float(selected_row.get("Outside Diameter (um) SD", 0)))
+            reported_concentricity = st.number_input("Reported Concentricity (%)", value=parse_float(selected_row.get("Reported Concentricity (%)", 0)))
+            batch_length = st.number_input("Batch Length (m)", value=parse_float(selected_row.get("Batch Length (m)", 0)))
             shipment_date = st.date_input("Shipment Date", value=datetime.today())
-            average_t_od = st.number_input("Average t/OD", value=float(selected_row.get("Average t/OD", 0)))
-            minimum_t_od = st.number_input("Minimum t/OD", value=float(selected_row.get("Minimum t/OD", 0)))
-            min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=float(selected_row.get("Minimum wall thickness (um)", 0)))
-            avg_wall_thickness = st.number_input("Average Wall Thickness (um)", value=float(selected_row.get("Average wall thickness (um)", 0)))
-            n2_permeance = st.number_input("N2 Permeance (GPU)", value=float(selected_row.get("N2 permeance (GPU)", 0)))
-            collapse_pressure = st.number_input("Collapse Pressure (psi)", value=float(selected_row.get("Collapse Pressure (psi)", 0)))
-            kink_295 = st.number_input("Kink Test 2.95 (mm)", value=float(selected_row.get("Kink test 2.95 (mm)", 0)))
-            kink_236 = st.number_input("Kink Test 2.36 (mm)", value=float(selected_row.get("Kink test 2.36 (mm)", 0)))
-            order_bobbin = st.number_input("Order on Bobbin", value=int(float(selected_row.get("Order on bobbin (outside = 1)", 0))))
-            blue_splices = st.number_input("Number of Blue Splices", value=int(float(selected_row.get("Number of blue splices", 0))))
+            average_t_od = st.number_input("Average t/OD", value=parse_float(selected_row.get("Average t/OD", 0)))
+            minimum_t_od = st.number_input("Minimum t/OD", value=parse_float(selected_row.get("Minimum t/OD", 0)))
+            min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=parse_float(selected_row.get("Minimum wall thickness (um)", 0)))
+            avg_wall_thickness = st.number_input("Average Wall Thickness (um)", value=parse_float(selected_row.get("Average wall thickness (um)", 0)))
+            n2_permeance = st.number_input("N2 Permeance (GPU)", value=parse_float(selected_row.get("N2 permeance (GPU)", 0)))
+            collapse_pressure = st.number_input("Collapse Pressure (psi)", value=parse_float(selected_row.get("Collapse Pressure (psi)", 0)))
+            kink_295 = st.number_input("Kink Test 2.95 (mm)", value=parse_float(selected_row.get("Kink test 2.95 (mm)", 0)))
+            kink_236 = st.number_input("Kink Test 2.36 (mm)", value=parse_float(selected_row.get("Kink test 2.36 (mm)", 0)))
+            order_bobbin = st.number_input("Order on Bobbin", value=parse_int(selected_row.get("Order on bobbin (outside = 1)", 0)))
+            blue_splices = st.number_input("Number of Blue Splices", value=parse_int(selected_row.get("Number of blue splices", 0)))
             notes = st.text_area("Notes")
             add_btn = st.form_submit_button("➕ Add to Batch List")
 
