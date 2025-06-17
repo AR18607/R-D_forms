@@ -153,6 +153,8 @@ ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes"
 ar_sheet = get_or_create_worksheet(spreadsheet, "As Received UnCoatedSpools Tbl", ar_headers)
 
 # Fetch existing UncoatedSpool_IDs and Batch_Fiber_IDs for dropdowns
+usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Date_Time"])
+
 uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_all_records() if record["UncoatedSpool_ID"]]
 batch_fiber_ids = [record["Batch_Fiber_ID"] for record in ufd_sheet.get_all_records() if record["Batch_Fiber_ID"]]
 
