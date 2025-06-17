@@ -31,7 +31,8 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
 
 def get_foreign_key_options(worksheet, id_col_name):
     records = worksheet.get_all_records()
-    return [str(row[id_col_name]) for row in records if str(row[id_col_name]).strip() != ""]
+    return [str(row[id_col_name]) for row in records if id_col_name in row and row[id_col_name] not in [None, ""]]
+
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
