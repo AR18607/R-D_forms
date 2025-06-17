@@ -80,33 +80,34 @@ if fiber_source == "Syensqo":
         st.markdown(f"**Next Batch_Fiber_ID:** `{batch_fiber_id}`")
 
         with st.form("syensqo_entry_form"):
+            supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_row.get("Supplier batch ID", ""))
+            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=float(selected_row.get("Inside Diameter (um) avg", 0)))
+            inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=float(selected_row.get("Inside Diameter (um) StDev", 0)))
+            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=float(selected_row.get("Outside Diameter (um) Avg", 0)))
+            outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=float(selected_row.get("Outside Diameter (um) StDev", 0)))
+            reported_concentricity = st.number_input("Reported Concentricity (%)", value=float(selected_row.get("Reported Concentricity (%)", 0)))
+            batch_length = st.number_input("Batch Length (m)", value=float(selected_row.get("Batch Length (m)", 0)))
+            shipment_date = st.date_input("Shipment Date", value=datetime.today())
+            average_t_od = st.number_input("Average t/OD", value=float(selected_row.get("Average t/OD", 0)))
+            minimum_t_od = st.number_input("Minimum t/OD", value=float(selected_row.get("Minimum t/OD", 0)))
+            min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=float(selected_row.get("Minimum wall thickness (um)", 0)))
+            avg_wall_thickness = st.number_input("Average Wall Thickness (um)", value=float(selected_row.get("Average wall thickness (um)", 0)))
+            n2_permeance = st.number_input("N2 Permeance (GPU)", value=float(selected_row.get("N2 permeance (GPU)", 0)))
+            collapse_pressure = st.number_input("Collapse Pressure (psi)", value=float(selected_row.get("Collapse Pressure (psi)", 0)))
+            kink_295 = st.number_input("Kink Test 2.95 (mm)", value=float(selected_row.get("Kink test 2.95 (mm)", 0)))
+            kink_236 = st.number_input("Kink Test 2.36 (mm)", value=float(selected_row.get("Kink test 2.36 (mm)", 0)))
+            order_bobbin = st.number_input("Order on Bobbin", value=int(float(selected_row.get("Order on bobbin (outside = 1)", 0))))
+            blue_splices = st.number_input("Number of Blue Splices", value=int(float(selected_row.get("Number of blue splices", 0))))
             notes = st.text_area("Notes")
             add_btn = st.form_submit_button("➕ Add to Batch List")
 
         if add_btn:
             row_data = [
-                batch_fiber_id,
-                selected_row.get("Supplier batch ID", ""),
-                selected_row.get("Inside Diameter (um) avg", 0),
-                selected_row.get("Inside Diameter (um) StDev", 0),
-                selected_row.get("Outside Diameter (um) Avg", 0),
-                selected_row.get("Outside Diameter (um) StDev", 0),
-                selected_row.get("Reported Concentricity (%)", 0),
-                selected_row.get("Batch Length (m)", 0),
-                selected_row.get("Shipment Date", datetime.today().strftime("%Y-%m-%d")),
-                selected_row.get("Tracking number UPS", ""),
-                "Syensqo",
-                selected_row.get("Average t/OD", 0.0),
-                selected_row.get("Minimum t/OD", 0.0),
-                selected_row.get("Minimum wall thickness (um)", 0),
-                selected_row.get("Average wall thickness (um)", 0),
-                selected_row.get("N2 permeance (GPU)", 0),
-                selected_row.get("Collapse Pressure (psi)", 0),
-                selected_row.get("Kink test 2.95 (mm)", 0.0),
-                selected_row.get("Kink test 2.36 (mm)", 0.0),
-                selected_row.get("Order on bobbin (outside = 1)", 0),
-                selected_row.get("Number of blue splices", 0),
-                notes,
+                batch_fiber_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
+                outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
+                shipment_date.strftime("%Y-%m-%d"), selected_tracking, "Syensqo", average_t_od,
+                minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
+                collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             ]
             st.session_state.batch_list.append(row_data)
