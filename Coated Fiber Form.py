@@ -55,7 +55,7 @@ uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoat
 uncoated_ids = [str(r["UnCoatedSpool_ID"]) for r in uncoated_sheet.get_all_records()]
 
 with st.form("Coated Spool Form"):
-    uncoated_selected = st.selectbox("UnCoatedSpool ID", uncoated_ids)
+    uncoated_selected = st.selectbox("UnCoatedSpool_ID", uncoated_ids)
     cs_submit = st.form_submit_button("Submit")
     if cs_submit:
         cs_id = get_next_id(cs_sheet, "CoatedSpoolID")
