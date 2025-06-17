@@ -53,9 +53,6 @@ cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
 uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length"])
 uncoated_records = uncoated_sheet.get_all_records()
-st.write("DEBUG: Uncoated sheet records", uncoated_records)  # 👈 This line will help you debug
-
-# Try to extract correct key (you can adjust this if needed)
 uncoated_ids = [str(r["UncoatedSpool_ID"]) for r in uncoated_records]
 
 with st.form("Coated Spool Form"):
@@ -77,13 +74,13 @@ else:
 # === FIBER PER COATING RUN FORM ===
 st.header("Fiber Per Coating Run Entry")
 fpcr_headers = [
-    "FiberCoat_ID", "PCoating_ID", "CoatedSpool_ID",
+    "FiberCoat_ID", "PCoating ID", "CoatedSpool_ID",
     "Payout_Position", "Length_Coated", "Label", "Notes", "Date"
 ]
 fpcr_sheet = get_or_create_worksheet(sheet, "Fiber per Coating Run Tbl (Coating)", fpcr_headers)
 
-pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating_ID"])
-pcoating_ids = [str(r["PCoating_ID"]) for r in pcoating_sheet.get_all_records()]
+pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating ID"])
+pcoating_ids = [str(r["PCoating ID"]) for r in pcoating_sheet.get_all_records()]
 coated_ids = [str(r["CoatedSpool_ID"]) for r in cs_sheet.get_all_records()]
 
 with st.form("Fiber Per Coating Run Form"):
