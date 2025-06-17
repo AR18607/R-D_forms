@@ -44,11 +44,8 @@ def get_last_7_days_df(ws, date_col_name):
     if not df.empty:
         df.columns = df.columns.str.strip()
         if date_col_name in df.columns:
-            df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce")
-            today = datetime.today().date()
             df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce").dt.date
-            return df[df[date_col_name] >= today - timedelta(days=7)]
-
+            return df[df[date_col_name] >= datetime.today().date() - timedelta(days=7)]
     return pd.DataFrame()
 
 # === COATED SPOOL FORM ===
@@ -62,12 +59,13 @@ uncoated_ids = [str(r.get("UnCoatedSpool_ID", "")).strip() for r in uncoated_rec
 
 with st.form("Coated Spool Form"):
     if uncoated_ids:
+        next_cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
+        st.markdown(f"**Next CoatedSpool_ID:** `{next_cs_id}`")
         uncoated_selected = st.selectbox("UnCoatedSpool_ID", uncoated_ids)
         cs_submit = st.form_submit_button("Submit")
         if cs_submit:
-            cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
-            cs_sheet.append_row([cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
-            st.success(f"✅ Coated Spool ID {cs_id} submitted.")
+            cs_sheet.append_row([next_cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
+            st.success(f"✅ Coated Spool ID {next_cs_id} submitted.")
     else:
         st.warning("No available UnCoatedSpool_ID found.")
 
