@@ -48,17 +48,17 @@ def get_last_7_days_df(ws, date_col_name):
 
 # === COATED SPOOL FORM ===
 st.header("Coated Spool Entry")
-cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID"]
+cs_headers = ["CoatedSpoolID", "UnCoatedSpool_ID"]
 cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length"])
-uncoated_ids = [str(r["UncoatedSpool_ID"]) for r in uncoated_sheet.get_all_records()]
+uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
+uncoated_ids = [str(r["UnCoatedSpool_ID"]) for r in uncoated_sheet.get_all_records()]
 
 with st.form("Coated Spool Form"):
     uncoated_selected = st.selectbox("UnCoatedSpool ID", uncoated_ids)
     cs_submit = st.form_submit_button("Submit")
     if cs_submit:
-        cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
+        cs_id = get_next_id(cs_sheet, "CoatedSpoolID")
         cs_sheet.append_row([cs_id, uncoated_selected])
         st.success(f"✅ Coated Spool ID {cs_id} submitted.")
 
@@ -73,14 +73,14 @@ else:
 # === FIBER PER COATING RUN FORM ===
 st.header("Fiber Per Coating Run Entry")
 fpcr_headers = [
-    "FiberCoat_ID", "PCoating_ID", "CoatedSpool_ID",
+    "FiberCoat_ID", "PCoating_ID", "CoatedSpoolID",
     "Payout_Position", "Length_Coated", "Label", "Notes", "Date"
 ]
 fpcr_sheet = get_or_create_worksheet(sheet, "Fiber per Coating Run Tbl (Coat)", fpcr_headers)
 
 pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating_ID"])
-pcoating_ids = [str(r["PCoating ID"]) for r in pcoating_sheet.get_all_records()]
-coated_ids = [str(r["CoatedSpool_ID"]) for r in cs_sheet.get_all_records()]
+pcoating_ids = [str(r["PCoating_ID"]) for r in pcoating_sheet.get_all_records()]
+coated_ids = [str(r["CoatedSpoolID"]) for r in cs_sheet.get_all_records()]
 
 with st.form("Fiber Per Coating Run Form"):
     pcoating_selected = st.selectbox("PCoating ID", pcoating_ids)
