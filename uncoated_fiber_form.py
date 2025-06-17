@@ -25,11 +25,12 @@ sheet_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWX
 spreadsheet = client.open_by_url(sheet_url)
 
 # === LOAD SYENSQO SHEET SAFELY ===
-syensqo_sheet = client.open_by_url(sheet_url).worksheet("Sheet1")
+syensqo_sheet = spreadsheet.worksheet("Sheet1")
 raw_data = syensqo_sheet.get_all_values()
-headers = raw_data[0]
+headers = [h.strip() for h in raw_data[0]]
 data_rows = raw_data[1:]
 syensqo_df = pd.DataFrame(data_rows, columns=headers)
+syensqo_df["Tracking number UPS"] = syensqo_df["Tracking number UPS"].astype(str).str.strip()
 
 # === HELPER FUNCTIONS ===
 def get_or_create_worksheet(sheet, title, headers):
@@ -65,50 +66,48 @@ if 'batch_list' not in st.session_state:
     st.session_state.batch_list = []
 
 if fiber_source == "Syensqo":
-    syensqo_df["Tracking number UPS"] = syensqo_df["Tracking number UPS"].astype(str).str.strip()
     tracking_numbers = syensqo_df["Tracking number UPS"].dropna().unique().tolist()
     selected_tracking = st.selectbox("Select Tracking Number", tracking_numbers)
-    if selected_tracking:
-        matching_rows = syensqo_df[syensqo_df["Tracking number UPS"].astype(str).str.strip() == selected_tracking]
-        if not matching_rows.empty:
-            selected_row = matching_rows.iloc[0]
+    matching_rows = syensqo_df[syensqo_df["Tracking number UPS"] == selected_tracking]
 
+    if not matching_rows.empty:
+        selected_row = matching_rows.iloc[0]
 
-    batch_fiber_id = get_next_id(ufd_sheet, "Batch_Fiber_ID")
-    st.markdown(f"**Next Batch_Fiber_ID:** `{batch_fiber_id}`")
+        batch_fiber_id = get_next_id(ufd_sheet, "Batch_Fiber_ID")
+        st.markdown(f"**Next Batch_Fiber_ID:** `{batch_fiber_id}`")
 
-    with st.form("syensqo_entry_form"):
-        notes = st.text_area("Notes")
-        add_btn = st.form_submit_button("➕ Add to Batch List")
+        with st.form("syensqo_entry_form"):
+            notes = st.text_area("Notes")
+            add_btn = st.form_submit_button("➕ Add to Batch List")
 
-    if add_btn:
-        row_data = [
-            batch_fiber_id,
-            selected_row.get("Supplier batch ID", ""),
-            selected_row.get("Inside Diameter (um) avg", 0),
-            selected_row.get("Inside Diameter (um) StDev", 0),
-            selected_row.get("Outside Diameter (um) Avg", 0),
-            selected_row.get("Outside Diameter (um) StDev", 0),
-            selected_row.get("Reported Concentricity (%)", 0),
-            selected_row.get("Batch Length (m)", 0),
-            selected_row.get("Shipment Date", datetime.today().strftime("%Y-%m-%d")),
-            selected_row.get("Tracking number", ""),
-            "Syensqo",
-            selected_row.get("Average t/OD", 0.0),
-            selected_row.get("Minimum t/OD", 0.0),
-            selected_row.get("Minimum wall thickness (um)", 0),
-            selected_row.get("Average wall thickness (um)", 0),
-            selected_row.get("N2 permeance (GPU)", 0),
-            selected_row.get("Collapse Pressure (psi)", 0),
-            selected_row.get("Kink test 2.95 (mm)", 0.0),
-            selected_row.get("Kink test 2.36 (mm)", 0.0),
-            selected_row.get("Order on bobbin (outside = 1)", 0),
-            selected_row.get("Number of blue splices", 0),
-            notes,
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ]
-        st.session_state.batch_list.append(row_data)
-        st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
+        if add_btn:
+            row_data = [
+                batch_fiber_id,
+                selected_row.get("Supplier batch ID", ""),
+                selected_row.get("Inside Diameter (um) avg", 0),
+                selected_row.get("Inside Diameter (um) StDev", 0),
+                selected_row.get("Outside Diameter (um) Avg", 0),
+                selected_row.get("Outside Diameter (um) StDev", 0),
+                selected_row.get("Reported Concentricity (%)", 0),
+                selected_row.get("Batch Length (m)", 0),
+                selected_row.get("Shipment Date", datetime.today().strftime("%Y-%m-%d")),
+                selected_row.get("Tracking number UPS", ""),
+                "Syensqo",
+                selected_row.get("Average t/OD", 0.0),
+                selected_row.get("Minimum t/OD", 0.0),
+                selected_row.get("Minimum wall thickness (um)", 0),
+                selected_row.get("Average wall thickness (um)", 0),
+                selected_row.get("N2 permeance (GPU)", 0),
+                selected_row.get("Collapse Pressure (psi)", 0),
+                selected_row.get("Kink test 2.95 (mm)", 0.0),
+                selected_row.get("Kink test 2.36 (mm)", 0.0),
+                selected_row.get("Order on bobbin (outside = 1)", 0),
+                selected_row.get("Number of blue splices", 0),
+                notes,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ]
+            st.session_state.batch_list.append(row_data)
+            st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
 
 if st.session_state.batch_list:
     st.markdown("### 📝 Batches to be Submitted:")
