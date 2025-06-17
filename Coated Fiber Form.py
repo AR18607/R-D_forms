@@ -53,12 +53,16 @@ st.header("Coated Spool Entry")
 cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length", "Date_Time"])
+uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"])
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
+uncoated_df.columns = uncoated_df.columns.str.strip()  # Ensure columns are stripped
 
 # Get IDs that haven't yet been coated
 used_uncoated = set(cs_sheet.col_values(2)[1:])  # Skip header
-available_uncoated_ids = sorted([str(uid) for uid in uncoated_df["UnCoatedSpool_ID"] if str(uid) not in used_uncoated])
+if "UncoatedSpool_ID" in uncoated_df.columns:
+    available_uncoated_ids = sorted([str(uid) for uid in uncoated_df["UncoatedSpool_ID"] if str(uid) not in used_uncoated])
+else:
+    available_uncoated_ids = []
 
 with st.form("coated_spool_form"):
     if available_uncoated_ids:
