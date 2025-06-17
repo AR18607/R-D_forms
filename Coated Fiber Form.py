@@ -53,11 +53,11 @@ st.header("Coated Spool Entry")
 cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"])
+uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length", "Date_Time"])
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 uncoated_df.columns = uncoated_df.columns.str.strip()
 
-# Get used IDs and add status label
+# Add status label
 used_uncoated = set(str(uid).strip() for uid in cs_sheet.col_values(2)[1:] if uid.strip())
 uncoated_choices = []
 if "UnCoatedSpool_ID" in uncoated_df.columns:
@@ -66,8 +66,8 @@ if "UnCoatedSpool_ID" in uncoated_df.columns:
         label = f"{uid_str} ({'used' if uid_str in used_uncoated else 'not used'})"
         uncoated_choices.append((label, uid_str))
 
-if uncoated_choices:
-    with st.form("coated_spool_form"):
+with st.form("coated_spool_form"):
+    if uncoated_choices:
         options = [label for label, _ in uncoated_choices]
         selected_label = st.selectbox("UnCoatedSpool_ID", options)
         uncoated_selected = dict(uncoated_choices)[selected_label]
@@ -77,8 +77,8 @@ if uncoated_choices:
         if cs_submit:
             cs_sheet.append_row([next_cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
             st.success(f"✅ Coated Spool ID {next_cs_id} submitted.")
-else:
-    st.warning("No available UnCoatedSpool_ID found.")
+    else:
+        st.warning("No available UnCoatedSpool_ID found.")
 
 # Show last 7 days
 st.subheader("Recent Coated Spool Entries")
