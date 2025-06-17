@@ -3,27 +3,10 @@ import json
 import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 
-# Setup
-def get_or_create_worksheet(sheet, title, headers):
-    try:
-        worksheet = sheet.worksheet(title)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = sheet.add_worksheet(title=title, rows="1000", cols="50")
-        worksheet.append_row(headers)
-    return worksheet
-
-def get_next_id(worksheet, id_column):
-    records = worksheet.get_all_records()
-    if records:
-        last_id = max([int(record[id_column]) for record in records if str(record.get(id_column, '')).isdigit()])
-        return last_id + 1
-    else:
-        return 1
-
-# === STREAMLIT SETUP ===
+# === DISABLE ENTER KEY FORM SUBMIT ===
 st.markdown("""
     <script>
         document.addEventListener("keydown", function(e) {
@@ -34,62 +17,78 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
+# === GOOGLE SHEET SETUP ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
 client = gspread.authorize(creds)
-spreadsheet = client.open("R&D Data Form")
+sheet = client.open("R&D Data Form")
 
-# ------------------ Coated Spool Tbl ------------------ #
+# === HELPERS ===
+def get_or_create_worksheet(sheet, title, headers):
+    try:
+        ws = sheet.worksheet(title)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sheet.add_worksheet(title=title, rows="1000", cols="50")
+        ws.append_row(headers)
+    return ws
+
+def get_next_id(worksheet, id_column):
+    records = worksheet.get_all_records()
+    if records:
+        last_id = max([int(r[id_column]) for r in records if str(r.get(id_column, '')).isdigit()])
+        return last_id + 1
+    return 1
+
+def get_last_7_days_df(ws, date_col_name):
+    df = pd.DataFrame(ws.get_all_records())
+    if not df.empty:
+        df.columns = df.columns.str.strip()
+        if date_col_name in df.columns:
+            df[date_col_name] = pd.to_datetime(df[date_col_name], errors="coerce")
+            return df[df[date_col_name] >= datetime.today() - timedelta(days=7)]
+    return pd.DataFrame()
+
+# === COATED SPOOL FORM ===
 st.header("Coated Spool Entry")
 cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
-cs_sheet = get_or_create_worksheet(spreadsheet, "Coated Spool Tbl", cs_headers)
+cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
+uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length", "Date_Time"])
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
-cs_df = pd.DataFrame(cs_sheet.get_all_records())
-
 uncoated_df.columns = uncoated_df.columns.str.strip()
-cs_df.columns = cs_df.columns.str.strip()
 
-# Show current ID to be created
-next_id = get_next_id(cs_sheet, "CoatedSpool_ID")
-st.markdown(f"**Next CoatedSpool_ID will be:** `{next_id}`")
-
-# All available IDs labeled with usage
-used_ids = set(cs_df["UnCoatedSpool_ID"].astype(str)) if not cs_df.empty and "UnCoatedSpool_ID" in cs_df.columns else set()
-uncoated_choices = []
+# Get used IDs and add status label
+used_uncoated = set(str(uid).strip() for uid in cs_sheet.col_values(2)[1:] if uid.strip())
 if "UnCoatedSpool_ID" in uncoated_df.columns:
-    for _, row in uncoated_df.iterrows():
-        try:
-            uid = str(row["UnCoatedSpool_ID"]).strip()
-            label = f"{uid} ({'used' if uid in used_ids else 'not used'})"
-            uncoated_choices.append((label, uid))
-        except KeyError:
-            continue
+    uncoated_choices = []
+    for uid in uncoated_df["UnCoatedSpool_ID"]:
+        uid_str = str(uid).strip()
+        label = f"{uid_str} ({'used' if uid_str in used_uncoated else 'not used'})"
+        uncoated_choices.append((label, uid_str))
+else:
+    uncoated_choices = []
 
-with st.form("Coated Spool Form"):
+with st.form("coated_spool_form"):
     if uncoated_choices:
-        display_labels = [label for label, _ in uncoated_choices]
-        selected_label = st.selectbox("UnCoatedSpool_ID", display_labels)
-        selected_id = dict(uncoated_choices)[selected_label]
-        submitted = st.form_submit_button("Submit")
-        if submitted:
-            cs_sheet.append_row([next_id, selected_id, datetime.today().strftime("%Y-%m-%d")])
-            st.success(f"Coated Spool with ID {next_id} submitted successfully!")
+        options = [label for label, _ in uncoated_choices]
+        selected_label = st.selectbox("UnCoatedSpool_ID", options)
+        uncoated_selected = dict(uncoated_choices)[selected_label]
+        next_cs_id = get_next_id(cs_sheet, "CoatedSpool_ID")
+        st.markdown(f"**Next CoatedSpool_ID:** `{next_cs_id}`")
+        cs_submit = st.form_submit_button("Submit")
+        if cs_submit:
+            cs_sheet.append_row([next_cs_id, uncoated_selected, datetime.today().strftime("%Y-%m-%d")])
+            st.success(f"✅ Coated Spool ID {next_cs_id} submitted.")
     else:
-        st.warning("No UnCoatedSpool_IDs found. Please add a new entry in the 'UnCoatedSpool ID Tbl' sheet.")
+        st.warning("No available UnCoatedSpool_ID found.")
 
 # Show last 7 days
 st.subheader("Recent Coated Spool Entries")
-if not cs_df.empty and "Date" in cs_df.columns:
-    cs_df["Date"] = pd.to_datetime(cs_df["Date"], errors="coerce")
-    last_7 = cs_df[cs_df["Date"] >= datetime.today() - pd.Timedelta(days=7)]
-    if not last_7.empty:
-        st.dataframe(last_7)
-    else:
-        st.info("No recent Coated Spool entries in the last 7 days.")
+recent_cs = get_last_7_days_df(cs_sheet, "Date")
+if not recent_cs.empty:
+    st.dataframe(recent_cs[["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]])
 else:
-    st.info("No records or missing Date column in Coated Spool Tbl.")
+    st.info("No recent Coated Spool entries in the last 7 days.")
 
 # === FIBER PER COATING RUN FORM ===
 st.header("Fiber Per Coating Run Entry")
@@ -132,3 +131,7 @@ if not recent_fpcr.empty:
     st.dataframe(recent_fpcr)
 else:
     st.info("No recent fiber coating entries in the last 7 days.")
+
+
+
+
