@@ -80,7 +80,7 @@ if fiber_source == "Syensqo":
         st.markdown(f"**Next Batch_Fiber_ID:** `{batch_fiber_id}`")
 
         with st.form("syensqo_entry_form"):
-            supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_row.get("Supplier batch ID", ""))
+            supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_tracking)
             inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=float(selected_row.get("Inside Diameter (um) avg", 0)))
             inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=float(selected_row.get("Inside Diameter (um) StDev", 0)))
             outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=float(selected_row.get("Outside Diameter (um) Avg", 0)))
