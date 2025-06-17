@@ -71,7 +71,7 @@ def parse_int(val):
 # === UNCOATED FIBER FORM ===
 st.header("Uncoated Fiber Data Entry")
 ufd_headers = [
-    "Batch_Fiber_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
+    "Batch_Fiber_ID", "Spool_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
     "Outside_Diameter_Avg", "Outside_Diameter_StDev", "Reported_Concentricity", "Batch_Length",
     "Shipment_Date", "Tracking_Number", "Fiber_Source", "Average_t_OD", "Minimum_t_OD",
     "Minimum_Wall_Thickness", "Average_Wall_Thickness", "N2_Permeance", "Collapse_Pressure",
@@ -93,10 +93,9 @@ if fiber_source == "Syensqo":
     if not matching_rows.empty:
         selected_row = matching_rows.iloc[0]
 
-        batch_fiber_id = get_next_id(ufd_sheet, "Batch_Fiber_ID")
-        st.markdown(f"**Next Batch_Fiber_ID:** `{batch_fiber_id}`")
-
         with st.form("syensqo_entry_form"):
+            batch_fiber_id = st.text_input("Batch Fiber ID (provided by vendor)")
+            spool_id = st.text_input("Spool ID")
             supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_tracking)
             inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=parse_float(selected_row.get("ID", 0)))
             inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=0.0)
@@ -118,9 +117,9 @@ if fiber_source == "Syensqo":
             notes = st.text_area("Notes")
             add_btn = st.form_submit_button("➕ Add to Batch List")
 
-            if add_btn:
+            if add_btn and batch_fiber_id and spool_id:
                 row_data = [
-                    batch_fiber_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
+                    batch_fiber_id, spool_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
                     outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
                     shipment_date.strftime("%Y-%m-%d"), selected_tracking, "Syensqo", average_t_od,
                     minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
@@ -129,6 +128,8 @@ if fiber_source == "Syensqo":
                 ]
                 st.session_state.batch_list.append(row_data)
                 st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
+            elif add_btn:
+                st.warning("Please enter both Batch_Fiber_ID and Spool_ID before adding to the list.")
 
 if st.session_state.batch_list:
     st.markdown("### 📝 Batches to be Submitted:")
