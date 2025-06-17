@@ -4,6 +4,7 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import pandas as pd
 
 # Setup
 def get_or_create_worksheet(sheet, title, headers):
@@ -17,7 +18,7 @@ def get_or_create_worksheet(sheet, title, headers):
 def get_next_id(worksheet, id_column):
     records = worksheet.get_all_records()
     if records:
-        last_id = max([int(record[id_column]) for record in records if str(record[id_column]).isdigit()])
+        last_id = max([int(record[id_column]) for record in records if str(record.get(id_column, '')).isdigit()])
         return last_id + 1
     else:
         return 1
@@ -44,16 +45,19 @@ cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(spreadsheet, "Coated Spool Tbl", cs_headers)
 
 uncoated_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
-uncoated_records = uncoated_sheet.get_all_records()
+uncoated_records_raw = uncoated_sheet.get_all_records()
+cs_records_raw = cs_sheet.get_all_records()
 
-used_ids = set(record["UnCoatedSpool_ID"] for record in cs_sheet.get_all_records())
+used_ids = set(str(record.get("UnCoatedSpool_ID", "")).strip() for record in cs_records_raw if record.get("UnCoatedSpool_ID"))
 
 uncoated_choices = []
-for record in uncoated_records:
-    id_str = str(record["UnCoatedSpool_ID"])
-    status = "used" if id_str in used_ids else "not used"
-    label = f"{id_str} ({status})"
-    uncoated_choices.append((label, id_str))
+for record in uncoated_records_raw:
+    record = {k.strip(): v for k, v in record.items()}
+    id_str = str(record.get("UnCoatedSpool_ID", "")).strip()
+    if id_str:
+        status = "used" if id_str in used_ids else "not used"
+        label = f"{id_str} ({status})"
+        uncoated_choices.append((label, id_str))
 
 with st.form("Coated Spool Form"):
     if uncoated_choices:
