@@ -53,7 +53,9 @@ cs_sheet = get_or_create_worksheet(sheet, "Coated Spool Tbl", cs_headers)
 
 uncoated_sheet = get_or_create_worksheet(sheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length", "Date_Time"])
 uncoated_records = uncoated_sheet.get_all_records()
-uncoated_ids = [str(r["UnCoatedSpool_ID"]) for r in uncoated_records if "UnCoatedSpool_ID" in r]
+
+uncoated_ids = [str(r.get("UnCoatedSpool_ID")) for r in uncoated_records if r.get("UnCoatedSpool_ID")]
+
 
 with st.form("Coated Spool Form"):
     if uncoated_ids:
@@ -84,7 +86,9 @@ fpcr_sheet = get_or_create_worksheet(sheet, "Fiber per Coating Run Tbl (Coating)
 
 pcoating_sheet = get_or_create_worksheet(sheet, "Pilot Coating Process Tbl", ["PCoating_ID"])
 pcoating_records = pcoating_sheet.get_all_records()
-pcoating_ids = [str(r["PCoating_ID"]) for r in pcoating_records if "PCoating_ID" in r]
+
+pcoating_ids = [str(r.get("PCoating_ID")) for r in pcoating_records if r.get("PCoating_ID")]
+
 coated_records = cs_sheet.get_all_records()
 coated_ids = [str(r["CoatedSpool_ID"]) for r in coated_records if "CoatedSpool_ID" in r]
 
