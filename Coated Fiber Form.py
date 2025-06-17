@@ -44,7 +44,7 @@ st.header("Coated Spool Entry")
 cs_headers = ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"]
 cs_sheet = get_or_create_worksheet(spreadsheet, "Coated Spool Tbl", cs_headers)
 
-uncoated_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool_ID", "Type", "C_Length"])
+uncoated_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Type", "C_Length"])
 uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
 cs_df = pd.DataFrame(cs_sheet.get_all_records())
 
@@ -56,11 +56,16 @@ next_id = get_next_id(cs_sheet, "CoatedSpool_ID")
 st.markdown(f"**Next CoatedSpool_ID will be:** `{next_id}`")
 
 # All available IDs labeled with usage
-used_ids = set(cs_df["UnCoatedSpool_ID"].astype(str)) if not cs_df.empty else set()
-uncoated_choices = [
-    (f"{str(row['UnCoatedSpool_ID'])} ({'used' if str(row['UnCoatedSpool_ID']) in used_ids else 'not used'})", str(row['UnCoatedSpool_ID']))
-    for _, row in uncoated_df.iterrows() if str(row['UnCoatedSpool_ID']).strip()
-]
+used_ids = set(cs_df["UnCoatedSpool_ID"].astype(str)) if not cs_df.empty and "UnCoatedSpool_ID" in cs_df.columns else set()
+uncoated_choices = []
+if "UncoatedSpool_ID" in uncoated_df.columns:
+    for _, row in uncoated_df.iterrows():
+        try:
+            uid = str(row["UncoatedSpool_ID"]).strip()
+            label = f"{uid} ({'used' if uid in used_ids else 'not used'})"
+            uncoated_choices.append((label, uid))
+        except KeyError:
+            continue
 
 with st.form("Coated Spool Form"):
     if uncoated_choices:
