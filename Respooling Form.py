@@ -9,7 +9,6 @@ import json
 GOOGLE_SHEET_NAME = "R&D Data Form"
 GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
 
-# Sheet Tab Names
 TAB_RESPOOLING = "Respooling Tbl"
 TAB_COATED_SPOOL = "Coated Spool Tbl"
 TAB_UNCOATED_SPOOL = "UnCoatedSpool ID Tbl"
@@ -31,8 +30,11 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
 
 def get_foreign_key_options(worksheet, id_col_name):
     records = worksheet.get_all_records()
-    return [str(row[id_col_name]) for row in records if id_col_name in row and row[id_col_name] not in [None, ""]]
-
+    return [
+        str(row[id_col_name])
+        for row in records
+        if id_col_name in row and str(row[id_col_name]).strip() != ""
+    ]
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
@@ -57,20 +59,21 @@ spreadsheet = connect_google_sheet()
 
 respooling_headers = ["Respooling ID", "Spool Type", "Spool ID", "Length List", "Date", "Initials", "Label", "Notes"]
 respooling_sheet = get_or_create_tab(spreadsheet, TAB_RESPOOLING, respooling_headers)
-coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool_ID", "UnCoatedSpool_ID", "Date"])
+coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool_ID", "UnCoatedSpool", "Date"])
 uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"])
 
 # ---------------- PRE-FORM SECTION ----------------
 st.subheader("📋 Respooling Entry")
 
-# Fiber type selection
 spool_type = st.selectbox("Are you respooled fiber from:", ["Coated", "Uncoated"], key="spool_type")
 
-# Load spool IDs based on fiber type and correct column
 if spool_type == "Coated":
     spool_ids = get_foreign_key_options(coated_sheet, "CoatedSpool_ID")
 else:
     spool_ids = get_foreign_key_options(uncoated_sheet, "UncoatedSpool_ID")
+
+# ✅ Debug output (remove if not needed)
+st.write("DEBUG - Loaded Spool IDs:", spool_ids)
 
 if not spool_ids:
     st.warning(f"No spool IDs found for '{spool_type}' fiber. Please check the appropriate sheet.")
