@@ -6,19 +6,17 @@ from datetime import datetime, timedelta
 import json
 
 # ---------------- CONFIG ----------------
-GOOGLE_SHEET_NAME = "R&D Data Form"
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
 GOOGLE_CREDENTIALS = json.loads(st.secrets["gcp_service_account"])
 
 TAB_RESPOOLING = "Respooling Tbl"
-TAB_COATED_SPOOL = "Coated Spool Tbl"
-TAB_UNCOATED_SPOOL = "UnCoatedSpool ID Tbl"
 
 # ---------------- FUNCTIONS ----------------
 def connect_google_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
-    return client.open_by_url("https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8")
+    return client.open_by_url(GOOGLE_SHEET_URL)
 
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
@@ -28,9 +26,8 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-# ✅ Directly read Column A for spool IDs
-def get_foreign_key_options_by_column(worksheet, col_index=1):
-    values = worksheet.col_values(col_index)[1:]  # skip header
+def get_column_a_values(worksheet):
+    values = worksheet.col_values(1)[1:]  # Skip header
     return [str(v).strip() for v in values if str(v).strip() != ""]
 
 def get_last_id(worksheet, id_prefix):
@@ -54,29 +51,36 @@ def get_recent_entries_df(sheet, headers):
 st.title("🌀 Respooling Form")
 spreadsheet = connect_google_sheet()
 
+# Get all tabs by index
+all_sheets = spreadsheet.worksheets()
+st.write("DEBUG - Tabs available:", [ws.title for ws in all_sheets])
+
+# Respooling sheet by name
 respooling_headers = ["Respooling ID", "Spool Type", "Spool ID", "Length List", "Date", "Initials", "Label", "Notes"]
 respooling_sheet = get_or_create_tab(spreadsheet, TAB_RESPOOLING, respooling_headers)
-coated_sheet = get_or_create_tab(spreadsheet, TAB_COATED_SPOOL, ["CoatedSpool_ID", "UnCoatedSpool", "Date"])
-uncoated_sheet = get_or_create_tab(spreadsheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"])
 
-# ---------------- PRE-FORM SECTION ----------------
+# Load coated/uncoated sheets by position
+coated_sheet = all_sheets[0]   # 🟡 First tab
+uncoated_sheet = all_sheets[1] # 🟡 Second tab
+
+# ---------------- FORM ENTRY ----------------
 st.subheader("📋 Respooling Entry")
 
 spool_type = st.selectbox("Are you respooled fiber from:", ["Coated", "Uncoated"], key="spool_type")
 
-# ✅ Read from Column A regardless of header
 if spool_type == "Coated":
-    spool_ids = get_foreign_key_options_by_column(coated_sheet, 1)
+    spool_ids = get_column_a_values(coated_sheet)
+    st.write("DEBUG - Coated Spool IDs from Column A:", spool_ids)
 else:
-    spool_ids = get_foreign_key_options_by_column(uncoated_sheet, 1)
+    spool_ids = get_column_a_values(uncoated_sheet)
+    st.write("DEBUG - Uncoated Spool IDs from Column A:", spool_ids)
 
 if not spool_ids:
-    st.warning(f"No spool IDs found for '{spool_type}' fiber. Please check the appropriate sheet.")
+    st.warning(f"No spool IDs found for '{spool_type}' fiber. Please check column A in the correct sheet.")
     selected_spool_id = None
 else:
     selected_spool_id = st.selectbox("Select Spool ID", spool_ids, key="spool_id")
 
-# Spool count using session state
 if "num_spools" not in st.session_state:
     st.session_state.num_spools = 1
 
@@ -129,7 +133,7 @@ if submit:
         except Exception as e:
             st.error(f"❌ Error saving data: {e}")
 
-# ---------------- 7-DAY REVIEW TABLE ----------------
+# ---------------- 7-DAY REVIEW ----------------
 st.markdown("---")
 st.subheader("📅 Recent Respooling Entries (Last 7 Days)")
 df_recent = get_recent_entries_df(respooling_sheet, respooling_headers)
