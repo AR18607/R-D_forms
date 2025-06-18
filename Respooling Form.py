@@ -28,13 +28,10 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
         worksheet.insert_row(headers, 1)
     return worksheet
 
-def get_foreign_key_options(worksheet, id_col_name):
-    records = worksheet.get_all_records()
-    return [
-        str(row[id_col_name])
-        for row in records
-        if id_col_name in row and str(row[id_col_name]).strip() != ""
-    ]
+# ✅ Directly read Column A for spool IDs
+def get_foreign_key_options_by_column(worksheet, col_index=1):
+    values = worksheet.col_values(col_index)[1:]  # skip header
+    return [str(v).strip() for v in values if str(v).strip() != ""]
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
@@ -67,13 +64,11 @@ st.subheader("📋 Respooling Entry")
 
 spool_type = st.selectbox("Are you respooled fiber from:", ["Coated", "Uncoated"], key="spool_type")
 
+# ✅ Read from Column A regardless of header
 if spool_type == "Coated":
-    spool_ids = get_foreign_key_options(coated_sheet, "CoatedSpool_ID")
+    spool_ids = get_foreign_key_options_by_column(coated_sheet, 1)
 else:
-    spool_ids = get_foreign_key_options(uncoated_sheet, "UncoatedSpool_ID")
-
-# ✅ Debug output (remove if not needed)
-st.write("DEBUG - Loaded Spool IDs:", spool_ids)
+    spool_ids = get_foreign_key_options_by_column(uncoated_sheet, 1)
 
 if not spool_ids:
     st.warning(f"No spool IDs found for '{spool_type}' fiber. Please check the appropriate sheet.")
