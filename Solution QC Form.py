@@ -5,6 +5,17 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import json
 
+# === DISABLE ENTER KEY FORM SUBMIT ===
+st.markdown("""
+    <script>
+        document.addEventListener("keydown", function(e) {
+            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+                e.preventDefault();
+            }
+        });
+    </script>
+""", unsafe_allow_html=True)
+
 # ------------------ CONFIG ------------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_SOLUTION_QC = "Solution QC Tbl"
@@ -87,10 +98,23 @@ with st.form("solution_qc_form", clear_on_submit=False):
         operator_initials = st.text_input("Operator Initials")
         notes = st.text_area("Notes")
         qc_date = st.date_input("QC Date")
-        c_percent_solids = st.number_input("C-Percent Solids (%)", format="%.2f")
+        # Auto-calculate C - % solids
+    try:
+        dry_polymer_weight = final_dish_mass - dish_tare_mass
+        initial_solution_weight = initial_solution_mass
+        if initial_solution_weight > 0:
+            c_percent_solids = (dry_polymer_weight / initial_solution_weight) * 100
+        else:
+            c_percent_solids = 0.0
+    except:
+        c_percent_solids = 0.0
 
-    st.divider()
-    submit_button = st.form_submit_button("🚀 Submit Solution QC Record")
+st.markdown("**C - % solids (auto-calculated):**")
+st.code(f"{c_percent_solids:.2f} %", language="python")
+
+
+st.divider()
+submit_button = st.form_submit_button("🚀 Submit Solution QC Record")
 
 
 # ------------------ SAVE DATA ------------------
