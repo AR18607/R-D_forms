@@ -215,7 +215,8 @@ if submit_combined:
 st.markdown("## 📅 Last 7 Days Data Preview (Based on Prep Date)")
 
 # Step 1: Build reference dictionary from Solution Prep Data Tbl
-prep_records = prep_sheet.get_all_records()
+prep_records = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
+
 recent_solution_ids = set()
 recent_prep_ids = []
 today = datetime.today()
@@ -228,7 +229,7 @@ for rec in prep_records:
 
 # Step 2: Solution ID Table - show only those with IDs in recent_prep_ids
 st.markdown("### 📘 Solution ID Table (Filtered by Recent Prep)")
-solution_records = solution_sheet.get_all_records()
+solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
 filtered_solution_ids = [rec for rec in solution_records if rec.get("Solution ID", "").strip() in recent_solution_ids]
 
 if filtered_solution_ids:
@@ -245,7 +246,7 @@ else:
 
 # Step 4: Combined Solution Table - filter if A or B used recently
 st.markdown("### 🧪 Combined Solution Data (Using Recently Prepped IDs)")
-combined_records = combined_sheet.get_all_records()
+combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 recent_combined = []
 for rec in combined_records:
     combined_date = parse_date(rec.get("Combined Date", ""))
