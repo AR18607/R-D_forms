@@ -5,16 +5,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import json
 
-# === DISABLE ENTER KEY FORM SUBMIT ===
-st.markdown("""
-    <script>
-        document.addEventListener("keydown", function(e) {
-            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
-                e.preventDefault();
-            }
-        });
-    </script>
-""", unsafe_allow_html=True)
 
 # ------------------ CONFIG ------------------
 GOOGLE_SHEET_NAME = "R&D Data Form"
@@ -65,6 +55,17 @@ def get_last_qc_id(worksheet):
 # ------------------ MAIN APP ------------------
 
 st.title("🔬 Solution QC Form (Linked to Solution Management Form)")
+# === DISABLE ENTER KEY FORM SUBMIT ===
+st.markdown("""
+    <script>
+        document.addEventListener("keydown", function(e) {
+            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+                e.preventDefault();
+            }
+        });
+    </script>
+""", unsafe_allow_html=True)
+
 
 # Connect
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
