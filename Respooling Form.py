@@ -72,7 +72,7 @@ with st.form("respooling_form"):
 
     lengths = []
     for i in range(int(num_spools)):
-        length = st.number_input(f"Length for Spool #{i + 1} (m)", min_value=0.0, format="%.2f", key=f"length_{i}")
+        length = st.number_input(f"Length for Spool #{i + 1} (m)", min_value=0.0, format="%.2f", key=f"length_{i}_{respooling_id}")
         lengths.append(length)
 
     date = st.date_input("Date")
