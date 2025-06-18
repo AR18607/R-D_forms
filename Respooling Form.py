@@ -27,8 +27,11 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
     return worksheet
 
 def get_column_a_values(worksheet):
-    values = worksheet.col_values(1)[1:]  # Skip header
-    return [str(v).strip() for v in values if str(v).strip() != ""]
+    values = worksheet.col_values(1)[1:]  # skip header
+    return [
+        str(v).strip() for v in values
+        if str(v).strip() != "" and str(v).strip().lower() not in ["fiber", "spool id", "coatedspool_id", "uncoatedspool_id"]
+    ]
 
 def get_last_id(worksheet, id_prefix):
     records = worksheet.col_values(1)[1:]
@@ -60,8 +63,8 @@ respooling_headers = ["Respooling ID", "Spool Type", "Spool ID", "Length List", 
 respooling_sheet = get_or_create_tab(spreadsheet, TAB_RESPOOLING, respooling_headers)
 
 # Load coated/uncoated sheets by position
-coated_sheet = all_sheets[0]   # 🟡 First tab
-uncoated_sheet = all_sheets[1] # 🟡 Second tab
+coated_sheet = all_sheets[7]   # 🟡 Coated Spool Tbl
+uncoated_sheet = all_sheets[3] # 🟡 UnCoatedSpool ID Tbl
 
 # ---------------- FORM ENTRY ----------------
 st.subheader("📋 Respooling Entry")
