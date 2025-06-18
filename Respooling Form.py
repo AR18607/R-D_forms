@@ -68,11 +68,11 @@ with st.form("respooling_form"):
     spool_ids = get_foreign_key_options(coated_spool_sheet if spool_type == "Coated" else uncoated_spool_sheet)
     selected_spool_id = st.selectbox("Select Spool ID", spool_ids)
 
-    num_spools = st.number_input("How many spools are you making from this fiber?", min_value=1, step=1)
+    num_spools = st.number_input("How many spools are you making from this fiber?", min_value=1, step=1, key="num_spools")
 
     lengths = []
-    for i in range(int(num_spools)):
-        length = st.number_input(f"Length for Spool #{i + 1} (m)", min_value=0.0, format="%.2f", key=f"length_{i}_{respooling_id}")
+    for i in range(int(st.session_state.num_spools)):
+        length = st.number_input(f"Length for Spool #{i + 1} (m)", min_value=0.0, format="%.2f", key=f"length_{i}")
         lengths.append(length)
 
     date = st.date_input("Date")
