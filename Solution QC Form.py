@@ -126,7 +126,8 @@ if submit_button:
             qc_id, solution_id_fk, str(test_date), dish_tare_mass,
             initial_solution_mass, final_dish_mass, operator_initials,
             notes, str(qc_date), c_percent_solids
-        ])
+            ])
+
         st.success("✅ Solution QC record successfully saved!")
     except Exception as e:
         st.error(f"❌ Error saving data: {e}")
