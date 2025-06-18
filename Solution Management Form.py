@@ -84,6 +84,17 @@ prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADE
 combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
 # --- Form Title ---
 st.markdown("# :page_facing_up: **Solution Management Form**")
+# === DISABLE ENTER KEY FORM SUBMIT ===
+st.markdown("""
+    <script>
+        document.addEventListener("keydown", function(e) {
+            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+                e.preventDefault();
+            }
+        });
+    </script>
+""", unsafe_allow_html=True)
+
 st.markdown("Manage creation, preparation, and combination of solutions.")
 existing_solution_ids = cached_col_values(SPREADSHEET_KEY, "Solution ID Tbl")
 # --- Solution ID Form ---
@@ -151,17 +162,23 @@ with st.form("prep_data_form"):
     prep_date = st.date_input("Prep Date", value=prep_date)
     initials = st.text_input("Initials", value=safe_get(existing_record, "Initials", ""))
     notes = st.text_area("Notes", value=safe_get(existing_record, "Notes", ""))
-    c_sol_conc = st.number_input("C-Solution Concentration",
-        value=float(safe_get(existing_record, "C-Solution Concentration", 0.0)),
-        format="%.2f"
-    )
+    # Auto-calculate C-Solution Concentration
+    try:
+        total_weight = solvent_weight + polymer_weight
+        c_sol_conc_value = (polymer_weight / total_weight) if total_weight > 0 else 0.0
+    except:
+        c_sol_conc_value = 0.0
+    # Display calculated value
+    st.markdown("**C-Solution Concentration (auto-calculated):**")
+    st.code(f"{c_sol_conc_value:.4f}", language="python")
     c_label_jar = st.text_input("C-Label for jar", value=safe_get(existing_record, "C-Label for jar", ""))
     submit_prep = st.form_submit_button("Submit/Update Prep Details")
 if submit_prep:
     data = [
         prep_id, selected_solution_fk, desired_conc, final_volume, solvent, solvent_lot,
         solvent_weight, polymer, polymer_conc, polymer_lot, polymer_weight, str(prep_date),
-        initials, notes, c_sol_conc, c_label_jar
+        initials, notes, c_sol_conc_value, c_label_jar
+
     ]
     try:
         if existing_record:
