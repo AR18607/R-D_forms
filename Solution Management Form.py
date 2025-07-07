@@ -60,8 +60,16 @@ def cached_get_all_records(sheet_key, tab_name):
     worksheet = retry_open_worksheet(spreadsheet, tab_name)
     return worksheet.get_all_records()
 
+# ----------- NEW FIXED get_last_id_from_records -----------
 def get_last_id_from_records(records, id_prefix):
-    nums = [int(str(r).split('-')[-1]) for r in records if str(r).startswith(id_prefix) and str(r).split('-')[-1].isdigit()]
+    # Accepts a set or list of strings or dicts with the ID key, returns next available
+    clean_ids = set(str(r).strip() for r in records if str(r).strip())
+    nums = []
+    for rid in clean_ids:
+        if rid.startswith(id_prefix):
+            parts = rid.split('-')
+            if len(parts) > 1 and parts[-1].isdigit():
+                nums.append(int(parts[-1]))
     next_num = max(nums) + 1 if nums else 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
@@ -180,9 +188,13 @@ else:
     st.success("✅ No prep entry found. Enter new details.")
 
 with st.form("prep_data_form"):
-    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(
-        [r["Solution Prep ID"] for r in prep_entries if "Solution Prep ID" in r], "PREP"
-    ))
+    # ---- CORRECT PREP ID LOGIC (ALWAYS UNIQUE) ----
+    if existing_record:
+        prep_id = safe_get(existing_record, "Solution Prep ID")
+    else:
+        valid_prep_ids = set(str(r.get("Solution Prep ID", "")).strip() for r in prep_entries if str(r.get("Solution Prep ID", "")).strip())
+        prep_id = get_last_id_from_records(valid_prep_ids, "PREP")
+
     st.markdown(f"**Prep ID:** `{prep_id}`")
     desired_conc = st.number_input(
         "Desired Solution Concentration (%)",
@@ -295,7 +307,8 @@ for sid in valid_comb_ids:
     solution_options.append(label)
     sid_to_conc[sid] = c
 
-existing_comb_ids = [rec.get("Combined Solution ID") for rec in combined_records if rec.get("Combined Solution ID")]
+# ---- CORRECT COMBINED SOLUTION ID LOGIC (ALWAYS UNIQUE) ----
+existing_comb_ids = set(str(rec.get("Combined Solution ID", "")).strip() for rec in combined_records if str(rec.get("Combined Solution ID", "")).strip())
 combined_id = get_last_id_from_records(existing_comb_ids, "COMB")
 
 with st.form("combined_solution_form", clear_on_submit=True):
