@@ -1,4 +1,3 @@
-# --- Import Required Libraries ---
 import streamlit as st
 import pandas as pd
 import gspread
@@ -7,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 import time
 
-# --- Configuration ---
+# --- Google Sheets Config ---
 SPREADSHEET_KEY = "1uPdUWiiwMdJCYJaxZ5TneFa9h6tbSrs327BVLT5GVPY"
 SOLUTION_ID_HEADERS = ["Solution ID", "Type", "Expired", "Consumed", "C-Solution Conc"]
 PREP_HEADERS = [
@@ -85,25 +84,6 @@ def parse_date(date_val):
                 continue
     return None
 
-def get_c_solution_conc(solvent_weight, polymer_weight):
-    try:
-        total_weight = float(solvent_weight) + float(polymer_weight)
-        return (float(polymer_weight) / total_weight) if total_weight > 0 else 0.0
-    except:
-        return 0.0
-
-def get_c_from_prep(prep_rec):
-    try:
-        return float(prep_rec.get("C-Solution Concentration", 0.0))
-    except:
-        return 0.0
-
-# --- Setup ---
-spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
-solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
-prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
-combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
-
 # --- Disable Enter-key submit except in TextAreas ---
 st.markdown("""
     <script>
@@ -115,41 +95,54 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
-st.markdown("# :page_facing_up: **Solution Management Form**")
+st.markdown("# 📄 Solution Management Form")
 st.markdown("Manage creation, preparation, and combination of solutions.")
 
-# Load data tables
+# --- Load data ---
+spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
+solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
+prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
+combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
+
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
 prep_records = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
 combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 
-# ========= 1. Solution ID Entry and Management =========
-st.markdown("## :small_blue_diamond: Solution ID Entry / Management")
+# --- Helper for ID labeling ---
+def label_status(row):
+    label = row["Solution ID"]
+    if row.get("Expired", "No") == "Yes":
+        label += " (expired)"
+    elif row.get("Consumed", "No") == "Yes":
+        label += " (consumed)"
+    elif row.get("Type", "New") == "Combined":
+        label += " (combined)"
+    return label
 
-with st.expander("➕ **View/Edit Existing Solution IDs**", expanded=False):
+# ================== Solution ID Entry / Management ===================
+st.markdown("## 🔹 Solution ID Entry / Management")
+
+with st.expander("View / Update Existing Solution IDs", expanded=False):
     df = pd.DataFrame(solution_records)
     if not df.empty:
-        # Show status columns and allow updating
+        df["Label"] = df.apply(label_status, axis=1)
         st.dataframe(df[["Solution ID", "Type", "Expired", "Consumed"]])
-
         to_edit = st.selectbox("Select Solution ID to update", options=[""] + df["Solution ID"].tolist())
         if to_edit:
             idx = df[df["Solution ID"] == to_edit].index[0]
             expired_val = st.selectbox("Expired?", ["No", "Yes"], index=0 if df.at[idx,"Expired"]=="No" else 1, key="edit_expired")
             consumed_val = st.selectbox("Consumed?", ["No", "Yes"], index=0 if df.at[idx,"Consumed"]=="No" else 1, key="edit_consumed")
             if st.button("Update Status", key="update_status_btn"):
-                # Find in sheet and update
-                row_number = idx+2 # header is row 1
+                row_number = idx+2
                 solution_sheet.update(f"C{row_number}:D{row_number}", [[expired_val, consumed_val]])
                 st.success("Status updated. Please refresh to see the latest!")
     else:
         st.info("No Solution IDs yet.")
 
-st.write("")
-
+# --- Solution ID Entry (not submitting automatically) ---
 with st.form("solution_id_form", clear_on_submit=True):
     next_id = get_last_id_from_records([rec["Solution ID"] for rec in solution_records], "SOL")
-    st.markdown(f"**Auto-generated Solution ID:** `{next_id}`")
+    st.markdown(f"**Auto-generated Solution ID:** `{next_id}` _(will only be saved on submit)_")
     solution_type = st.selectbox("Type", ['New', 'Combined'])
     expired = st.selectbox("Expired?", ['No', 'Yes'], index=0)
     consumed = st.selectbox("Consumed?", ['No', 'Yes'], index=0)
@@ -159,20 +152,27 @@ if submit_solution:
     solution_sheet.append_row([next_id, solution_type, expired, consumed, ""])
     st.success(":white_check_mark: Solution ID saved! Please refresh if not visible in the dropdown.")
 
-# Immediately reflect latest solution IDs for next dropdowns
+# --- Reload for up-to-date dropdowns
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
+df_solution = pd.DataFrame(solution_records)
+df_solution["Label"] = df_solution.apply(label_status, axis=1)
 
-# ========= 2. Solution Prep Form (filter IDs) =========
-st.divider()
-st.markdown("## :small_blue_diamond: Solution Prep Data Entry")
+# ================== Solution Prep Data Entry ===================
+st.markdown("---")
+st.markdown("## 🔹 Solution Prep Data Entry")
 
-prep_entries = prep_records
-solution_df = pd.DataFrame(solution_records)
-# Only show IDs with Type = 'New' and not Expired or Consumed or Combined
-prep_valid_df = solution_df[(solution_df['Type']=="New") & (solution_df['Expired']=="No") & (solution_df['Consumed']=="No")]
+# Filter Solution IDs for prep: type = New, not expired, not consumed, not combined
+prep_valid_df = df_solution[
+    (df_solution['Type'] == "New") &
+    (df_solution['Expired'] == "No") &
+    (df_solution['Consumed'] == "No")
+]
 prep_valid_ids = prep_valid_df["Solution ID"].tolist()
+
 selected_solution_fk = st.selectbox("Select Solution ID", options=prep_valid_ids, key="prep_solution_fk")
+prep_entries = prep_records
 existing_record = next((r for r in prep_entries if r.get("Solution ID (FK)", "") == selected_solution_fk), None)
+
 if existing_record:
     st.info(":large_yellow_circle: Existing prep entry found. Fields prefilled for update.")
 else:
@@ -198,20 +198,17 @@ with st.form("prep_data_form"):
     )
     solvent_lot = st.text_input("Solvent Lot Number", value=safe_get(existing_record, "Solvent Lot Number", ""))
     solvent_weight = st.number_input("Solvent Weight Measured (g)",
-        value=float(safe_get(existing_record, "Solvent Weight Measured (g)", 0.0)),
-        format="%.2f"
+        value=float(safe_get(existing_record, "Solvent Weight Measured (g)", 0.0)), format="%.2f"
     )
     polymer = st.selectbox("Polymer", ['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'],
         index=['CMS-72', 'CMS-335', 'CMS-34', 'CMS-7'].index(safe_get(existing_record, "Polymer", "CMS-72")) if existing_record else 0
     )
     polymer_conc = st.number_input("Polymer starting concentration (%)",
-        value=float(safe_get(existing_record, "Polymer starting concentration", 0.0)),
-        format="%.2f"
+        value=float(safe_get(existing_record, "Polymer starting concentration", 0.0)), format="%.2f"
     )
     polymer_lot = st.text_input("Polymer Lot Number", value=safe_get(existing_record, "Polymer Lot Number", ""))
     polymer_weight = st.number_input("Polymer Weight Measured (g)",
-        value=float(safe_get(existing_record, "Polymer Weight Measured (g)", 0.0)),
-        format="%.2f"
+        value=float(safe_get(existing_record, "Polymer Weight Measured (g)", 0.0)), format="%.2f"
     )
     prep_date_str = safe_get(existing_record, "Prep Date")
     try:
@@ -221,10 +218,9 @@ with st.form("prep_data_form"):
     prep_date = st.date_input("Prep Date", value=prep_date)
     initials = st.text_input("Initials", value=safe_get(existing_record, "Initials", ""))
     notes = st.text_area("Notes", value=safe_get(existing_record, "Notes", ""))
-    # Auto-calculate C-Solution Concentration
-    c_sol_conc_value = get_c_solution_conc(solvent_weight, polymer_weight)
-    st.markdown("**C-Solution Concentration (auto-calculated):**")
-    st.code(f"{c_sol_conc_value:.4f}", language="python")
+    # Live calculation
+    c_sol_conc_value = polymer_weight / (solvent_weight + polymer_weight) if (solvent_weight + polymer_weight) > 0 else 0.0
+    st.markdown(f"**C-Solution Concentration (polymer/(solvent+polymer)):** `{c_sol_conc_value:.4f}`")
     c_label_jar = st.text_input("C-Label for jar", value=safe_get(existing_record, "C-Label for jar", ""))
     submit_prep = st.form_submit_button("Submit/Update Prep Details")
 if submit_prep:
@@ -234,94 +230,114 @@ if submit_prep:
         initials, notes, c_sol_conc_value, c_label_jar
     ]
     try:
-        # Write both to prep table and update C-Solution Conc in Solution ID Tbl
         if existing_record:
             cell = prep_sheet.find(selected_solution_fk)
             row_number = cell.row
             prep_sheet.update(f"A{row_number}:P{row_number}", [data])
-            # Update C-Solution Conc in solution_sheet
-            sol_row = solution_df[solution_df["Solution ID"]==selected_solution_fk].index[0] + 2
+            sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
             solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
             st.success(":white_check_mark: Prep Data updated!")
         else:
             prep_sheet.append_row(data)
-            # Update C-Solution Conc in solution_sheet
-            sol_row = solution_df[solution_df["Solution ID"]==selected_solution_fk].index[0] + 2
+            sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
             solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
             st.success(":white_check_mark: Prep Data submitted!")
     except Exception as e:
         st.error(f":x: Error while writing to Google Sheet: {e}")
 
-# ========= 3. Combined Solution Form =========
-st.divider()
-st.markdown("## :small_blue_diamond: Combined Solution Entry")
+# ================== Combined Solution Entry ===================
+st.markdown("---")
+st.markdown("## 🔹 Combined Solution Entry")
 
-# IDs for Combined: exclude Expired, Consumed. Highlight Combined IDs separately
-comb_valid_df = solution_df[(solution_df["Type"]=="New") & (solution_df['Expired']=="No") & (solution_df['Consumed']=="No")]
-comb_valid_ids = comb_valid_df["Solution ID"].tolist()
-combined_ids = solution_df[solution_df["Type"]=="Combined"]["Solution ID"].tolist()
+# Separate Combined IDs
+combined_ids = df_solution[df_solution["Type"]=="Combined"]["Solution ID"].tolist()
+combined_label_list = []
+for row in df_solution.itertuples():
+    label = row._1
+    if row.Type == "Combined":
+        label += " (combined)"
+    elif row.Expired == "Yes":
+        label += " (expired)"
+    elif row.Consumed == "Yes":
+        label += " (consumed)"
+    combined_label_list.append(label)
 
-st.markdown("**Select/Review Combined IDs:**")
-st.write("IDs marked 'Combined' (already merged):")
 if combined_ids:
-    st.write(", ".join(combined_ids))
+    st.info("IDs marked 'Combined': " + ", ".join(combined_ids))
 else:
-    st.write("_No Combined Solution IDs yet._")
+    st.info("No Combined Solution IDs yet.")
 
+# Filter for only valid solution IDs: Not expired, not consumed
+valid_comb_df = df_solution[
+    (df_solution['Type'] == "New") &
+    (df_solution['Expired'] == "No") &
+    (df_solution['Consumed'] == "No")
+]
+valid_comb_ids = valid_comb_df["Solution ID"].tolist()
+
+# Build dropdowns with concentrations
+solution_options = []
+sid_to_conc = {}
+for sid in valid_comb_ids:
+    prep = next((r for r in prep_records if r.get("Solution ID (FK)", "") == sid), None)
+    c = float(prep["C-Solution Concentration"]) if prep and "C-Solution Concentration" in prep and prep["C-Solution Concentration"] != '' else 0.0
+    label = f"{sid} | Conc: {c:.4f}"
+    solution_options.append(label)
+    sid_to_conc[sid] = c
+
+# Combined Solution form
+combined_id = get_last_id_from_records(
+    [rec.get("Combined Solution ID", "") for rec in combined_records if rec.get("Combined Solution ID")], "COMB"
+)
 with st.form("combined_solution_form", clear_on_submit=True):
-    combined_id = get_last_id_from_records([rec["Combined Solution ID"] for rec in combined_records], "COMB")
     st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
-    # Solution A/B: Show C-Solution Conc
-    solution_options = [
-        f"{sid} | Conc: {safe_get(prep_rec, 'C-Solution Concentration', '?')}"
-        for sid in comb_valid_ids
-        for prep_rec in prep_records if prep_rec.get("Solution ID (FK)", "") == sid
-    ]
-    sid_to_value = {s.split(" |")[0]: float(s.split(": ")[-1]) if ": " in s else None for s in solution_options}
+    st.markdown("**Select Solution IDs to Combine:**")
     solution_id_a = st.selectbox("Solution ID A", options=solution_options, key="comb_a")
     solution_id_b = st.selectbox("Solution ID B", options=solution_options, key="comb_b")
     solution_mass_a = st.number_input("Solution Mass A (g)", format="%.2f")
     solution_mass_b = st.number_input("Solution Mass B (g)", format="%.2f")
-    # Show combined concentration
-    conc_a = sid_to_value.get(solution_id_a.split(" |")[0], 0)
-    conc_b = sid_to_value.get(solution_id_b.split(" |")[0], 0)
+    sid_a = solution_id_a.split(" |")[0]
+    sid_b = solution_id_b.split(" |")[0]
+    conc_a = sid_to_conc.get(sid_a, 0)
+    conc_b = sid_to_conc.get(sid_b, 0)
     combined_mass = solution_mass_a + solution_mass_b
     combined_conc = ((solution_mass_a * conc_a) + (solution_mass_b * conc_b)) / combined_mass if combined_mass > 0 else 0.0
-    st.markdown(f"**Combined Solution Concentration (auto):** `{combined_conc:.4f}`")
-    st.info("🚩 Confirm with the team: Is it allowed to combine different concentrations? (Document policy!)")
+    st.markdown(f"**Combined Solution Concentration (calculated):** `{combined_conc:.4f}`")
+    st.warning("Check with your team: Do you ever combine different concentrations? This form will auto-calculate if you do.")
     combined_date = st.date_input("Combined Date")
     combined_initials = st.text_input("Initials")
     combined_notes = st.text_area("Notes")
     submit_combined = st.form_submit_button("Submit Combined Solution Details")
 if submit_combined:
     combined_sheet.append_row([
-        combined_id, solution_id_a.split(" |")[0], solution_id_b.split(" |")[0],
+        combined_id, sid_a, sid_b,
         solution_mass_a, solution_mass_b, combined_conc,
         str(combined_date), combined_initials, combined_notes
     ])
     st.success(":white_check_mark: Combined Solution saved!")
 
-# ========= 4. Last 7 Days Filtered Data Section =========
-st.divider()
-st.markdown("## 📅 Last 7 Days Data Preview (Based on Prep Date)")
+# ================== 7-Day Filtered Data Display ===================
+st.markdown("---")
+st.markdown("## 📅 Last 7 Days Data Preview")
+
 today = datetime.today()
 recent_prep_ids = [rec for rec in prep_records if (parsed:=parse_date(rec.get("Prep Date", ""))) and parsed >= today - timedelta(days=7)]
 recent_solution_ids = set([rec.get("Solution ID (FK)", "").strip() for rec in recent_prep_ids])
 
-st.markdown("### 📘 Solution ID Table (Filtered by Recent Prep)")
+st.markdown("### Solution ID Table (Filtered by Recent Prep)")
 filtered_solution_ids = [rec for rec in solution_records if rec.get("Solution ID", "").strip() in recent_solution_ids]
 if filtered_solution_ids:
     st.dataframe(pd.DataFrame(filtered_solution_ids))
 else:
     st.write("No recent Solution ID records based on prep activity.")
 
-st.markdown("### 🧪 Solution Prep Data (Last 7 Days Only)")
+st.markdown("### Solution Prep Data (Last 7 Days Only)")
 if recent_prep_ids:
     st.dataframe(pd.DataFrame(recent_prep_ids))
 else:
     st.write("No Solution Prep records in the last 7 days.")
 
-st.markdown("### 🧪 Combined Solution Data (Using Recently Prepped IDs)")
+st.markdown("### Combined Solution Data (Using Recently Prepped IDs)")
 recent_combined = [rec for rec in combined_records if (cd:=parse_date(rec.get("Date", rec.get("Combined Date", "")))) and cd >= today - timedelta(days=7)]
 if recent_combined:
     st.dataframe(pd.DataFrame(recent_combined))
