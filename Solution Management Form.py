@@ -271,24 +271,26 @@ valid_comb_df = df_solution[
 ]
 valid_comb_ids = valid_comb_df["Solution ID"].unique().tolist()
 
-# Build dropdown options (unique and valid)
+# Build dropdown options for Solution A/B using latest concentration from PREP table
 solution_options = []
 sid_to_conc = {}
 for sid in valid_comb_ids:
-    # Find the most recent C-solution conc from combined/prep tables if available
-    # We'll use the solution sheet column if populated, else 0.0
-    row = df_solution[df_solution["Solution ID"] == sid]
-    if not row.empty:
-        c = float(row.iloc[0].get("C-Solution Conc", 0) or 0)
-    else:
-        c = 0.0
+    # Find latest C-Solution Concentration for this Solution ID from PREP table
+    preps = [p for p in prep_records if p.get("Solution ID (FK)", "") == sid]
+    c = 0.0
+    if preps:
+        # Use the prep with the latest date
+        preps = sorted(preps, key=lambda p: parse_date(p.get("Prep Date", "")) or datetime.min, reverse=True)
+        latest_prep = preps[0]
+        c = float(latest_prep.get("C-Solution Concentration", 0) or 0)
     label = f"{sid} | Conc: {c:.4f}"
     solution_options.append(label)
     sid_to_conc[sid] = c
 
-combined_id = get_last_id_from_records(
-    [rec.get("Combined Solution ID", "") for rec in combined_records if rec.get("Combined Solution ID")], "COMB"
-)
+# 3. Correctly increment Combined Solution ID
+existing_comb_ids = [rec.get("Combined Solution ID") for rec in combined_records if rec.get("Combined Solution ID")]
+combined_id = get_last_id_from_records(existing_comb_ids, "COMB")
+
 with st.form("combined_solution_form", clear_on_submit=True):
     st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
     st.markdown("**Select Solution IDs to Combine:**")
@@ -321,6 +323,7 @@ if submit_combined:
         str(combined_date), combined_initials, combined_notes
     ])
     st.success(":white_check_mark: Combined Solution saved! Please click the '🔄 Refresh Data' button at the top to update dropdowns.")
+
 
 # ------------- 7-Day Recent Data Section (all activities) --------------
 st.markdown("---")
