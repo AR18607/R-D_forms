@@ -130,7 +130,8 @@ with st.expander("➕ **View/Edit Existing Solution IDs**", expanded=False):
     df = pd.DataFrame(solution_records)
     if not df.empty:
         # Show status columns and allow updating
-        st.dataframe(df[["Solution ID", "Type", "Expired", "Consumed"]].style.highlight_null(null_color='orange'))
+        st.dataframe(df[["Solution ID", "Type", "Expired", "Consumed"]])
+
         to_edit = st.selectbox("Select Solution ID to update", options=[""] + df["Solution ID"].tolist())
         if to_edit:
             idx = df[df["Solution ID"] == to_edit].index[0]
