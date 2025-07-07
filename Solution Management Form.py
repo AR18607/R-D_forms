@@ -61,7 +61,7 @@ def cached_get_all_records(sheet_key, tab_name):
     return worksheet.get_all_records()
 
 def get_last_id_from_records(records, id_prefix):
-    # Deduplicate and clean up
+    # Accepts a list or set of strings
     clean_ids = set(str(r).strip() for r in records if str(r).strip())
     nums = []
     for rid in clean_ids:
@@ -74,7 +74,6 @@ def get_last_id_from_records(records, id_prefix):
                 continue
     next_num = max(nums) + 1 if nums else 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
-
 
 def safe_get(record, key, default=""):
     if isinstance(record, dict):
@@ -154,7 +153,8 @@ with st.expander("View / Update Existing Solution IDs", expanded=False):
         st.info("No Solution IDs yet.")
 
 with st.form("solution_id_form", clear_on_submit=True):
-    next_id = get_last_id_from_records([rec["Solution ID"] for rec in solution_records], "SOL")
+    valid_sol_ids = set(str(rec["Solution ID"]).strip() for rec in solution_records if str(rec["Solution ID"]).strip())
+    next_id = get_last_id_from_records(valid_sol_ids, "SOL")
     st.markdown(f"**Auto-generated Solution ID:** `{next_id}` _(will only be saved on submit)_")
     solution_type = st.selectbox("Type", ['New', 'Combined'])
     expired = st.selectbox("Expired?", ['No', 'Yes'], index=0)
@@ -191,9 +191,13 @@ else:
     st.success("✅ No prep entry found. Enter new details.")
 
 with st.form("prep_data_form"):
-    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(
-        [r["Solution Prep ID"] for r in prep_entries if "Solution Prep ID" in r], "PREP"
-    ))
+    # --- FIXED Prep ID generation ---
+    if existing_record:
+        prep_id = safe_get(existing_record, "Solution Prep ID")
+    else:
+        valid_prep_ids = set(str(r.get("Solution Prep ID", "")).strip() for r in prep_entries if str(r.get("Solution Prep ID", "")).strip())
+        prep_id = get_last_id_from_records(valid_prep_ids, "PREP")
+
     st.markdown(f"**Prep ID:** `{prep_id}`")
     desired_conc = st.number_input(
         "Desired Solution Concentration (%)",
@@ -306,8 +310,9 @@ for sid in valid_comb_ids:
     solution_options.append(label)
     sid_to_conc[sid] = c
 
-existing_comb_ids = [rec.get("Combined Solution ID") for rec in combined_records if rec.get("Combined Solution ID")]
-combined_id = get_last_id_from_records(existing_comb_ids, "COMB")
+# --- FIXED Combined ID generation ---
+valid_combined_ids = set(str(rec.get("Combined Solution ID", "")).strip() for rec in combined_records if str(rec.get("Combined Solution ID", "")).strip())
+combined_id = get_last_id_from_records(valid_combined_ids, "COMB")
 
 with st.form("combined_solution_form", clear_on_submit=True):
     st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
