@@ -118,7 +118,7 @@ st.markdown("""
 
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
-    st.experimental_rerun()
+    st.experimental_rerun()  # <--- this is fine, it's in button callback!
 
 st.markdown("# 📄 Solution Management Form")
 st.markdown("Manage creation, preparation, and combination of solutions.")
@@ -127,11 +127,6 @@ spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
 solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
 prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
 combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
-
-# -- Always load records FRESH, at this point --
-solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
-prep_records = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
-combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 
 def label_status(row):
     label = row["Solution ID"]
@@ -146,6 +141,7 @@ def label_status(row):
 # ------------------- Solution ID Management -------------------
 st.markdown("## 🔹 Solution ID Entry / Management")
 with st.expander("View / Update Existing Solution IDs", expanded=False):
+    solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
     df = pd.DataFrame(solution_records)
     if not df.empty:
         df["Label"] = df.apply(label_status, axis=1)
@@ -165,6 +161,7 @@ with st.expander("View / Update Existing Solution IDs", expanded=False):
         st.info("No Solution IDs yet.")
 
 with st.form("solution_id_form", clear_on_submit=True):
+    solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
     next_id = get_last_id_from_records([rec["Solution ID"] for rec in solution_records], "SOL")
     st.markdown(f"**Auto-generated Solution ID:** `{next_id}` _(will only be saved on submit)_")
     solution_type = st.selectbox("Type", ['New', 'Combined'])
@@ -177,7 +174,7 @@ with st.form("solution_id_form", clear_on_submit=True):
         st.success(":white_check_mark: Solution ID saved! Dropdowns and tables updated.")
         st.experimental_rerun()
 
-# Reload records after possible rerun
+# Reload after update
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
 df_solution = pd.DataFrame(solution_records)
 df_solution["Label"] = df_solution.apply(label_status, axis=1)
@@ -202,7 +199,6 @@ else:
     st.success("✅ No prep entry found. Enter new details.")
 
 with st.form("prep_data_form"):
-    # Find latest PREP id in all records for PREP, not just current Solution ID
     all_prep_ids = [r.get("Solution Prep ID") for r in prep_entries if r.get("Solution Prep ID")]
     prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(all_prep_ids, "PREP"))
     st.markdown(f"**Prep ID:** `{prep_id}`")
@@ -277,7 +273,7 @@ with st.form("prep_data_form"):
         except Exception as e:
             st.error(f":x: Error while writing to Google Sheet: {e}")
 
-# Reload after rerun for freshest data
+# Reload after update
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
 df_solution = pd.DataFrame(solution_records)
 df_solution["Label"] = df_solution.apply(label_status, axis=1)
@@ -288,9 +284,9 @@ combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tb
 st.markdown("---")
 st.markdown("## 🔹 Combined Solution Entry")
 
-# -- Always refresh combined records before generating next ID --
+# Always reload combined_records before ID generation!
 combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
-combined_id = get_last_id_from_records(combined_records, "COMB")
+combined_id = get_last_id_from_records([rec.get("Combined Solution ID", "") for rec in combined_records], "COMB")
 
 valid_comb_df = df_solution[
     (df_solution["Type"] == "Combined") &
