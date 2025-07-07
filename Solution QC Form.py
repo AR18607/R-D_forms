@@ -1,4 +1,4 @@
-import streamlit as st 
+import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -7,7 +7,6 @@ import json
 
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_SOLUTION_QC = "Solution QC Tbl"
-TAB_SOLUTION_ID = "Solution ID Tbl"
 
 st.markdown("""
     <script>
@@ -39,138 +38,175 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
 
 def get_existing_solution_ids(spreadsheet):
     try:
-        solution_sheet = spreadsheet.worksheet(TAB_SOLUTION_ID)
-        return solution_sheet.col_values(1)[1:]
+        solution_sheet = spreadsheet.worksheet("Solution ID Tbl")
+        solution_ids = solution_sheet.col_values(1)[1:]
+        return solution_ids
     except Exception as e:
         st.error(f"Error fetching Solution IDs: {e}")
         return []
 
 def get_last_qc_id(worksheet):
     records = worksheet.col_values(1)[1:]
-    nums = [int(r.split('-')[-1]) for r in records if r.startswith("QC") and r.split('-')[-1].isdigit()]
-    next_num = max(nums) + 1 if nums else 1
+    if not records:
+        return "QC-001"
+    nums = [int(r.split('-')[-1]) for r in records if r.startswith("QC")]
+    next_num = max(nums) + 1
     return f"QC-{str(next_num).zfill(3)}"
 
-def get_qc_records(qc_sheet):
-    records = qc_sheet.get_all_records()
-    return pd.DataFrame(records)
-
-def is_incomplete(row):
-    # Mark as pending if any essential fields are missing or zero
-    essentials = ["Dish Tare Mass (g)", "Initial Solution Mass (g)", "Final Dish Mass (g)", "Operator Initials"]
-    for f in essentials:
-        v = row.get(f, "")
-        if v in ("", None) or (isinstance(v, (int, float)) and v == 0):
-            return True
-    return False
-
+# --------- MAIN ---------
 st.title("🔬 Solution QC Form (Linked to Solution Management Form)")
-spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
-qc_headers = [
+spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+qc_sheet = get_or_create_tab(spreadsheet, TAB_SOLUTION_QC, [
     "Solution QC ID", "Solution ID (FK)", "Test Date", "Dish Tare Mass (g)",
     "Initial Solution Mass (g)", "Final Dish Mass (g)", "Operator Initials",
-    "Notes", "QC Date", "C-Percent Solids"
-]
-
-qc_sheet = get_or_create_tab(spreadsheet, TAB_SOLUTION_QC, qc_headers)
+    "Notes", "QC Date", "C-Percent Solids", "Status"
+])
 existing_solution_ids = get_existing_solution_ids(spreadsheet)
-qc_df = get_qc_records(qc_sheet) if qc_sheet else pd.DataFrame(columns=qc_headers)
+qc_records = qc_sheet.get_all_records()
+qc_df = pd.DataFrame(qc_records)
 
-# 1. Select Solution ID to view ALL records for it
-st.subheader("📑 QC Data Table for Selected Solution ID")
-selected_sol = st.selectbox("Select Solution ID", existing_solution_ids)
-df_sol = qc_df[qc_df["Solution ID (FK)"] == selected_sol] if not qc_df.empty else pd.DataFrame()
-if not df_sol.empty:
-    df_sol = df_sol.copy()
-    df_sol["Status"] = df_sol.apply(lambda r: "submitted but pending" if is_incomplete(r) else "completed", axis=1)
-    st.dataframe(df_sol)
+def is_pending(row):
+    required = ["Test Date", "Dish Tare Mass (g)", "Initial Solution Mass (g)",
+                "Final Dish Mass (g)", "Operator Initials", "QC Date"]
+    return any(not row.get(col) for col in required)
+
+if not qc_df.empty:
+    qc_df["Status"] = qc_df.apply(lambda r: "pending" if is_pending(r) else "completed", axis=1)
 else:
-    st.info("No QC records for this Solution ID.")
+    qc_df["Status"] = ""
 
-# 2. Only allow editing incomplete records
-pending_df = df_sol[df_sol["Status"] == "submitted but pending"] if not df_sol.empty else pd.DataFrame()
-if not pending_df.empty:
-    st.markdown("#### Edit Pending (Incomplete) QC Record")
-    edit_qc_id = st.selectbox("Select pending QC ID to edit", [""] + pending_df["Solution QC ID"].tolist())
+# ---------- VIEW/EDIT PENDING QC RECORDS -----------
+st.subheader("📝 Review/Edit Pending QC Records")
+pending_qc_df = qc_df[qc_df["Status"] == "pending"]
+if not pending_qc_df.empty:
+    st.info("The following QC records are pending completion:")
+    st.dataframe(pending_qc_df)
+    edit_qc_id = st.selectbox("Select Pending QC ID to edit", [""] + pending_qc_df["Solution QC ID"].tolist())
     if edit_qc_id:
-        edit_row = pending_df[pending_df["Solution QC ID"] == edit_qc_id].iloc[0]
-        with st.form("edit_pending_qc_form", clear_on_submit=False):
-            st.markdown(f"**Editing QC ID:** `{edit_qc_id}` (status: pending)")
+        record = pending_qc_df[pending_qc_df["Solution QC ID"] == edit_qc_id].iloc[0]
+        with st.form("edit_pending_qc"):
             col1, col2 = st.columns(2)
             with col1:
-                dish_tare_mass = st.number_input("Dish Tare Mass (g)", value=float(edit_row["Dish Tare Mass (g)"] or 0), format="%.2f")
-                initial_solution_mass = st.number_input("Initial Solution Mass (g)", value=float(edit_row["Initial Solution Mass (g)"] or 0), format="%.2f")
-                test_date = st.date_input("Test Date", pd.to_datetime(edit_row["Test Date"], errors='coerce') if edit_row["Test Date"] else datetime.today())
+                solution_id_fk = st.text_input("Solution ID (FK)", value=record["Solution ID (FK)"], disabled=True)
+                test_date = st.date_input("Test Date", value=pd.to_datetime(record["Test Date"]).date() if record["Test Date"] else datetime.today())
+                dish_tare_mass = st.number_input("Dish Tare Mass (g)", value=float(record["Dish Tare Mass (g)"] or 0), format="%.2f")
+                initial_solution_mass = st.number_input("Initial Solution Mass (g)", value=float(record["Initial Solution Mass (g)"] or 0), format="%.2f")
             with col2:
-                final_dish_mass = st.number_input("Final Dish Mass (g)", value=float(edit_row["Final Dish Mass (g)"] or 0), format="%.2f")
-                operator_initials = st.text_input("Operator Initials", value=edit_row["Operator Initials"])
-                notes = st.text_area("Notes", value=edit_row["Notes"])
-                qc_date = st.date_input("QC Date", pd.to_datetime(edit_row["QC Date"], errors='coerce') if edit_row["QC Date"] else datetime.today())
-
-            dry_polymer_weight = final_dish_mass - dish_tare_mass
-            c_percent_solids = (dry_polymer_weight / initial_solution_mass) * 100 if initial_solution_mass > 0 else 0.0
+                final_dish_mass = st.number_input("Final Dish Mass (g)", value=float(record["Final Dish Mass (g)"] or 0), format="%.2f")
+                operator_initials = st.text_input("Operator Initials", value=record["Operator Initials"])
+                notes = st.text_area("Notes", value=record["Notes"])
+                qc_date = st.date_input("QC Date", value=pd.to_datetime(record["QC Date"]).date() if record["QC Date"] else datetime.today())
+            # Calculation before submit
+            try:
+                dry_polymer_weight = final_dish_mass - dish_tare_mass
+                if initial_solution_mass > 0:
+                    c_percent_solids = (dry_polymer_weight / initial_solution_mass) * 100
+                else:
+                    c_percent_solids = 0.0
+            except:
+                c_percent_solids = 0.0
             st.markdown("**C - % solids (auto-calculated):**")
             st.code(f"{c_percent_solids:.2f} %", language="python")
-            submit_edit = st.form_submit_button("💾 Update Pending QC Record")
+            submit_edit = st.form_submit_button("Update QC Record")
         if submit_edit:
             try:
                 idx = qc_df[qc_df["Solution QC ID"] == edit_qc_id].index[0]
                 rownum = idx + 2
-                qc_sheet.update(f"C{rownum}:J{rownum}", [
+                qc_sheet.update(f"C{rownum}:J{rownum}", [[
                     str(test_date), dish_tare_mass, initial_solution_mass, final_dish_mass,
                     operator_initials, notes, str(qc_date), c_percent_solids
-                ])
+                ]])
+                status = "pending" if is_pending({
+                    "Test Date": test_date,
+                    "Dish Tare Mass (g)": dish_tare_mass,
+                    "Initial Solution Mass (g)": initial_solution_mass,
+                    "Final Dish Mass (g)": final_dish_mass,
+                    "Operator Initials": operator_initials,
+                    "QC Date": qc_date
+                }) else "completed"
+                qc_sheet.update(f"K{rownum}", [[status]])
                 st.success("✅ QC record updated!")
                 st.experimental_rerun()
             except Exception as e:
                 st.error(f"❌ Error updating record: {e}")
 else:
-    st.info("No pending QC entries for this Solution ID. You may add a new record below.")
+    st.info("No pending QC records found.")
 
 st.divider()
-# 3. Only allow new entry if no pending
-if pending_df.empty:
-    st.markdown("### ➕ New Solution QC Record")
-    with st.form("solution_qc_form", clear_on_submit=False):
-        qc_id = get_last_qc_id(qc_sheet)
-        st.markdown(f"**Auto-generated QC ID:** `{qc_id}`")
-        col1, col2 = st.columns(2)
-        with col1:
-            test_date = st.date_input("Test Date", value=datetime.today())
-            dish_tare_mass = st.number_input("Dish Tare Mass (g)", format="%.2f")
-            initial_solution_mass = st.number_input("Initial Solution Mass (g)", format="%.2f")
-        with col2:
-            final_dish_mass = st.number_input("Final Dish Mass (g)", format="%.2f")
-            operator_initials = st.text_input("Operator Initials")
-            notes = st.text_area("Notes")
-            qc_date = st.date_input("QC Date", value=datetime.today())
-        dry_polymer_weight = final_dish_mass - dish_tare_mass
-        c_percent_solids = (dry_polymer_weight / initial_solution_mass) * 100 if initial_solution_mass > 0 else 0.0
-        st.markdown("**C - % solids (auto-calculated):**")
-        st.code(f"{c_percent_solids:.2f} %", language="python")
-        submit_button = st.form_submit_button("🚀 Submit Solution QC Record")
-    if submit_button:
-        try:
-            qc_sheet.append_row([
-                qc_id, selected_sol, str(test_date), dish_tare_mass,
-                initial_solution_mass, final_dish_mass, operator_initials,
-                notes, str(qc_date), c_percent_solids
-            ])
-            st.success("✅ Solution QC record successfully saved!")
-            st.experimental_rerun()
-        except Exception as e:
-            st.error(f"❌ Error saving data: {e}")
 
-# 4. Last 7 days view for all data
+# ----------- ADD NEW QC ENTRY ------------
+st.subheader("📄 Enter Solution QC Data")
+with st.form("solution_qc_form", clear_on_submit=False):
+    qc_id = get_last_qc_id(qc_sheet)
+    st.markdown(f"**Auto-generated QC ID:** `{qc_id}`")
+    col1, col2 = st.columns(2)
+    with col1:
+        solution_id_fk = st.selectbox("Select Solution ID (FK)", existing_solution_ids) if existing_solution_ids else st.text_input("Solution ID (FK)")
+        test_date = st.date_input("Test Date")
+        dish_tare_mass = st.number_input("Dish Tare Mass (g)", format="%.2f")
+        initial_solution_mass = st.number_input("Initial Solution Mass (g)", format="%.2f")
+    with col2:
+        final_dish_mass = st.number_input("Final Dish Mass (g)", format="%.2f")
+        operator_initials = st.text_input("Operator Initials")
+        notes = st.text_area("Notes")
+        qc_date = st.date_input("QC Date")
+    # Calculation before submit
+    try:
+        dry_polymer_weight = final_dish_mass - dish_tare_mass
+        if initial_solution_mass > 0:
+            c_percent_solids = (dry_polymer_weight / initial_solution_mass) * 100
+        else:
+            c_percent_solids = 0.0
+    except:
+        c_percent_solids = 0.0
+    st.markdown("**C - % solids (auto-calculated):**")
+    st.code(f"{c_percent_solids:.2f} %", language="python")
+    submit_button = st.form_submit_button("🚀 Submit Solution QC Record")
+
+if submit_button:
+    try:
+        status = "pending" if is_pending({
+            "Test Date": test_date,
+            "Dish Tare Mass (g)": dish_tare_mass,
+            "Initial Solution Mass (g)": initial_solution_mass,
+            "Final Dish Mass (g)": final_dish_mass,
+            "Operator Initials": operator_initials,
+            "QC Date": qc_date
+        }) else "completed"
+        qc_sheet.append_row([
+            qc_id, solution_id_fk, str(test_date), dish_tare_mass,
+            initial_solution_mass, final_dish_mass, operator_initials,
+            notes, str(qc_date), c_percent_solids, status
+        ])
+        st.success("✅ Solution QC record successfully saved!")
+        st.experimental_rerun()
+    except Exception as e:
+        st.error(f"❌ Error saving data: {e}")
+
+# -------- VIEW QC DATA FOR A PARTICULAR SOLUTION ---------
+st.divider()
+st.subheader("🔎 View All QC Records for a Solution")
+selected_qc_solution = st.selectbox("Show all QC records for Solution ID", [""] + existing_solution_ids)
+if selected_qc_solution:
+    filtered_qc = qc_df[qc_df["Solution ID (FK)"] == selected_qc_solution]
+    if not filtered_qc.empty:
+        st.dataframe(filtered_qc)
+    else:
+        st.info("No QC records for this solution.")
+
+# ----------- DISPLAY WEEKLY QC DATA -----------
+st.divider()
 st.subheader("📅 Solution QC Records - Last 7 Days")
 try:
-    df = qc_df.copy()
-    df["QC Date"] = pd.to_datetime(df["QC Date"], errors='coerce')
-    last_week_df = df[df["QC Date"] >= (datetime.now() - timedelta(days=7))]
-    if not last_week_df.empty:
-        st.dataframe(last_week_df)
+    if not qc_df.empty:
+        qc_df["QC Date"] = pd.to_datetime(qc_df["QC Date"], errors='coerce')
+        last_week_df = qc_df[qc_df["QC Date"] >= (datetime.now() - timedelta(days=7))]
+        if not last_week_df.empty:
+            st.dataframe(last_week_df)
+        else:
+            st.info("No QC data entered in the last 7 days.")
     else:
-        st.info("No QC data entered in the last 7 days.")
+        st.info("No QC data found yet.")
 except Exception as e:
     st.error(f"❌ Error loading weekly data: {e}")
