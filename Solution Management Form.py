@@ -18,7 +18,7 @@ PREP_HEADERS = [
 COMBINED_HEADERS = [
     "Combined Solution ID", "Solution ID A", "Solution ID B",
     "Solution Mass A", "Solution Mass B", "Combined Solution Conc",
-    "Combined Date", "Initials", "Notes"
+    "Date", "Initials", "Notes"
 ]
 
 @st.cache_resource(ttl=600)
@@ -61,20 +61,26 @@ def cached_get_all_records(sheet_key, tab_name):
     return worksheet.get_all_records()
 
 def get_last_id_from_records(records, id_prefix):
-    # Records may be dicts or strings; supports both.
+    """Return next auto-increment ID (e.g., COMB-014). Records can be string or dict or None."""
     ids = set()
     for r in records:
         val = None
         if isinstance(r, dict):
-            for k, v in r.items():
-                vstr = str(v).strip()
-                if vstr.startswith(id_prefix):
-                    val = vstr
+            # Try all relevant keys
+            for k in r:
+                if id_prefix in k and str(r[k]).startswith(id_prefix):
+                    val = str(r[k])
                     break
+            else:
+                # Or just check all values if keys not match
+                for v in r.values():
+                    if str(v).startswith(id_prefix):
+                        val = str(v)
+                        break
         elif isinstance(r, str):
             if r.startswith(id_prefix):
-                val = r.strip()
-        if val:
+                val = r
+        if val and val.startswith(id_prefix):
             ids.add(val)
     nums = []
     for rid in ids:
@@ -118,7 +124,7 @@ st.markdown("""
 
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
-    st.experimental_rerun()  # <--- this is fine, it's in button callback!
+    st.experimental_rerun()
 
 st.markdown("# 📄 Solution Management Form")
 st.markdown("Manage creation, preparation, and combination of solutions.")
@@ -127,6 +133,11 @@ spreadsheet = connect_google_sheet(SPREADSHEET_KEY)
 solution_sheet = get_or_create_tab(spreadsheet, "Solution ID Tbl", SOLUTION_ID_HEADERS)
 prep_sheet = get_or_create_tab(spreadsheet, "Solution Prep Data Tbl", PREP_HEADERS)
 combined_sheet = get_or_create_tab(spreadsheet, "Combined Solution Tbl", COMBINED_HEADERS)
+
+# -- Always load records FRESH, at this point --
+solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
+prep_records = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
+combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 
 def label_status(row):
     label = row["Solution ID"]
@@ -141,7 +152,6 @@ def label_status(row):
 # ------------------- Solution ID Management -------------------
 st.markdown("## 🔹 Solution ID Entry / Management")
 with st.expander("View / Update Existing Solution IDs", expanded=False):
-    solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
     df = pd.DataFrame(solution_records)
     if not df.empty:
         df["Label"] = df.apply(label_status, axis=1)
@@ -161,7 +171,6 @@ with st.expander("View / Update Existing Solution IDs", expanded=False):
         st.info("No Solution IDs yet.")
 
 with st.form("solution_id_form", clear_on_submit=True):
-    solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
     next_id = get_last_id_from_records([rec["Solution ID"] for rec in solution_records], "SOL")
     st.markdown(f"**Auto-generated Solution ID:** `{next_id}` _(will only be saved on submit)_")
     solution_type = st.selectbox("Type", ['New', 'Combined'])
@@ -174,7 +183,7 @@ with st.form("solution_id_form", clear_on_submit=True):
         st.success(":white_check_mark: Solution ID saved! Dropdowns and tables updated.")
         st.experimental_rerun()
 
-# Reload after update
+# Reload records after possible rerun
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
 df_solution = pd.DataFrame(solution_records)
 df_solution["Label"] = df_solution.apply(label_status, axis=1)
@@ -199,8 +208,9 @@ else:
     st.success("✅ No prep entry found. Enter new details.")
 
 with st.form("prep_data_form"):
-    all_prep_ids = [r.get("Solution Prep ID") for r in prep_entries if r.get("Solution Prep ID")]
-    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(all_prep_ids, "PREP"))
+    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(
+        [r.get("Solution Prep ID") for r in prep_entries if r.get("Solution Prep ID")], "PREP"
+    ))
     st.markdown(f"**Prep ID:** `{prep_id}`")
     desired_conc = st.number_input(
         "Desired Solution Concentration (%)",
@@ -273,7 +283,7 @@ with st.form("prep_data_form"):
         except Exception as e:
             st.error(f":x: Error while writing to Google Sheet: {e}")
 
-# Reload after update
+# Reload after rerun for freshest data
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
 df_solution = pd.DataFrame(solution_records)
 df_solution["Label"] = df_solution.apply(label_status, axis=1)
@@ -284,10 +294,11 @@ combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tb
 st.markdown("---")
 st.markdown("## 🔹 Combined Solution Entry")
 
-# Always reload combined_records before ID generation!
+# -- Always refresh combined records before generating next ID --
 combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
-combined_id = get_last_id_from_records([rec.get("Combined Solution ID", "") for rec in combined_records], "COMB")
+combined_id = get_last_id_from_records(combined_records, "COMB")
 
+# Option dropdown logic as before...
 valid_comb_df = df_solution[
     (df_solution["Type"] == "Combined") &
     ((df_solution['Consumed'] == "No") | (df_solution['Expired'] == "No"))
@@ -330,15 +341,16 @@ with st.form("combined_solution_form", clear_on_submit=True):
     combined_initials = st.text_input("Initials")
     combined_notes = st.text_area("Notes")
     submit_combined = st.form_submit_button("Submit Combined Solution Details")
-    if submit_combined:
-        combined_sheet.append_row([
-            combined_id, sid_a, sid_b,
-            solution_mass_a, solution_mass_b, combined_conc,
-            str(combined_date), combined_initials, combined_notes
-        ])
-        st.cache_data.clear()
-        st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
-        st.experimental_rerun()
+if submit_combined:
+    combined_sheet.append_row([
+        combined_id, sid_a, sid_b,
+        solution_mass_a, solution_mass_b, combined_conc,
+        str(combined_date), combined_initials, combined_notes
+    ])
+    st.cache_data.clear()
+    st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
+    st.experimental_rerun()
+
 
 # ----------- 7-Day Recent Data Section (all activities) -----------
 st.markdown("---")
@@ -375,3 +387,7 @@ if recent_combined:
     st.dataframe(pd.DataFrame(recent_combined))
 else:
     st.write("No Combined Solution records in the last 7 days.")
+
+
+
+
