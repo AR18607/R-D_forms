@@ -83,6 +83,7 @@ def parse_date(date_val):
                 continue
     return None
 
+# --- Prevent accidental form submit on Enter ---
 st.markdown("""
     <script>
         document.addEventListener("keydown", function(e) {
@@ -95,7 +96,7 @@ st.markdown("""
 
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
-    st.success("Data refreshed. New Solution IDs now appear in dropdowns.")
+    st.success("Data refreshed. All dropdowns and tables are now updated.")
 
 st.markdown("# 📄 Solution Management Form")
 st.markdown("Manage creation, preparation, and combination of solutions.")
@@ -119,6 +120,7 @@ def label_status(row):
         label += " (combined)"
     return label
 
+# ------------------- Solution ID Management -------------------
 st.markdown("## 🔹 Solution ID Entry / Management")
 with st.expander("View / Update Existing Solution IDs", expanded=False):
     df = pd.DataFrame(solution_records)
@@ -152,12 +154,14 @@ solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
 df_solution = pd.DataFrame(solution_records)
 df_solution["Label"] = df_solution.apply(label_status, axis=1)
 
+# ------------------- Solution Prep Data Entry -------------------
 st.markdown("---")
 st.markdown("## 🔹 Solution Prep Data Entry")
+
+# Only exclude if both Expired and Consumed are Yes
 prep_valid_df = df_solution[
-    (df_solution['Type'] == "New") &
-    (df_solution['Expired'] == "No") &
-    (df_solution['Consumed'] == "No")
+    ((df_solution['Type'].isin(["New", "Combined"])) &
+     ~((df_solution['Expired'] == "Yes") & (df_solution['Consumed'] == "Yes")))
 ]
 prep_valid_ids = prep_valid_df["Solution ID"].tolist()
 selected_solution_fk = st.selectbox("Select Solution ID", options=prep_valid_ids, key="prep_solution_fk")
@@ -208,8 +212,15 @@ with st.form("prep_data_form"):
     prep_date = st.date_input("Prep Date", value=prep_date)
     initials = st.text_input("Initials", value=safe_get(existing_record, "Initials", ""))
     notes = st.text_area("Notes", value=safe_get(existing_record, "Notes", ""))
+    # --- LIVE Calculation: C-Solution Concentration ---
     c_sol_conc_value = polymer_weight / (solvent_weight + polymer_weight) if (solvent_weight + polymer_weight) > 0 else 0.0
-    st.markdown(f"**C-Solution Concentration (polymer/(solvent+polymer)):** `{c_sol_conc_value:.4f}`")
+    st.markdown(
+        f"""<div style="padding:8px 0 8px 0">
+        <b>C-Solution Concentration <span style="font-weight:normal;">(polymer/(solvent+polymer)):</span></b>
+        <code style="background:#E9F7EF; color:#247146; font-size:18px;">{c_sol_conc_value:.4f}</code>
+        </div>""",
+        unsafe_allow_html=True,
+    )
     c_label_jar = st.text_input("C-Label for jar", value=safe_get(existing_record, "C-Label for jar", ""))
     submit_prep = st.form_submit_button("Submit/Update Prep Details")
 if submit_prep:
@@ -235,6 +246,8 @@ if submit_prep:
         st.error(f":x: Error while writing to Google Sheet: {e}")
 
 # (Continue with Combined Solution Entry and 7-day tables as before...)
+
+# If you want those sections again, let me know, I'll paste them fully!
 
 # --------------------- COMBINED SOLUTION ENTRY -----------------------
 st.markdown("---")
