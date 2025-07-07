@@ -294,16 +294,11 @@ combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tb
 st.markdown("---")
 st.markdown("## 🔹 Combined Solution Entry")
 
-combined_ids_df = df_solution[
-    (df_solution["Type"] == "Combined") &
-    ((df_solution["Consumed"] == "No") | (df_solution["Expired"] == "No"))
-]
-combined_ids = combined_ids_df["Solution ID"].tolist()
-if combined_ids:
-    st.info("Active Combined Solution IDs: " + ", ".join(combined_ids))
-else:
-    st.info("No active Combined Solution IDs.")
+# -- Always refresh combined records before generating next ID --
+combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
+combined_id = get_last_id_from_records(combined_records, "COMB")
 
+# Option dropdown logic as before...
 valid_comb_df = df_solution[
     (df_solution["Type"] == "Combined") &
     ((df_solution['Consumed'] == "No") | (df_solution['Expired'] == "No"))
@@ -323,11 +318,8 @@ for sid in valid_comb_ids:
     solution_options.append(label)
     sid_to_conc[sid] = c
 
-existing_comb_ids = [rec.get("Combined Solution ID") for rec in combined_records if rec.get("Combined Solution ID") and str(rec.get("Combined Solution ID")).startswith("COMB-")]
-combined_id = get_last_id_from_records(existing_comb_ids, "COMB")
-
+st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
 with st.form("combined_solution_form", clear_on_submit=True):
-    st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
     st.markdown("**Select Solution IDs to Combine:**")
     solution_id_a = st.selectbox("Solution ID A", options=solution_options, key="comb_a")
     solution_id_b = st.selectbox(
@@ -349,15 +341,16 @@ with st.form("combined_solution_form", clear_on_submit=True):
     combined_initials = st.text_input("Initials")
     combined_notes = st.text_area("Notes")
     submit_combined = st.form_submit_button("Submit Combined Solution Details")
-    if submit_combined:
-        combined_sheet.append_row([
-            combined_id, sid_a, sid_b,
-            solution_mass_a, solution_mass_b, combined_conc,
-            str(combined_date), combined_initials, combined_notes
-        ])
-        st.cache_data.clear()
-        st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
-        st.experimental_rerun()
+if submit_combined:
+    combined_sheet.append_row([
+        combined_id, sid_a, sid_b,
+        solution_mass_a, solution_mass_b, combined_conc,
+        str(combined_date), combined_initials, combined_notes
+    ])
+    st.cache_data.clear()
+    st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
+    st.experimental_rerun()
+
 
 # ----------- 7-Day Recent Data Section (all activities) -----------
 st.markdown("---")
