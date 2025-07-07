@@ -60,16 +60,36 @@ def cached_get_all_records(sheet_key, tab_name):
     worksheet = retry_open_worksheet(spreadsheet, tab_name)
     return worksheet.get_all_records()
 
-# ----------- NEW FIXED get_last_id_from_records -----------
 def get_last_id_from_records(records, id_prefix):
-    # Accepts a set or list of strings or dicts with the ID key, returns next available
-    clean_ids = set(str(r).strip() for r in records if str(r).strip())
+    """Return next auto-increment ID (e.g., COMB-014). Records can be string or dict or None."""
+    ids = set()
+    for r in records:
+        val = None
+        if isinstance(r, dict):
+            # Try all relevant keys
+            for k in r:
+                if id_prefix in k and str(r[k]).startswith(id_prefix):
+                    val = str(r[k])
+                    break
+            else:
+                # Or just check all values if keys not match
+                for v in r.values():
+                    if str(v).startswith(id_prefix):
+                        val = str(v)
+                        break
+        elif isinstance(r, str):
+            if r.startswith(id_prefix):
+                val = r
+        if val and val.startswith(id_prefix):
+            ids.add(val)
     nums = []
-    for rid in clean_ids:
-        if rid.startswith(id_prefix):
-            parts = rid.split('-')
-            if len(parts) > 1 and parts[-1].isdigit():
-                nums.append(int(parts[-1]))
+    for rid in ids:
+        try:
+            suffix = rid.split('-')[-1]
+            if suffix.isdigit():
+                nums.append(int(suffix))
+        except Exception:
+            continue
     next_num = max(nums) + 1 if nums else 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
 
@@ -157,11 +177,11 @@ with st.form("solution_id_form", clear_on_submit=True):
     expired = st.selectbox("Expired?", ['No', 'Yes'], index=0)
     consumed = st.selectbox("Consumed?", ['No', 'Yes'], index=0)
     submit_solution = st.form_submit_button("Submit New Solution ID")
-if submit_solution:
-    solution_sheet.append_row([next_id, solution_type, expired, consumed, ""])
-    st.cache_data.clear()
-    st.success(":white_check_mark: Solution ID saved! Dropdowns and tables updated.")
-    st.experimental_rerun()
+    if submit_solution:
+        solution_sheet.append_row([next_id, solution_type, expired, consumed, ""])
+        st.cache_data.clear()
+        st.success(":white_check_mark: Solution ID saved! Dropdowns and tables updated.")
+        st.experimental_rerun()
 
 # Reload records after possible rerun
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
@@ -188,13 +208,9 @@ else:
     st.success("✅ No prep entry found. Enter new details.")
 
 with st.form("prep_data_form"):
-    # ---- CORRECT PREP ID LOGIC (ALWAYS UNIQUE) ----
-    if existing_record:
-        prep_id = safe_get(existing_record, "Solution Prep ID")
-    else:
-        valid_prep_ids = set(str(r.get("Solution Prep ID", "")).strip() for r in prep_entries if str(r.get("Solution Prep ID", "")).strip())
-        prep_id = get_last_id_from_records(valid_prep_ids, "PREP")
-
+    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(
+        [r.get("Solution Prep ID") for r in prep_entries if r.get("Solution Prep ID")], "PREP"
+    ))
     st.markdown(f"**Prep ID:** `{prep_id}`")
     desired_conc = st.number_input(
         "Desired Solution Concentration (%)",
@@ -241,31 +257,31 @@ with st.form("prep_data_form"):
     )
     c_label_jar = st.text_input("C-Label for jar", value=safe_get(existing_record, "C-Label for jar", ""))
     submit_prep = st.form_submit_button("Submit/Update Prep Details")
-if submit_prep:
-    data = [
-        prep_id, selected_solution_fk, desired_conc, final_volume, solvent, solvent_lot,
-        solvent_weight, polymer, polymer_conc, polymer_lot, polymer_weight, str(prep_date),
-        initials, notes, c_sol_conc_value, c_label_jar
-    ]
-    try:
-        if existing_record:
-            cell = prep_sheet.find(selected_solution_fk)
-            row_number = cell.row
-            prep_sheet.update(f"A{row_number}:P{row_number}", [data])
-            sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
-            solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
-            st.cache_data.clear()
-            st.success(":white_check_mark: Prep Data updated! Dropdowns and tables updated.")
-            st.experimental_rerun()
-        else:
-            prep_sheet.append_row(data)
-            sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
-            solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
-            st.cache_data.clear()
-            st.success(":white_check_mark: Prep Data submitted! Dropdowns and tables updated.")
-            st.experimental_rerun()
-    except Exception as e:
-        st.error(f":x: Error while writing to Google Sheet: {e}")
+    if submit_prep:
+        data = [
+            prep_id, selected_solution_fk, desired_conc, final_volume, solvent, solvent_lot,
+            solvent_weight, polymer, polymer_conc, polymer_lot, polymer_weight, str(prep_date),
+            initials, notes, c_sol_conc_value, c_label_jar
+        ]
+        try:
+            if existing_record:
+                cell = prep_sheet.find(selected_solution_fk)
+                row_number = cell.row
+                prep_sheet.update(f"A{row_number}:P{row_number}", [data])
+                sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
+                solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
+                st.cache_data.clear()
+                st.success(":white_check_mark: Prep Data updated! Dropdowns and tables updated.")
+                st.experimental_rerun()
+            else:
+                prep_sheet.append_row(data)
+                sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
+                solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
+                st.cache_data.clear()
+                st.success(":white_check_mark: Prep Data submitted! Dropdowns and tables updated.")
+                st.experimental_rerun()
+        except Exception as e:
+            st.error(f":x: Error while writing to Google Sheet: {e}")
 
 # Reload after rerun for freshest data
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
@@ -307,8 +323,7 @@ for sid in valid_comb_ids:
     solution_options.append(label)
     sid_to_conc[sid] = c
 
-# ---- CORRECT COMBINED SOLUTION ID LOGIC (ALWAYS UNIQUE) ----
-existing_comb_ids = set(str(rec.get("Combined Solution ID", "")).strip() for rec in combined_records if str(rec.get("Combined Solution ID", "")).strip())
+existing_comb_ids = [rec.get("Combined Solution ID") for rec in combined_records if rec.get("Combined Solution ID") and str(rec.get("Combined Solution ID")).startswith("COMB-")]
 combined_id = get_last_id_from_records(existing_comb_ids, "COMB")
 
 with st.form("combined_solution_form", clear_on_submit=True):
@@ -334,15 +349,15 @@ with st.form("combined_solution_form", clear_on_submit=True):
     combined_initials = st.text_input("Initials")
     combined_notes = st.text_area("Notes")
     submit_combined = st.form_submit_button("Submit Combined Solution Details")
-if submit_combined:
-    combined_sheet.append_row([
-        combined_id, sid_a, sid_b,
-        solution_mass_a, solution_mass_b, combined_conc,
-        str(combined_date), combined_initials, combined_notes
-    ])
-    st.cache_data.clear()
-    st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
-    st.experimental_rerun()
+    if submit_combined:
+        combined_sheet.append_row([
+            combined_id, sid_a, sid_b,
+            solution_mass_a, solution_mass_b, combined_conc,
+            str(combined_date), combined_initials, combined_notes
+        ])
+        st.cache_data.clear()
+        st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
+        st.experimental_rerun()
 
 # ----------- 7-Day Recent Data Section (all activities) -----------
 st.markdown("---")
