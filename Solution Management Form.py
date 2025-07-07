@@ -95,6 +95,11 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
+# --- Add a Refresh Button at the top ---
+if st.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.success("Data refreshed. Please rerun or reload the page if you still see old data.")
+
 st.markdown("# 📄 Solution Management Form")
 st.markdown("Manage creation, preparation, and combination of solutions.")
 
@@ -134,8 +139,7 @@ with st.expander("View / Update Existing Solution IDs", expanded=False):
             if st.button("Update Status", key="update_status_btn"):
                 row_number = idx+2
                 solution_sheet.update(f"C{row_number}:D{row_number}", [[expired_val, consumed_val]])
-                st.success("Status updated!")
-                st.experimental_rerun()
+                st.success("Status updated! Please click the '🔄 Refresh Data' button at the top to update dropdowns.")
     else:
         st.info("No Solution IDs yet.")
 
@@ -149,8 +153,7 @@ with st.form("solution_id_form", clear_on_submit=True):
     submit_solution = st.form_submit_button("Submit New Solution ID")
 if submit_solution:
     solution_sheet.append_row([next_id, solution_type, expired, consumed, ""])
-    st.success(":white_check_mark: Solution ID saved!")
-    st.experimental_rerun()
+    st.success(":white_check_mark: Solution ID saved! Please click the '🔄 Refresh Data' button at the top to update dropdowns.")
 
 # --- Reload for up-to-date dropdowns
 solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
@@ -235,14 +238,12 @@ if submit_prep:
             prep_sheet.update(f"A{row_number}:P{row_number}", [data])
             sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
             solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
-            st.success(":white_check_mark: Prep Data updated!")
-            st.experimental_rerun()
+            st.success(":white_check_mark: Prep Data updated! Please click the '🔄 Refresh Data' button at the top to update dropdowns.")
         else:
             prep_sheet.append_row(data)
             sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
             solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
-            st.success(":white_check_mark: Prep Data submitted!")
-            st.experimental_rerun()
+            st.success(":white_check_mark: Prep Data submitted! Please click the '🔄 Refresh Data' button at the top to update dropdowns.")
     except Exception as e:
         st.error(f":x: Error while writing to Google Sheet: {e}")
 
@@ -302,8 +303,7 @@ if submit_combined:
         solution_mass_a, solution_mass_b, combined_conc,
         str(combined_date), combined_initials, combined_notes
     ])
-    st.success(":white_check_mark: Combined Solution saved!")
-    st.experimental_rerun()
+    st.success(":white_check_mark: Combined Solution saved! Please click the '🔄 Refresh Data' button at the top to update dropdowns.")
 
 # ================== 7-Day Filtered Data Display ===================
 st.markdown("---")
