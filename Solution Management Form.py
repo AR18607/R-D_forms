@@ -18,7 +18,7 @@ PREP_HEADERS = [
 COMBINED_HEADERS = [
     "Combined Solution ID", "Solution ID A", "Solution ID B",
     "Solution Mass A", "Solution Mass B", "Combined Solution Conc",
-    "Date", "Initials", "Notes"
+    "Combined Date", "Initials", "Notes"
 ]
 
 @st.cache_resource(ttl=600)
@@ -61,26 +61,20 @@ def cached_get_all_records(sheet_key, tab_name):
     return worksheet.get_all_records()
 
 def get_last_id_from_records(records, id_prefix):
-    """Return next auto-increment ID (e.g., COMB-014). Records can be string or dict or None."""
+    # Records may be dicts or strings; supports both.
     ids = set()
     for r in records:
         val = None
         if isinstance(r, dict):
-            # Try all relevant keys
-            for k in r:
-                if id_prefix in k and str(r[k]).startswith(id_prefix):
-                    val = str(r[k])
+            for k, v in r.items():
+                vstr = str(v).strip()
+                if vstr.startswith(id_prefix):
+                    val = vstr
                     break
-            else:
-                # Or just check all values if keys not match
-                for v in r.values():
-                    if str(v).startswith(id_prefix):
-                        val = str(v)
-                        break
         elif isinstance(r, str):
             if r.startswith(id_prefix):
-                val = r
-        if val and val.startswith(id_prefix):
+                val = r.strip()
+        if val:
             ids.add(val)
     nums = []
     for rid in ids:
@@ -208,9 +202,9 @@ else:
     st.success("✅ No prep entry found. Enter new details.")
 
 with st.form("prep_data_form"):
-    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(
-        [r.get("Solution Prep ID") for r in prep_entries if r.get("Solution Prep ID")], "PREP"
-    ))
+    # Find latest PREP id in all records for PREP, not just current Solution ID
+    all_prep_ids = [r.get("Solution Prep ID") for r in prep_entries if r.get("Solution Prep ID")]
+    prep_id = safe_get(existing_record, "Solution Prep ID", get_last_id_from_records(all_prep_ids, "PREP"))
     st.markdown(f"**Prep ID:** `{prep_id}`")
     desired_conc = st.number_input(
         "Desired Solution Concentration (%)",
@@ -298,7 +292,6 @@ st.markdown("## 🔹 Combined Solution Entry")
 combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 combined_id = get_last_id_from_records(combined_records, "COMB")
 
-# Option dropdown logic as before...
 valid_comb_df = df_solution[
     (df_solution["Type"] == "Combined") &
     ((df_solution['Consumed'] == "No") | (df_solution['Expired'] == "No"))
@@ -341,16 +334,15 @@ with st.form("combined_solution_form", clear_on_submit=True):
     combined_initials = st.text_input("Initials")
     combined_notes = st.text_area("Notes")
     submit_combined = st.form_submit_button("Submit Combined Solution Details")
-if submit_combined:
-    combined_sheet.append_row([
-        combined_id, sid_a, sid_b,
-        solution_mass_a, solution_mass_b, combined_conc,
-        str(combined_date), combined_initials, combined_notes
-    ])
-    st.cache_data.clear()
-    st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
-    st.experimental_rerun()
-
+    if submit_combined:
+        combined_sheet.append_row([
+            combined_id, sid_a, sid_b,
+            solution_mass_a, solution_mass_b, combined_conc,
+            str(combined_date), combined_initials, combined_notes
+        ])
+        st.cache_data.clear()
+        st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
+        st.experimental_rerun()
 
 # ----------- 7-Day Recent Data Section (all activities) -----------
 st.markdown("---")
