@@ -236,6 +236,78 @@ if submit_prep:
 
 # (Continue with Combined Solution Entry and 7-day tables as before...)
 
+# --------------------- COMBINED SOLUTION ENTRY -----------------------
+st.markdown("---")
+st.markdown("## 🔹 Combined Solution Entry")
+
+# 1. Show only combined solution IDs which are (Consumed=No OR Expired=No)
+combined_ids_df = df_solution[
+    (df_solution["Type"] == "Combined") &
+    ((df_solution["Consumed"] == "No") | (df_solution["Expired"] == "No"))
+]
+combined_ids = combined_ids_df["Solution ID"].tolist()
+if combined_ids:
+    st.info("Active Combined Solution IDs: " + ", ".join(combined_ids))
+else:
+    st.info("No active Combined Solution IDs.")
+
+# 2. For Solution A/B, show only combined type and not consumed/expired
+valid_comb_df = df_solution[
+    (df_solution["Type"] == "Combined") &
+    ((df_solution['Consumed'] == "No") | (df_solution['Expired'] == "No"))
+]
+valid_comb_ids = valid_comb_df["Solution ID"].unique().tolist()
+
+# Build dropdown options (unique and valid)
+solution_options = []
+sid_to_conc = {}
+for sid in valid_comb_ids:
+    # Find the most recent C-solution conc from combined/prep tables if available
+    # We'll use the solution sheet column if populated, else 0.0
+    row = df_solution[df_solution["Solution ID"] == sid]
+    if not row.empty:
+        c = float(row.iloc[0].get("C-Solution Conc", 0) or 0)
+    else:
+        c = 0.0
+    label = f"{sid} | Conc: {c:.4f}"
+    solution_options.append(label)
+    sid_to_conc[sid] = c
+
+combined_id = get_last_id_from_records(
+    [rec.get("Combined Solution ID", "") for rec in combined_records if rec.get("Combined Solution ID")], "COMB"
+)
+with st.form("combined_solution_form", clear_on_submit=True):
+    st.markdown(f"**Auto-generated Combined ID:** `{combined_id}`")
+    st.markdown("**Select Solution IDs to Combine:**")
+    # Solution ID A
+    solution_id_a = st.selectbox("Solution ID A", options=solution_options, key="comb_a")
+    # Solution ID B (must be different from A)
+    solution_id_b = st.selectbox(
+        "Solution ID B",
+        options=[x for x in solution_options if x != solution_id_a],
+        key="comb_b"
+    )
+    solution_mass_a = st.number_input("Solution Mass A (g)", format="%.2f")
+    solution_mass_b = st.number_input("Solution Mass B (g)", format="%.2f")
+    sid_a = solution_id_a.split(" |")[0]
+    sid_b = solution_id_b.split(" |")[0]
+    conc_a = sid_to_conc.get(sid_a, 0)
+    conc_b = sid_to_conc.get(sid_b, 0)
+    combined_mass = solution_mass_a + solution_mass_b
+    combined_conc = ((solution_mass_a * conc_a) + (solution_mass_b * conc_b)) / combined_mass if combined_mass > 0 else 0.0
+    st.markdown(f"**Combined Solution Concentration (calculated):** `{combined_conc:.4f}`")
+    st.warning("Check with your team: Do you ever combine different concentrations? This form will auto-calculate if you do.")
+    combined_date = st.date_input("Combined Date")
+    combined_initials = st.text_input("Initials")
+    combined_notes = st.text_area("Notes")
+    submit_combined = st.form_submit_button("Submit Combined Solution Details")
+if submit_combined:
+    combined_sheet.append_row([
+        combined_id, sid_a, sid_b,
+        solution_mass_a, solution_mass_b, combined_conc,
+        str(combined_date), combined_initials, combined_notes
+    ])
+    st.success(":white_check_mark: Combined Solution saved! Please click the '🔄 Refresh Data' button at the top to update dropdowns.")
 
 # ------------- 7-Day Recent Data Section (all activities) --------------
 st.markdown("---")
