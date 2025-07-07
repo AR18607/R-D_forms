@@ -8,6 +8,7 @@ import json
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_SOLUTION_QC = "Solution QC Tbl"
 
+# -- Prevent accidental form submit on Enter --
 st.markdown("""
     <script>
         document.addEventListener("keydown", function(e) {
@@ -53,9 +54,13 @@ def get_last_qc_id(worksheet):
     next_num = max(nums) + 1
     return f"QC-{str(next_num).zfill(3)}"
 
-# --------- MAIN ---------
-st.title("🔬 Solution QC Form (Linked to Solution Management Form)")
+def is_pending(row):
+    required = ["Test Date", "Dish Tare Mass (g)", "Initial Solution Mass (g)",
+                "Final Dish Mass (g)", "Operator Initials", "QC Date"]
+    return any(not row.get(col) for col in required)
 
+# -- MAIN --
+st.title("🔬 Solution QC Form (Linked to Solution Management Form)")
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 qc_sheet = get_or_create_tab(spreadsheet, TAB_SOLUTION_QC, [
     "Solution QC ID", "Solution ID (FK)", "Test Date", "Dish Tare Mass (g)",
@@ -66,11 +71,6 @@ existing_solution_ids = get_existing_solution_ids(spreadsheet)
 qc_records = qc_sheet.get_all_records()
 qc_df = pd.DataFrame(qc_records)
 
-def is_pending(row):
-    required = ["Test Date", "Dish Tare Mass (g)", "Initial Solution Mass (g)",
-                "Final Dish Mass (g)", "Operator Initials", "QC Date"]
-    return any(not row.get(col) for col in required)
-
 if not qc_df.empty:
     qc_df["Status"] = qc_df.apply(lambda r: "pending" if is_pending(r) else "completed", axis=1)
 else:
@@ -80,7 +80,7 @@ else:
 st.subheader("📝 Review/Edit Pending QC Records")
 pending_qc_df = qc_df[qc_df["Status"] == "pending"]
 if not pending_qc_df.empty:
-    st.info("The following QC records are pending completion:")
+    st.info("The following QC records are pending completion (only these can be edited):")
     st.dataframe(pending_qc_df)
     edit_qc_id = st.selectbox("Select Pending QC ID to edit", [""] + pending_qc_df["Solution QC ID"].tolist())
     if edit_qc_id:
@@ -113,19 +113,16 @@ if not pending_qc_df.empty:
             try:
                 idx = qc_df[qc_df["Solution QC ID"] == edit_qc_id].index[0]
                 rownum = idx + 2
-                qc_sheet.update(f"C{rownum}:J{rownum}", [[
-                    str(test_date), dish_tare_mass, initial_solution_mass, final_dish_mass,
-                    operator_initials, notes, str(qc_date), c_percent_solids
-                ]])
-                status = "pending" if is_pending({
-                    "Test Date": test_date,
-                    "Dish Tare Mass (g)": dish_tare_mass,
-                    "Initial Solution Mass (g)": initial_solution_mass,
-                    "Final Dish Mass (g)": final_dish_mass,
-                    "Operator Initials": operator_initials,
-                    "QC Date": qc_date
-                }) else "completed"
-                qc_sheet.update(f"K{rownum}", [[status]])
+                status = "pending" if any([
+                    not test_date, not dish_tare_mass, not initial_solution_mass,
+                    not final_dish_mass, not operator_initials, not qc_date
+                ]) else "completed"
+                # Prepare flat list of strings/numbers
+                update_list = [
+                    str(test_date), float(dish_tare_mass), float(initial_solution_mass), float(final_dish_mass),
+                    operator_initials, notes, str(qc_date), float(c_percent_solids), status
+                ]
+                qc_sheet.update(f"C{rownum}:K{rownum}", [update_list])
                 st.success("✅ QC record updated!")
                 st.experimental_rerun()
             except Exception as e:
@@ -151,7 +148,6 @@ with st.form("solution_qc_form", clear_on_submit=False):
         operator_initials = st.text_input("Operator Initials")
         notes = st.text_area("Notes")
         qc_date = st.date_input("QC Date")
-    # Calculation before submit
     try:
         dry_polymer_weight = final_dish_mass - dish_tare_mass
         if initial_solution_mass > 0:
@@ -166,18 +162,14 @@ with st.form("solution_qc_form", clear_on_submit=False):
 
 if submit_button:
     try:
-        status = "pending" if is_pending({
-            "Test Date": test_date,
-            "Dish Tare Mass (g)": dish_tare_mass,
-            "Initial Solution Mass (g)": initial_solution_mass,
-            "Final Dish Mass (g)": final_dish_mass,
-            "Operator Initials": operator_initials,
-            "QC Date": qc_date
-        }) else "completed"
+        status = "pending" if any([
+            not test_date, not dish_tare_mass, not initial_solution_mass,
+            not final_dish_mass, not operator_initials, not qc_date
+        ]) else "completed"
         qc_sheet.append_row([
-            qc_id, solution_id_fk, str(test_date), dish_tare_mass,
-            initial_solution_mass, final_dish_mass, operator_initials,
-            notes, str(qc_date), c_percent_solids, status
+            qc_id, solution_id_fk, str(test_date), float(dish_tare_mass),
+            float(initial_solution_mass), float(final_dish_mass), operator_initials,
+            notes, str(qc_date), float(c_percent_solids), status
         ])
         st.success("✅ Solution QC record successfully saved!")
         st.experimental_rerun()
