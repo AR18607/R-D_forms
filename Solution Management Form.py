@@ -61,9 +61,20 @@ def cached_get_all_records(sheet_key, tab_name):
     return worksheet.get_all_records()
 
 def get_last_id_from_records(records, id_prefix):
-    nums = [int(str(r).split('-')[-1]) for r in records if str(r).startswith(id_prefix) and str(r).split('-')[-1].isdigit()]
+    # Deduplicate and clean up
+    clean_ids = set(str(r).strip() for r in records if str(r).strip())
+    nums = []
+    for rid in clean_ids:
+        if rid.startswith(id_prefix):
+            try:
+                suffix = rid.split('-')[-1]
+                if suffix.isdigit():
+                    nums.append(int(suffix))
+            except Exception:
+                continue
     next_num = max(nums) + 1 if nums else 1
     return f"{id_prefix}-{str(next_num).zfill(3)}"
+
 
 def safe_get(record, key, default=""):
     if isinstance(record, dict):
