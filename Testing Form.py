@@ -63,11 +63,11 @@ if not module_df.empty:
 else:
     module_options = {}
 
-# -------- FORM --------
 st.title("🧪 Pressure Test Form (Multi-Measurement)")
 st.markdown("Enter multiple pressure & flow readings for a module. Pass/fail and review available.")
 
-with st.form("pressure_test_form", clear_on_submit=True):
+# --- 1. Select Module, Operator, etc
+with st.form("pressure_form_meta", clear_on_submit=False):
     st.markdown("**Select Module**")
     module_display = st.selectbox(
         "Module",
@@ -81,47 +81,62 @@ with st.form("pressure_test_form", clear_on_submit=True):
     operator_initials = st.text_input("Operator Initials")
     notes = st.text_area("Notes")
     test_date = st.date_input("Date", datetime.today())
+    submit_meta = st.form_submit_button("Continue to Measurements")
 
-    # Live update of number of measurements
-    num = st.number_input("Number of Measurements", min_value=1, max_value=20, value=2, step=1, key="num_meas")
+# --- 2. Number of Measurements (Live, outside any form!)
+if "num_measurements" not in st.session_state:
+    st.session_state["num_measurements"] = 2
+if "measures" not in st.session_state:
+    st.session_state["measures"] = []
 
-    # Calculate what PKs will be used before saving
-    next_pt_id = get_last_id(pressure_test_sheet, "PT")
-    next_num = int(next_pt_id.split('-')[-1])
-    pk_list = [f"PT-{str(next_num + i).zfill(3)}" for i in range(num)]
-    st.info(f"Primary Key(s) that will be used: {', '.join(pk_list)}")
+num = st.number_input("Number of Measurements", min_value=1, max_value=20, value=st.session_state["num_measurements"], step=1, key="num_meas_live")
 
-    st.markdown("#### ➕ Enter Measurement Data")
-    measurement_data = []
-    for i in range(num):
-        cols = st.columns(2)
-        with cols[0]:
-            fp = st.number_input(f"Feed Pressure [{i+1}]", key=f"fp_{i}")
-        with cols[1]:
-            pf = st.number_input(f"Permeate Flow [{i+1}]", key=f"pf_{i}")
-        measurement_data.append({"Feed Pressure": fp, "Permeate Flow": pf})
+# Sync num_measurements
+if num != st.session_state["num_measurements"]:
+    st.session_state["num_measurements"] = num
+    # Reset measures to proper length
+    st.session_state["measures"] = [{"Feed Pressure": 0.0, "Permeate Flow": 0.0} for _ in range(num)]
 
-    # Live table
-    df_measure = pd.DataFrame(measurement_data)
-    st.markdown("#### 📋 All Entered Measurements")
-    if not df_measure.empty:
-        st.dataframe(df_measure)
-        st.line_chart(df_measure, x="Feed Pressure", y="Permeate Flow", use_container_width=True)
+# Ensure correct length
+while len(st.session_state["measures"]) < num:
+    st.session_state["measures"].append({"Feed Pressure": 0.0, "Permeate Flow": 0.0})
+while len(st.session_state["measures"]) > num:
+    st.session_state["measures"].pop()
 
-    passed = st.selectbox("Passed?", ["Select...", "Yes", "No"], index=0,
-        help="Select Pass/Fail after reviewing measurements and chart."
-    )
-    submit = st.form_submit_button("💾 Submit All (with above Pass/Fail)")
+st.markdown("#### ➕ Enter Measurement Data")
+for i in range(num):
+    cols = st.columns(2)
+    with cols[0]:
+        st.session_state["measures"][i]["Feed Pressure"] = st.number_input(
+            f"Feed Pressure [{i+1}]", value=st.session_state["measures"][i]["Feed Pressure"], key=f"fp_{i}_live"
+        )
+    with cols[1]:
+        st.session_state["measures"][i]["Permeate Flow"] = st.number_input(
+            f"Permeate Flow [{i+1}]", value=st.session_state["measures"][i]["Permeate Flow"], key=f"pf_{i}_live"
+        )
 
-# -------- SAVE --------
-if submit:
+df_measure = pd.DataFrame(st.session_state["measures"])
+st.markdown("#### 📋 All Entered Measurements")
+if not df_measure.empty:
+    st.dataframe(df_measure)
+    st.line_chart(df_measure, x="Feed Pressure", y="Permeate Flow", use_container_width=True)
+
+# --- Show which PKs will be used
+next_pt_id = get_last_id(pressure_test_sheet, "PT")
+next_num = int(next_pt_id.split('-')[-1])
+pk_list = [f"PT-{str(next_num + i).zfill(3)}" for i in range(num)]
+st.info(f"Primary Key(s) that will be used: {', '.join(pk_list)}")
+
+# --- 3. Pass/Fail & Submit
+passed = st.selectbox("Passed?", ["Select...", "Yes", "No"], index=0)
+if st.button("💾 Submit All (with above Pass/Fail)"):
     if passed == "Select...":
         st.warning("Please select Pass/Fail before submitting.")
     elif not module_id:
         st.warning("Please select a Module.")
     else:
         try:
-            for i, row_data in enumerate(measurement_data):
+            for i, row_data in enumerate(st.session_state["measures"]):
                 test_time = datetime.now().time()
                 test_dt = datetime.combine(test_date, test_time)
                 pt_id = pk_list[i]
