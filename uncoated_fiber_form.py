@@ -307,17 +307,22 @@ def filter_last_7_days(records, date_key):
             filtered_records.append(record)
     return filtered_records
 
-def safe_preview(title, records, date_col):
+def safe_preview(title, records, date_col, headers):
     st.markdown(f"### {title}")
     filtered = filter_last_7_days(records, date_col)
     if filtered:
-        st.dataframe(pd.DataFrame(filtered))
+        st.dataframe(pd.DataFrame(filtered, columns=headers))
     else:
+        # Show empty dataframe with all headers
+        empty_df = pd.DataFrame(columns=headers)
+        st.dataframe(empty_df)
         st.write("No records in the last 7 days.")
 
+
 # Preview all tables
-safe_preview("🧪 Uncoated Fiber Data", ufd_sheet.get_all_records(), "Date_Time")
-safe_preview("🧵 UnCoatedSpool ID", usid_sheet.get_all_records(), "Date_Time")
-safe_preview("📦 As Received UncoatedSpools", ar_sheet.get_all_records(), "Date_Time")
-safe_preview("🔗 Combined Spools", cs_sheet.get_all_records(), "Date_Time")
-safe_preview("🧪 Ardent Fiber Dimension QC", qc_sheet.get_all_records(), "Date_Time")
+safe_preview("🧪 Uncoated Fiber Data", ufd_sheet.get_all_records(), "Date_Time", ufd_headers)
+safe_preview("🧵 UnCoatedSpool ID", usid_sheet.get_all_records(), "Date_Time", ["UncoatedSpool_ID", "Date_Time"])
+safe_preview("📦 As Received UncoatedSpools", ar_sheet.get_all_records(), "Date_Time", ar_headers)
+safe_preview("🔗 Combined Spools", cs_sheet.get_all_records(), "Date_Time", cs_headers)
+safe_preview("🧪 Ardent Fiber Dimension QC", qc_sheet.get_all_records(), "Date_Time", qc_headers)
+
