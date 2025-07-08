@@ -31,8 +31,8 @@ data_rows = raw_data[1:]
 syensqo_df = pd.DataFrame(data_rows, columns=headers)
 
 # Clean fiber number column
-syensqo_df["fiber"] = syensqo_df["fiber"].astype(str).str.strip()
-syensqo_df = syensqo_df[syensqo_df["fiber"] != ""]
+syensqo_df["Fiber"] = syensqo_df["Fiber"].astype(str).str.strip()
+syensqo_df = syensqo_df[syensqo_df["Fiber"] != ""]
 
 # Clean tracking number column
 syensqo_df["Tracking number UPS"] = syensqo_df["Tracking number UPS"].astype(str).str.strip()
