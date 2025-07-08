@@ -85,41 +85,29 @@ fiber_source = st.selectbox("Fiber Source", ["EMI", "Syensqo", "Polymem", "Other
 if 'batch_list' not in st.session_state:
     st.session_state.batch_list = []
 
-def safe_value(row, col, default=0.0):
-    try:
-        v = row.get(col, "")
-        if isinstance(v, str) and v.strip() == "":
-            return default
-        return float(str(v).replace(",", "").replace("%", "").strip())
-    except:
-        return default
-
 if fiber_source == "Syensqo":
-    # 1. Use the Fiber column as unique key
-    syensqo_fibers = sorted(syensqo_df["fiber"].dropna().unique())
+    syensqo_fibers = sorted(syensqo_df["Fiber"].dropna().unique())
     selected_fiber = st.selectbox("Select Fiber", syensqo_fibers)
-    matching_rows = syensqo_df[syensqo_df["fiber"] == selected_fiber]
-
+    matching_rows = syensqo_df[syensqo_df["Fiber"] == selected_fiber]
     if not matching_rows.empty:
         selected_row = matching_rows.iloc[0]
-        # Pre-fill based on selected row
+
         with st.form("syensqo_entry_form"):
-            batch_fiber_id = st.text_input("Batch Fiber ID (provided by vendor)", value=selected_row.get("fiber", ""))
+            batch_fiber_id = st.text_input("Batch Fiber ID (provided by vendor)", value=selected_row.get("Fiber", ""))
             spool_id = st.text_input("Spool ID")
-            supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_row.get("fiber", ""))
-            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=safe_value(selected_row, "ID"))
+            supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_row.get("Fiber", ""))
+            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=float(selected_row.get("ID", 0)))
             inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=0.0)
-            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=safe_value(selected_row, "OD"))
+            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=float(selected_row.get("OD", 0)))
             outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=0.0)
             reported_concentricity = st.number_input("Reported Concentricity (%)", value=0.0)
-            batch_length = st.number_input("Batch Length (m)", value=safe_value(selected_row, "Batch length (m)"))
+            batch_length = st.number_input("Batch Length (m)", value=float(selected_row.get("Batch length (m)", 0)))
             shipment_date_val = selected_row.get("Shipment date", "")
             try:
-                parsed_date = datetime.strptime(shipment_date_val, "%m/%d/%Y")
+                parsed_date = datetime.strptime(str(shipment_date_val), "%m/%d/%Y")
             except:
                 parsed_date = datetime.today()
             shipment_date = st.date_input("Shipment Date", value=parsed_date)
-
             average_t_od = st.number_input("Average t/OD", value=0.0)
             minimum_t_od = st.number_input("Minimum t/OD", value=0.0)
             min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=0.0)
@@ -132,14 +120,13 @@ if fiber_source == "Syensqo":
             blue_splices = st.number_input("Number of Blue Splices", value=0)
             notes = st.text_area("Notes")
             add_btn = st.form_submit_button("➕ Add to Batch List")
-
             if add_btn:
                 if batch_fiber_id and spool_id:
                     row_data = [
                         batch_fiber_id, spool_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
                         outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
-                        shipment_date.strftime("%Y-%m-%d"), selected_row.get("fiber", ""), "Syensqo", average_t_od,
-                        minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
+                        shipment_date.strftime("%Y-%m-%d"), selected_fiber, "Syensqo",
+                        average_t_od, minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
                         collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     ]
@@ -147,10 +134,9 @@ if fiber_source == "Syensqo":
                     st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
                 else:
                     st.warning("Please enter both Batch_Fiber_ID and Spool_ID before adding to the list.")
-
 else:
-    # Manual entry for all other fiber sources (EMI, Polymem, Other)
-    with st.form("other_fiber_form"):
+    # ALL FIELDS MANUAL ENTRY FOR OTHER VENDORS (EMI, Polymem, Other)
+    with st.form("other_vendor_entry_form"):
         batch_fiber_id = st.text_input("Batch Fiber ID (provided by vendor)")
         spool_id = st.text_input("Spool ID")
         supplier_batch_id = st.text_input("Supplier Batch ID")
@@ -161,7 +147,6 @@ else:
         reported_concentricity = st.number_input("Reported Concentricity (%)", value=0.0)
         batch_length = st.number_input("Batch Length (m)", value=0.0)
         shipment_date = st.date_input("Shipment Date", value=datetime.today())
-        tracking_number = st.text_input("Tracking Number")
         average_t_od = st.number_input("Average t/OD", value=0.0)
         minimum_t_od = st.number_input("Minimum t/OD", value=0.0)
         min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=0.0)
@@ -174,14 +159,13 @@ else:
         blue_splices = st.number_input("Number of Blue Splices", value=0)
         notes = st.text_area("Notes")
         add_btn = st.form_submit_button("➕ Add to Batch List")
-
         if add_btn:
             if batch_fiber_id and spool_id:
                 row_data = [
                     batch_fiber_id, spool_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
                     outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
-                    shipment_date.strftime("%Y-%m-%d"), tracking_number, fiber_source, average_t_od,
-                    minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
+                    shipment_date.strftime("%Y-%m-%d"), "", fiber_source,
+                    average_t_od, minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
                     collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 ]
@@ -189,6 +173,7 @@ else:
                 st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
             else:
                 st.warning("Please enter both Batch_Fiber_ID and Spool_ID before adding to the list.")
+
 
 if st.session_state.batch_list:
     st.markdown("### 📝 Batches to be Submitted:")
