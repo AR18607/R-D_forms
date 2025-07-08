@@ -4,7 +4,6 @@ import gspread
 import json
 from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
-import numpy as np
 
 # -------- CONFIG --------
 GOOGLE_SHEET_NAME = "R&D Data Form"
@@ -83,30 +82,35 @@ with st.form("pressure_test_form", clear_on_submit=True):
     notes = st.text_area("Notes")
     test_date = st.date_input("Date", datetime.today())
 
-    num = st.number_input("Number of Measurements", min_value=1, max_value=20, value=2, step=1)
+    # Live update of number of measurements
+    num = st.number_input("Number of Measurements", min_value=1, max_value=20, value=2, step=1, key="num_meas")
 
-    st.subheader("➕ Add Multiple Pressure Measurements")
-    pressure_data = []
+    # Calculate what PKs will be used before saving
+    next_pt_id = get_last_id(pressure_test_sheet, "PT")
+    next_num = int(next_pt_id.split('-')[-1])
+    pk_list = [f"PT-{str(next_num + i).zfill(3)}" for i in range(num)]
+    st.info(f"Primary Key(s) that will be used: {', '.join(pk_list)}")
+
+    st.markdown("#### ➕ Enter Measurement Data")
+    measurement_data = []
     for i in range(num):
         cols = st.columns(2)
         with cols[0]:
             fp = st.number_input(f"Feed Pressure [{i+1}]", key=f"fp_{i}")
         with cols[1]:
             pf = st.number_input(f"Permeate Flow [{i+1}]", key=f"pf_{i}")
-        pressure_data.append({"Feed Pressure": fp, "Permeate Flow": pf})
+        measurement_data.append({"Feed Pressure": fp, "Permeate Flow": pf})
 
-    # Show a preview plot of the measurements before saving
-    df_measure = pd.DataFrame(pressure_data)
-    st.markdown("#### 📈 Pressure vs Flow Preview")
+    # Live table
+    df_measure = pd.DataFrame(measurement_data)
+    st.markdown("#### 📋 All Entered Measurements")
     if not df_measure.empty:
         st.dataframe(df_measure)
         st.line_chart(df_measure, x="Feed Pressure", y="Permeate Flow", use_container_width=True)
 
-    # Pass/fail can be selected AFTER previewing data!
     passed = st.selectbox("Passed?", ["Select...", "Yes", "No"], index=0,
         help="Select Pass/Fail after reviewing measurements and chart."
     )
-
     submit = st.form_submit_button("💾 Submit All (with above Pass/Fail)")
 
 # -------- SAVE --------
@@ -117,10 +121,10 @@ if submit:
         st.warning("Please select a Module.")
     else:
         try:
-            for i, row_data in enumerate(pressure_data):
+            for i, row_data in enumerate(measurement_data):
                 test_time = datetime.now().time()
                 test_dt = datetime.combine(test_date, test_time)
-                pt_id = get_last_id(pressure_test_sheet, "PT")
+                pt_id = pk_list[i]
                 row = [
                     pt_id, module_id, module_type, module_display,
                     row_data["Feed Pressure"], row_data["Permeate Flow"], str(test_dt),
@@ -146,4 +150,3 @@ try:
         st.info("No records found yet.")
 except Exception as e:
     st.error(f"❌ Could not load last 7-day records: {e}")
-
