@@ -5,7 +5,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import json
 
-# --- CONFIG ---
 GOOGLE_SHEET_NAME = "R&D Data Form"
 TAB_SOLUTION_QC = "Solution QC Tbl"
 
@@ -15,7 +14,6 @@ QC_HEADERS = [
     "Notes", "QC Date", "C-Percent Solids", "Status"
 ]
 
-# --- Prevent accidental submit on Enter ---
 st.markdown("""
     <script>
         document.addEventListener("keydown", function(e) {
@@ -26,7 +24,6 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
-# --- Google Sheets Connection ---
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(
@@ -62,7 +59,6 @@ def get_last_qc_id(worksheet):
     next_num = max(nums) + 1
     return f"QC-{str(next_num).zfill(3)}"
 
-# --- Helper ---
 def disable_if_filled(val):
     return bool(val) and str(val).strip() not in ["", "None"]
 
@@ -77,7 +73,6 @@ def is_complete_qc_record(rec):
             return False
     return True
 
-# --- App Start ---
 st.title("🔬 Solution QC Form (Linked to Solution Management Form)")
 
 spreadsheet = connect_google_sheet(GOOGLE_SHEET_NAME)
@@ -116,11 +111,9 @@ with st.form("solution_qc_form", clear_on_submit=False):
 
     st.markdown(f"**Auto-generated QC ID:** `{qc_id}`")
 
-    # Get defaults, disable if already filled in record
     def fieldval(k, fallback=""):
         return selected_pending_qc.get(k, fallback) if edit_mode else fallback
 
-    # --- Fields with disable logic ---
     test_date = st.date_input("Test Date", value=pd.to_datetime(fieldval("Test Date")).date() if disable_if_filled(fieldval("Test Date")) else datetime.today().date(), disabled=edit_mode and disable_if_filled(fieldval("Test Date")))
     dish_tare_mass = st.number_input("Dish Tare Mass (g)", format="%.2f", value=float(fieldval("Dish Tare Mass (g)",0.0)), disabled=edit_mode and disable_if_filled(fieldval("Dish Tare Mass (g)")))
     initial_solution_mass = st.number_input("Initial Solution Mass (g)", format="%.2f", value=float(fieldval("Initial Solution Mass (g)",0.0)), disabled=edit_mode and disable_if_filled(fieldval("Initial Solution Mass (g)")))
@@ -129,7 +122,6 @@ with st.form("solution_qc_form", clear_on_submit=False):
     notes = st.text_area("Notes", value=fieldval("Notes",""))
     qc_date = st.date_input("QC Date", value=pd.to_datetime(fieldval("QC Date")).date() if disable_if_filled(fieldval("QC Date")) else datetime.today().date(), disabled=edit_mode and disable_if_filled(fieldval("QC Date")))
 
-    # --- Calculation (before submit) ---
     dry_polymer_weight = (final_dish_mass or 0) - (dish_tare_mass or 0)
     c_percent_solids = (dry_polymer_weight / (initial_solution_mass or 1)) * 100 if initial_solution_mass else 0.0
 
@@ -138,7 +130,6 @@ with st.form("solution_qc_form", clear_on_submit=False):
 
     st.divider()
 
-    # --- Detect what is being edited ---
     fields_edited = []
     if edit_mode:
         if not disable_if_filled(fieldval("Test Date")) and test_date:
@@ -157,12 +148,9 @@ with st.form("solution_qc_form", clear_on_submit=False):
     can_submit = True if not edit_mode else bool(fields_edited)
     submit_button = st.form_submit_button("💾 Save QC Record", disabled=not can_submit)
 
-# --- Save Logic ---
 if submit_button:
     try:
-        # Build row or update
         status = "Completed"
-        # For completion, all required fields must be filled!
         if edit_mode:
             rownum = None
             for i, rec in enumerate(qc_records):
@@ -185,19 +173,17 @@ if submit_button:
                     c_percent_solids if not disable_if_filled(fieldval("C-Percent Solids")) else fieldval("C-Percent Solids"),
                     status
                 ]
-                # Mark as pending if any required field is missing
                 req = updated_row[:9]
                 if "" in [str(x).strip() for x in req] or "None" in [str(x).strip() for x in req]:
                     status = "Pending"
                     updated_row[-1] = status
                     st.warning("Submitted but pending (incomplete). You can revisit and fill the rest later.")
 
-                qc_sheet.delete_row(rownum)
-                qc_sheet.insert_row(updated_row, rownum)
+                # UPDATE IN PLACE INSTEAD OF DELETE/INSERT
+                qc_sheet.update(f"A{rownum}:K{rownum}", [updated_row])
                 st.success("QC record updated successfully!")
                 st.rerun()
         else:
-            # New record: allow partial fill
             row = [
                 qc_id, solution_id_fk, str(test_date), dish_tare_mass,
                 initial_solution_mass, final_dish_mass, operator_initials,
@@ -214,14 +200,11 @@ if submit_button:
     except Exception as e:
         st.error(f"❌ Error saving/updating data: {e}")
 
-# --- Show All Data as Table, Mark Pending ---
 st.markdown("### 📝 Solution QC Records Table")
-
 try:
     qc_records = qc_sheet.get_all_records()
     if qc_records:
         df = pd.DataFrame(qc_records)
-        # Mark pending visually
         def pending_note(row):
             if row.get("Status","").lower() == "pending":
                 return "⏳ PENDING - revisit to complete"
@@ -234,15 +217,3 @@ try:
         st.info("No QC data found yet.")
 except Exception as e:
     st.error(f"❌ Error loading QC data: {e}")
-
-# ----------- Recent 7 Day Table -------------
-st.subheader("📅 Solution QC Records - Last 7 Days")
-if not df.empty:
-    df["QC Date"] = pd.to_datetime(df["QC Date"], errors='coerce')
-    last_week_df = df[df["QC Date"] >= (datetime.now() - timedelta(days=7))]
-    if not last_week_df.empty:
-        st.dataframe(last_week_df)
-    else:
-        st.info("No QC data entered in the last 7 days.")
-else:
-    st.info("No QC data found yet.")
