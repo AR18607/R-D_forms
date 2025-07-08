@@ -49,10 +49,11 @@ def get_last_id(sheet_name, prefix):
     next_num = max(nums) + 1 if nums else 1
     return f"{prefix}-{str(next_num).zfill(3)}"
 
+# Streamlit app
 st.title("🛠 Module Management Form")
 
 spreadsheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
-module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Label", "Notes"])
+module_sheet = get_or_create_tab(spreadsheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
 leak_sheet = get_or_create_tab(spreadsheet, TAB_LEAK, [
     "Leak Test ID", "Module ID", "Module Type", "End", "Leak Test Type", "Leak Location",
     "Repaired", "Operator Initials", "Notes", "Date/Time"
@@ -62,68 +63,29 @@ failure_sheet = get_or_create_tab(spreadsheet, TAB_FAILURES, [
     "Microscopy", "Microscopy Notes", "Failure Mode", "Operator Initials", "Date", "Label"
 ])
 
-# ----- Fetch data for dropdowns -----
-modules_df = pd.DataFrame(get_all_records(TAB_MODULE))
-failures_df = pd.DataFrame(get_all_records(TAB_FAILURES))
-
-modules_df.columns = [c.strip() for c in modules_df.columns]
-failures_df.columns = [c.strip() for c in failures_df.columns]
-
-# Ensure all expected columns exist even if df is empty
-EXPECTED_FAILURE_COLS = ["Module Failure ID", "Module ID", "Description of Failure", "Autopsy", "Autopsy Notes",
-                         "Microscopy", "Microscopy Notes", "Failure Mode", "Operator Initials", "Date", "Label"]
-for col in EXPECTED_FAILURE_COLS:
-    if col not in failures_df.columns:
-        failures_df[col] = ""
-
-EXPECTED_MODULE_COLS = ["Module ID", "Module Type", "Label", "Notes"]
-for col in EXPECTED_MODULE_COLS:
-    if col not in modules_df.columns:
-        modules_df[col] = ""
-
-# Create detailed module dropdown labels (ID/Type/Label)
-if not modules_df.empty:
-    module_dropdown_labels = modules_df.apply(
-        lambda row: f"{row['Module ID']} / {row['Module Type']} / {row.get('Label','')}",
-        axis=1
-    ).tolist()
+existing_modules_df = pd.DataFrame(get_all_records(TAB_MODULE))
+if not existing_modules_df.empty:
+    existing_modules_df.columns = [c.strip() for c in existing_modules_df.columns]
+    module_options = existing_modules_df[['Module ID', 'Module Type']].apply(lambda x: f"{x[0]} / {x[1]}", axis=1).tolist()
 else:
-    module_dropdown_labels = []
+    module_options = []
 
-# ----- MODULE ENTRY FORM -----
+# MODULE ENTRY FORM
 st.subheader("🔹 Module Entry")
 with st.form("module_entry_form", clear_on_submit=True):
     module_id = get_last_id(TAB_MODULE, "MOD")
     st.markdown(f"**Auto-generated Module ID:** `{module_id}`")
     module_type = st.selectbox("Module Type", ["Wound", "Mini"])
-    module_label = st.text_input("Label")
     module_notes = st.text_area("Notes")
-    submit_module = st.form_submit_button("🚀 Submit Module")
-    if submit_module:
-        module_sheet.append_row([module_id, module_type, module_label, module_notes])
+    if st.form_submit_button("🚀 Submit Module"):
+        module_sheet.append_row([module_id, module_type, module_notes])
         st.success(f"✅ Module {module_id} saved successfully!")
 
-# ----- MODULE FAILURE FORM -----
+# MODULE FAILURE FORM
 st.subheader("🔹 Module Failure Entry")
-# For unique Module IDs in Failure Entry
-used_module_ids = set(failures_df["Module ID"].tolist()) if not failures_df.empty else set()
-available_module_ids = [row for i, row in modules_df.iterrows() if row["Module ID"] not in used_module_ids]
-if available_module_ids:
-    failure_module_dropdown = [f"{row['Module ID']} / {row['Module Type']} / {row.get('Label','')}" for row in available_module_ids]
-else:
-    failure_module_dropdown = []
-
-# For selecting previous Labels & details
-existing_labels = modules_df["Label"].dropna().unique().tolist()
-st.markdown("**View previous Labels and details**")
-selected_label = st.selectbox("Select Label to view details", [""] + existing_labels)
-if selected_label:
-    selected_label_rows = modules_df[modules_df["Label"] == selected_label]
-    st.table(selected_label_rows)
-
 with st.form("failure_entry_form", clear_on_submit=True):
     failure_id = get_last_id(TAB_FAILURES, "FAIL")
-    failure_module_fk = st.selectbox("Module ID (unique, not already failed)", failure_module_dropdown)
+    failure_module_fk = st.selectbox("Module ID", module_options)
     description = st.text_area("Description of Failure")
     autopsy = st.selectbox("Autopsy Done?", ["Yes", "No"])
     autopsy_notes = st.text_area("Autopsy Notes")
@@ -132,9 +94,8 @@ with st.form("failure_entry_form", clear_on_submit=True):
     failure_mode = st.text_input("Failure Mode")
     operator_initials = st.text_input("Operator Initials")
     failure_date = st.date_input("Failure Date")
-    label = st.text_input("Label for Failure Record")
-    submit_failure = st.form_submit_button("🚨 Submit Failure Entry")
-    if submit_failure:
+    label = st.text_input("Label")
+    if st.form_submit_button("🚨 Submit Failure Entry"):
         mod_id = failure_module_fk.split(' /')[0]
         failure_sheet.append_row([
             failure_id, mod_id, description, autopsy, autopsy_notes,
@@ -143,7 +104,7 @@ with st.form("failure_entry_form", clear_on_submit=True):
         ])
         st.success(f"✅ Failure Entry {failure_id} saved successfully!")
 
-# ----- LEAK TEST FORM -----
+# LEAK TEST FORM
 st.subheader("🔹 Leak Test Entry")
 leak_id = get_last_id(TAB_LEAK, "LEAK")
 st.markdown(f"**Auto-generated Leak Test ID:** `{leak_id}`")
@@ -151,7 +112,7 @@ if "leak_points" not in st.session_state:
     st.session_state["leak_points"] = []
 
 with st.form("leak_entry_form"):
-    module_selection = st.selectbox("Module ID (with Type/Label)", module_dropdown_labels)
+    module_selection = st.selectbox("Module ID", module_options)
     leak_end = st.selectbox("End", ["Plug", "Nozzle"])
     leak_test_type = st.selectbox("Leak Test Type", ["Water", "N2"])
     operator_initials = st.text_input("Operator Initials")
@@ -169,9 +130,7 @@ if st.session_state.leak_points:
     st.markdown("### 📋 Pending Leak Points")
     st.dataframe(pd.DataFrame(st.session_state.leak_points))
     if st.button("💧 Submit All Leak Points"):
-        mod_id = module_selection.split(' /')[0]
-        mod_type = module_selection.split(' /')[1]
-        label = module_selection.split(' /')[2] if len(module_selection.split(' /')) > 2 else ""
+        mod_id, mod_type = module_selection.split(' /')
         date_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for point in st.session_state.leak_points:
             leak_sheet.append_row([leak_id, mod_id, mod_type, point["End"], leak_test_type,
@@ -180,7 +139,7 @@ if st.session_state.leak_points:
         st.success(f"✅ Leak points saved under Leak ID {leak_id}")
         st.session_state.leak_points = []
 
-# ----- 30-DAYS DATA REVIEW -----
+# 30-DAYS DATA REVIEW
 st.subheader("📅 Records (Last 30 Days)")
 for tab_name, date_col in [(TAB_MODULE, None), (TAB_LEAK, "Date/Time"), (TAB_FAILURES, "Date")]:
     try:
