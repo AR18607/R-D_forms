@@ -179,65 +179,55 @@ if st.session_state.batch_list:
         st.session_state.batch_list.clear()
 
 # The rest of your code for As Received, Combined Spools, QC, and Preview stays the same.
-# ------------------ As Received UnCoatedSpools Tbl ------------------ #
-st.header("As Received UnCoatedSpools Entry")
-
+# ========== As Received UnCoatedSpools Tbl ==========
 ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes", "Date_Time"]
 ar_sheet = get_or_create_worksheet(spreadsheet, "As Received UnCoatedSpools Tbl", ar_headers)
 
-# Fetch existing UncoatedSpool_IDs and Batch_Fiber_IDs for dropdowns
-usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID", "Date_Time"])
+st.header("Manual Entry: As Received UnCoatedSpools Table")
+with st.form("ar_entry_form_manual"):
+    received_spool_pk_manual = st.text_input("Received Spool PK (manual)")
+    uncoated_spool_id_ar_manual = st.text_input("UncoatedSpool ID (manual, AR)")
+    batch_fiber_id_ar_manual = st.text_input("Batch Fiber ID (manual, AR)")
+    notes_ar_manual = st.text_area("Notes (manual, AR)")
+    ar_date_manual = st.date_input("Date (manual, AR)", value=datetime.today(), key="ar_manual")
+    submit_ar_manual = st.form_submit_button("Add As Received Spool (Manual)")
+    if submit_ar_manual:
+        if received_spool_pk_manual and uncoated_spool_id_ar_manual and batch_fiber_id_ar_manual:
+            ar_sheet.append_row([
+                received_spool_pk_manual,
+                uncoated_spool_id_ar_manual,
+                batch_fiber_id_ar_manual,
+                notes_ar_manual,
+                ar_date_manual.strftime("%Y-%m-%d %H:%M:%S")
+            ])
+            st.success(f"Added As Received Spool PK {received_spool_pk_manual}")
+        else:
+            st.warning("Please fill all fields for As Received entry.")
 
-uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_all_records() if record.get("UncoatedSpool_ID")]
-batch_fiber_ids = [record["Batch_Fiber_ID"] for record in ufd_sheet.get_all_records() if record.get("Batch_Fiber_ID")]
-
-if uncoated_spool_ids and batch_fiber_ids:
-    with st.form("As Received UnCoatedSpools Form"):
-        selected_uncoated_spool_id = st.selectbox("UncoatedSpool ID", uncoated_spool_ids)
-        selected_batch_fiber_id = st.selectbox("Batch Fiber ID", batch_fiber_ids)
-        notes = st.text_area("Notes")
-
-        submitted = st.form_submit_button("Submit")
-        if submitted:
-            try:
-                received_spool_pk = get_next_id(ar_sheet, "Received_Spool_PK")
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                ar_sheet.append_row([received_spool_pk, selected_uncoated_spool_id, selected_batch_fiber_id, notes, timestamp])
-                st.success(f"As Received UnCoatedSpool with PK {received_spool_pk} submitted successfully!")
-            except Exception as e:
-                st.error(f"❌ Failed to submit: {e}")
-else:
-    st.warning("⚠️ Please ensure both UncoatedSpool IDs and Batch Fiber IDs are available before submitting.")
-
-# ------------------ Combined Spools Tbl ------------------ #
-st.header("Combined Spools Entry")
-
+# ========== Combined Spools Tbl ==========
 cs_headers = ["Combined_SpoolsPK", "UncoatedSpool_ID", "Received_Spool_PK", "Date_Time"]
 cs_sheet = get_or_create_worksheet(spreadsheet, "Combined Spools Tbl", cs_headers)
 
-# Fetch existing Received_Spool_PKs for dropdown
-received_spool_pks = [record["Received_Spool_PK"] for record in ar_sheet.get_all_records() if record.get("Received_Spool_PK")]
+st.header("Manual Entry: Combined Spools Table")
+with st.form("cs_entry_form_manual"):
+    combined_spools_pk_manual = st.text_input("Combined Spools PK (manual)")
+    uncoated_spool_id_cs_manual = st.text_input("UncoatedSpool ID (manual, Combined)")
+    received_spool_pk_cs_manual = st.text_input("Received Spool PK (manual, Combined)")
+    cs_date_manual = st.date_input("Date (manual, Combined)", value=datetime.today(), key="cs_manual")
+    submit_cs_manual = st.form_submit_button("Add Combined Spools (Manual)")
+    if submit_cs_manual:
+        if combined_spools_pk_manual and uncoated_spool_id_cs_manual and received_spool_pk_cs_manual:
+            cs_sheet.append_row([
+                combined_spools_pk_manual,
+                uncoated_spool_id_cs_manual,
+                received_spool_pk_cs_manual,
+                cs_date_manual.strftime("%Y-%m-%d %H:%M:%S")
+            ])
+            st.success(f"Added Combined Spools PK {combined_spools_pk_manual}")
+        else:
+            st.warning("Please fill all fields for Combined Spools entry.")
 
-if uncoated_spool_ids and received_spool_pks:
-    with st.form("Combined Spools Form"):
-        selected_uncoated_spool_id = st.selectbox("UncoatedSpool ID (for Combine)", uncoated_spool_ids)
-        selected_received_spool_pk = st.selectbox("Received Spool PK", received_spool_pks)
-
-        submitted = st.form_submit_button("Submit")
-        if submitted:
-            try:
-                combined_spools_pk = get_next_id(cs_sheet, "Combined_SpoolsPK")
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                cs_sheet.append_row([combined_spools_pk, selected_uncoated_spool_id, selected_received_spool_pk, timestamp])
-                st.success(f"Combined Spool with PK {combined_spools_pk} submitted successfully!")
-            except Exception as e:
-                st.error(f"❌ Failed to submit: {e}")
-else:
-    st.warning("⚠️ Please ensure both UncoatedSpool IDs and Received Spool PKs are available before submitting.")
-
-# ------------------ Ardent Fiber Dimension QC Tbl ------------------ #
-st.header("Ardent Fiber Dimension QC Entry")
-
+# ========== Ardent Fiber Dimension QC Tbl ==========
 qc_headers = [
     "Ardent_QC_ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "Ardent_QC_Inside_Diameter",
     "Ardent_QC_Outside_Diameter", "Measured_Concentricity", "Wall_Thickness",
@@ -245,37 +235,42 @@ qc_headers = [
 ]
 qc_sheet = get_or_create_worksheet(spreadsheet, "Ardent Fiber Dimension QC Tbl", qc_headers)
 
-# Only allow form if dropdowns are valid
-if batch_fiber_ids and uncoated_spool_ids:
-    with st.form("Ardent Fiber Dimension QC Form"):
-        selected_batch_fiber_id = st.selectbox("Batch Fiber ID (for QC)", batch_fiber_ids)
-        selected_uncoated_spool_id = st.selectbox("UncoatedSpool ID (for QC)", uncoated_spool_ids)
-        ardent_qc_inside_diameter = st.number_input("Ardent QC Inside Diameter (um)", min_value=0.0)
-        ardent_qc_outside_diameter = st.number_input("Ardent QC Outside Diameter (um)", min_value=0.0)
-        measured_concentricity = st.number_input("Measured Concentricity (%)", min_value=0.0)
-        wall_thickness = st.number_input("Wall Thickness (um)", min_value=0.0)
-        operator_initials = st.text_input("Operator Initials")
-        notes = st.text_area("Notes")
-        date_time = st.date_input("Date", value=datetime.today())
-        inside_circularity = st.number_input("Inside Circularity", min_value=0.0)
-        outside_circularity = st.number_input("Outside Circularity", min_value=0.0)
+st.header("Manual Entry: Ardent Fiber Dimension QC Table")
+with st.form("qc_entry_form_manual"):
+    ardent_qc_id_manual = st.text_input("Ardent QC ID (manual)")
+    batch_fiber_id_qc_manual = st.text_input("Batch Fiber ID (manual, QC)")
+    uncoated_spool_id_qc_manual = st.text_input("UncoatedSpool ID (manual, QC)")
+    ardent_qc_inside_diameter_manual = st.number_input("Ardent QC Inside Diameter (um) (manual)", min_value=0.0, key="qc_in_manual")
+    ardent_qc_outside_diameter_manual = st.number_input("Ardent QC Outside Diameter (um) (manual)", min_value=0.0, key="qc_out_manual")
+    measured_concentricity_manual = st.number_input("Measured Concentricity (%) (manual)", min_value=0.0, key="qc_conc_manual")
+    wall_thickness_manual = st.number_input("Wall Thickness (um) (manual)", min_value=0.0, key="qc_wall_manual")
+    operator_initials_manual = st.text_input("Operator Initials (manual, QC)")
+    notes_qc_manual = st.text_area("Notes (manual, QC)")
+    qc_date_manual = st.date_input("Date (manual, QC)", value=datetime.today(), key="qc_manual")
+    inside_circularity_manual = st.number_input("Inside Circularity (manual)", min_value=0.0, key="qc_ic_manual")
+    outside_circularity_manual = st.number_input("Outside Circularity (manual)", min_value=0.0, key="qc_oc_manual")
+    submit_qc_manual = st.form_submit_button("Add Ardent QC Entry (Manual)")
+    if submit_qc_manual:
+        if ardent_qc_id_manual and batch_fiber_id_qc_manual and uncoated_spool_id_qc_manual:
+            qc_sheet.append_row([
+                ardent_qc_id_manual,
+                batch_fiber_id_qc_manual,
+                uncoated_spool_id_qc_manual,
+                ardent_qc_inside_diameter_manual,
+                ardent_qc_outside_diameter_manual,
+                measured_concentricity_manual,
+                wall_thickness_manual,
+                operator_initials_manual,
+                notes_qc_manual,
+                qc_date_manual.strftime("%Y-%m-%d %H:%M:%S"),
+                inside_circularity_manual,
+                outside_circularity_manual
+            ])
+            st.success(f"Added Ardent QC Entry {ardent_qc_id_manual}")
+        else:
+            st.warning("Please fill all required QC fields.")
 
-        submitted = st.form_submit_button("Submit")
-        if submitted:
-            try:
-                ardent_qc_id = get_next_id(qc_sheet, "Ardent_QC_ID")
-                timestamp = date_time.strftime("%Y-%m-%d %H:%M:%S")
-                qc_sheet.append_row([
-                    ardent_qc_id, selected_batch_fiber_id, selected_uncoated_spool_id,
-                    ardent_qc_inside_diameter, ardent_qc_outside_diameter, measured_concentricity,
-                    wall_thickness, operator_initials, notes, timestamp,
-                    inside_circularity, outside_circularity
-                ])
-                st.success(f"Ardent Fiber QC Entry with ID {ardent_qc_id} submitted successfully!")
-            except Exception as e:
-                st.error(f"❌ Failed to submit QC entry: {e}")
-else:
-    st.warning("⚠️ Please ensure Batch Fiber IDs and UncoatedSpool IDs are populated before entering QC data.")
+
 
 # ------------------ 7-DAYS DATA PREVIEW FOR ALL TABLES ------------------
 st.markdown("## 📅 Last 7 Days Data Preview")
