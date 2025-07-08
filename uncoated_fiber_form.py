@@ -61,13 +61,6 @@ def parse_float(val):
     except:
         return 0.0
 
-def parse_int(val):
-    try:
-        val = str(val).replace(",", "").replace("%", "").strip()
-        return int(float(val))
-    except:
-        return 0
-
 # === UNCOATED FIBER FORM ===
 st.header("Uncoated Fiber Data Entry")
 ufd_headers = [
@@ -96,18 +89,19 @@ if fiber_source == "Syensqo":
             batch_fiber_id = st.text_input("Batch Fiber ID (provided by vendor)", value=selected_row.get("Fiber", ""))
             spool_id = st.text_input("Spool ID")
             supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_row.get("Fiber", ""))
-            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=float(selected_row.get("ID", 0)))
+            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=parse_float(selected_row.get("ID", 0)))
             inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=0.0)
-            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=float(selected_row.get("OD", 0)))
+            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=parse_float(selected_row.get("OD", 0)))
             outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=0.0)
             reported_concentricity = st.number_input("Reported Concentricity (%)", value=0.0)
-            batch_length = st.number_input("Batch Length (m)", value=float(selected_row.get("Batch length (m)", 0)))
+            batch_length = st.number_input("Batch Length (m)", value=parse_float(selected_row.get("Batch length (m)", 0)))
             shipment_date_val = selected_row.get("Shipment date", "")
             try:
                 parsed_date = datetime.strptime(str(shipment_date_val), "%m/%d/%Y")
             except:
                 parsed_date = datetime.today()
             shipment_date = st.date_input("Shipment Date", value=parsed_date)
+            tracking_number = st.text_input("Tracking Number", value=selected_row.get("Tracking number UPS", ""))
             average_t_od = st.number_input("Average t/OD", value=0.0)
             minimum_t_od = st.number_input("Minimum t/OD", value=0.0)
             min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=0.0)
@@ -125,7 +119,7 @@ if fiber_source == "Syensqo":
                     row_data = [
                         batch_fiber_id, spool_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
                         outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
-                        shipment_date.strftime("%Y-%m-%d"), selected_fiber, "Syensqo",
+                        shipment_date.strftime("%Y-%m-%d"), tracking_number, "Syensqo",
                         average_t_od, minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
                         collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -147,6 +141,7 @@ else:
         reported_concentricity = st.number_input("Reported Concentricity (%)", value=0.0)
         batch_length = st.number_input("Batch Length (m)", value=0.0)
         shipment_date = st.date_input("Shipment Date", value=datetime.today())
+        tracking_number = st.text_input("Tracking Number")
         average_t_od = st.number_input("Average t/OD", value=0.0)
         minimum_t_od = st.number_input("Minimum t/OD", value=0.0)
         min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=0.0)
@@ -164,7 +159,7 @@ else:
                 row_data = [
                     batch_fiber_id, spool_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
                     outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
-                    shipment_date.strftime("%Y-%m-%d"), "", fiber_source,
+                    shipment_date.strftime("%Y-%m-%d"), tracking_number, fiber_source,
                     average_t_od, minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
                     collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -174,7 +169,6 @@ else:
             else:
                 st.warning("Please enter both Batch_Fiber_ID and Spool_ID before adding to the list.")
 
-
 if st.session_state.batch_list:
     st.markdown("### 📝 Batches to be Submitted:")
     st.dataframe(pd.DataFrame(st.session_state.batch_list, columns=ufd_headers))
@@ -183,8 +177,6 @@ if st.session_state.batch_list:
             ufd_sheet.append_row(row, value_input_option="USER_ENTERED")
         st.success(f"✅ {len(st.session_state.batch_list)} batches submitted successfully.")
         st.session_state.batch_list.clear()
-
-
 
 # The rest of your code for As Received, Combined Spools, QC, and Preview stays the same.
 # ------------------ As Received UnCoatedSpools Tbl ------------------ #
@@ -307,22 +299,15 @@ def filter_last_7_days(records, date_key):
             filtered_records.append(record)
     return filtered_records
 
-def safe_preview(title, records, date_col, headers):
+def safe_preview(title, records, headers):
     st.markdown(f"### {title}")
-    filtered = filter_last_7_days(records, date_col)
-    if filtered:
-        st.dataframe(pd.DataFrame(filtered, columns=headers))
-    else:
-        # Show empty dataframe with all headers
-        empty_df = pd.DataFrame(columns=headers)
-        st.dataframe(empty_df)
-        st.write("No records in the last 7 days.")
+    df = pd.DataFrame(records, columns=headers)
+    st.dataframe(df)  # Always shows headers even if no rows
+    if df.empty:
+        st.markdown('<div style="color: #888; font-size: 16px;">No records in the last 7 days.</div>', unsafe_allow_html=True)
 
-
-# Preview all tables
-safe_preview("🧪 Uncoated Fiber Data", ufd_sheet.get_all_records(), "Date_Time", ufd_headers)
-safe_preview("🧵 UnCoatedSpool ID", usid_sheet.get_all_records(), "Date_Time", ["UncoatedSpool_ID", "Date_Time"])
-safe_preview("📦 As Received UncoatedSpools", ar_sheet.get_all_records(), "Date_Time", ar_headers)
-safe_preview("🔗 Combined Spools", cs_sheet.get_all_records(), "Date_Time", cs_headers)
-safe_preview("🧪 Ardent Fiber Dimension QC", qc_sheet.get_all_records(), "Date_Time", qc_headers)
-
+safe_preview("🧪 Uncoated Fiber Data", filter_last_7_days(ufd_sheet.get_all_records(), "Date_Time"), ufd_headers)
+safe_preview("🧵 UnCoatedSpool ID", filter_last_7_days(usid_sheet.get_all_records(), "Date_Time"), ["UncoatedSpool_ID", "Date_Time"])
+safe_preview("📦 As Received UncoatedSpools", filter_last_7_days(ar_sheet.get_all_records(), "Date_Time"), ar_headers)
+safe_preview("🔗 Combined Spools", filter_last_7_days(cs_sheet.get_all_records(), "Date_Time"), cs_headers)
+safe_preview("🧪 Ardent Fiber Dimension QC", filter_last_7_days(qc_sheet.get_all_records(), "Date_Time"), qc_headers)
