@@ -22,6 +22,7 @@ UFD_HEADERS = [
 ]
 
 # === LOAD SYENSQO SHEET ===
+# === LOAD SYENSQO SHEET ===
 try:
     syensqo_sheet = spreadsheet.worksheet("Syensqo")
 except Exception:
@@ -30,16 +31,17 @@ except Exception:
 syensqo_df = pd.DataFrame()
 if syensqo_sheet:
     syensqo_raw = syensqo_sheet.get_all_values()
-    if syensqo_raw:
-        syensqo_headers = [h.strip() for h in syensqo_raw[0]]
-        syensqo_data = syensqo_raw[1:]
+    if len(syensqo_raw) > 2:
+        syensqo_headers = [h.strip() for h in syensqo_raw[1]]  # 2nd row is header
+        syensqo_data = syensqo_raw[2:]  # Data starts from 3rd row
         syensqo_df = pd.DataFrame(syensqo_data, columns=syensqo_headers)
         syensqo_df = syensqo_df.loc[~(syensqo_df == '').all(axis=1)]
-
-        # === DEBUG OUTPUT: Print real column names and a sample row ===
         st.write("DEBUG: Syensqo column headers:", list(syensqo_df.columns))
         if not syensqo_df.empty:
             st.write("DEBUG: First data row dict:", syensqo_df.iloc[0].to_dict())
+    else:
+        syensqo_df = pd.DataFrame()
+
 
 def safe_float(val):
     try:
