@@ -12,7 +12,7 @@ client = gspread.authorize(creds)
 sheet_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
 spreadsheet = client.open_by_url(sheet_url)
 
-# === HEADERS (MUST MATCH YOUR GOOGLE SHEET EXACTLY) ===
+# === HEADERS ===
 UFD_HEADERS = [
     "Batch_Fiber_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
     "Outside_Diameter_Avg", "Outside_Diameter_StDev", "Reported_Concentricity", "Batch_Length",
@@ -35,25 +35,33 @@ if syensqo_sheet:
         syensqo_data = syensqo_raw[1:]
         syensqo_df = pd.DataFrame(syensqo_data, columns=syensqo_headers)
         syensqo_df = syensqo_df.loc[~(syensqo_df == '').all(axis=1)]
-        # Fix for duplicate SD column if present:
+        # Add SD.1 column for ID if not present
         if "SD" in syensqo_df.columns and "SD.1" not in syensqo_df.columns:
-            # Duplicate SD for mapping both
             syensqo_df["SD.1"] = syensqo_df["SD"]
 
-def parse_float(val):
+def safe_float(val):
     try:
-        return float(str(val).replace(",", "").replace("%", "").strip())
+        # If "no kink" or blank, return 0
+        val = str(val).strip().replace(",", "")
+        if val.lower() == "no kink" or val == "":
+            return 0.0
+        return float(val)
     except Exception:
         return 0.0
 
-def parse_int(val):
+def safe_int(val):
     try:
-        return int(float(str(val).replace(",", "").replace("%", "").strip()))
+        val = str(val).strip().replace(",", "")
+        if val == "":
+            return 0
+        return int(float(val))
     except Exception:
         return 0
 
+def safe_text(val):
+    return str(val).strip() if val is not None else ""
+
 def parse_date(val):
-    # Accepts both European and US dates
     for fmt in ("%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d"):
         try:
             return datetime.strptime(str(val).strip(), fmt).date()
@@ -81,67 +89,66 @@ form_values = {h: "" for h in UFD_HEADERS}
 form_values["Fiber_Source"] = fiber_source
 form_values["Supplier_Batch_ID"] = st.text_input("Supplier batch ID", key="Supplier_Batch_ID")
 
-# --- If SYENSQO: Offer select box for Batch Fiber ID, then auto-fill if available ---
 if fiber_source == "Syensqo" and not syensqo_df.empty:
     syensqo_fiber_ids = sorted(syensqo_df["Fiber"].dropna().unique())
     selected_fiber = st.selectbox("Batch Fiber ID (from Syensqo sheet)", syensqo_fiber_ids, key="Batch_Fiber_ID")
     syensqo_row = syensqo_df[syensqo_df["Fiber"] == selected_fiber].iloc[0]
 
-    # --- Mapping: all fields are editable and filled from Syensqo if available ---
-    form_values["Batch_Fiber_ID"] = selected_fiber
+    # --- All mapping fields with robust header match and type conversion ---
+    form_values["Batch_Fiber_ID"] = safe_text(syensqo_row.get("Fiber", ""))
     form_values["Inside_Diameter_Avg"] = st.number_input(
-        "Inside Diameter (um) avg", value=parse_float(syensqo_row.get("ID", 0)), key="Inside_Diameter_Avg"
+        "Inside Diameter (um) avg", value=safe_float(syensqo_row.get("ID", 0)), key="Inside_Diameter_Avg"
     )
     form_values["Inside_Diameter_StDev"] = st.number_input(
-        "Inside Diameter (um) StDev", value=parse_float(syensqo_row.get("SD.1", 0)), key="Inside_Diameter_StDev"
+        "Inside Diameter (um) StDev", value=safe_float(syensqo_row.get("SD.1", syensqo_row.get("SD", 0))), key="Inside_Diameter_StDev"
     )
     form_values["Outside_Diameter_Avg"] = st.number_input(
-        "Outside Diameter (um) Avg", value=parse_float(syensqo_row.get("OD", 0)), key="Outside_Diameter_Avg"
+        "Outside Diameter (um) Avg", value=safe_float(syensqo_row.get("OD", 0)), key="Outside_Diameter_Avg"
     )
     form_values["Outside_Diameter_StDev"] = st.number_input(
-        "Outside Diameter (um) StDev", value=parse_float(syensqo_row.get("SD", 0)), key="Outside_Diameter_StDev"
+        "Outside Diameter (um) StDev", value=safe_float(syensqo_row.get("SD", 0)), key="Outside_Diameter_StDev"
     )
     form_values["Reported_Concentricity"] = st.number_input(
-        "Reported Concentricity (%)", value=parse_float(syensqo_row.get("Concentricity (%)", 0)), key="Reported_Concentricity"
+        "Reported Concentricity (%)", value=safe_float(syensqo_row.get("Concentricity (%)", 0)), key="Reported_Concentricity"
     )
     form_values["Batch_Length"] = st.number_input(
-        "Batch Length (m)", value=parse_float(syensqo_row.get("Batch length (m)", 0)), key="Batch_Length"
+        "Batch Length (m)", value=safe_float(syensqo_row.get("Batch length (m)", 0)), key="Batch_Length"
     )
     form_values["Shipment_Date"] = st.date_input(
         "Shipment Date", value=parse_date(syensqo_row.get("Shipment date", "")), key="Shipment_Date"
     )
     form_values["Tracking_Number"] = st.text_input(
-        "Tracking number", value=str(syensqo_row.get("Tracking number UPS", "")), key="Tracking_Number"
+        "Tracking number", value=safe_text(syensqo_row.get("Tracking number UPS", "")), key="Tracking_Number"
     )
     form_values["Average_t_OD"] = st.number_input(
-        "Average t/OD", value=parse_float(syensqo_row.get("Thickness/OD", 0)), key="Average_t_OD"
+        "Average t/OD", value=safe_float(syensqo_row.get("Thickness/OD", 0)), key="Average_t_OD"
     )
     form_values["Minimum_t_OD"] = st.number_input(
-        "Minimum t/OD", value=parse_float(syensqo_row.get("minimum thickness/OD", 0)), key="Minimum_t_OD"
+        "Minimum t/OD", value=safe_float(syensqo_row.get("minimum thickness/OD", 0)), key="Minimum_t_OD"
     )
     form_values["Minimum_Wall_Thickness"] = st.number_input(
-        "Minimum wall thickness (um)", value=parse_float(syensqo_row.get("Thickness (µm)", 0)), key="Minimum_Wall_Thickness"
+        "Minimum wall thickness (um)", value=safe_float(syensqo_row.get("Thickness (µm)", 0)), key="Minimum_Wall_Thickness"
     )
     form_values["Average_Wall_Thickness"] = st.number_input(
         "Average wall thickness (um)", value=0.0, key="Average_Wall_Thickness"
     )
     form_values["N2_Permeance"] = st.number_input(
-        "N2 permeance (GPU)", value=parse_float(syensqo_row.get("GPU (N2)", 0)), key="N2_Permeance"
+        "N2 permeance (GPU)", value=safe_float(syensqo_row.get("GPU (N2)", 0)), key="N2_Permeance"
     )
     form_values["Collapse_Pressure"] = st.number_input(
-        "Collapse Pressure (psi)", value=parse_float(syensqo_row.get("Collapse pressure (PSI)", 0)), key="Collapse_Pressure"
+        "Collapse Pressure (psi)", value=safe_float(syensqo_row.get("Collapse pressure (PSI)", 0)), key="Collapse_Pressure"
     )
     form_values["Kink_Test_2_95"] = st.number_input(
-        "Kink test 2.95 (mm)", value=parse_float(syensqo_row.get("Kink test 2.95 inches (mm)", 0)), key="Kink_Test_2_95"
+        "Kink test 2.95 (mm)", value=safe_float(syensqo_row.get("Kink test 2.95 inches (mm)", "")), key="Kink_Test_2_95"
     )
     form_values["Kink_Test_2_36"] = st.number_input(
-        "Kink test 2.36 (mm)", value=parse_float(syensqo_row.get("Kink test 2.36 inches (mm)", 0)), key="Kink_Test_2_36"
+        "Kink test 2.36 (mm)", value=safe_float(syensqo_row.get("Kink test 2.36 inches (mm)", "")), key="Kink_Test_2_36"
     )
     form_values["Order_On_Bobbin"] = st.number_input(
-        "Order on bobbin (outside = 1)", value=parse_int(syensqo_row.get("Bobbin number", 1)), key="Order_On_Bobbin"
+        "Order on bobbin (outside = 1)", value=safe_int(syensqo_row.get("Bobbin number", 1)), key="Order_On_Bobbin"
     )
     form_values["Number_Of_Blue_Splices"] = st.number_input(
-        "Number of blue splices", value=parse_int(syensqo_row.get("Blue Splicings number", 0)), key="Number_Of_Blue_Splices"
+        "Number of blue splices", value=safe_int(syensqo_row.get("Blue Splicings number", 0)), key="Number_Of_Blue_Splices"
     )
     form_values["Notes"] = st.text_area("Notes", value="", key="Notes")
 
@@ -175,7 +182,6 @@ if st.button("Submit Fiber Data"):
         st.warning("Batch Fiber ID is required.")
     else:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Prepare row for Google Sheets
         row = [
             form_values["Batch_Fiber_ID"],
             form_values["Supplier_Batch_ID"],
