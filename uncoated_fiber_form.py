@@ -35,13 +35,14 @@ if syensqo_sheet:
         syensqo_data = syensqo_raw[1:]
         syensqo_df = pd.DataFrame(syensqo_data, columns=syensqo_headers)
         syensqo_df = syensqo_df.loc[~(syensqo_df == '').all(axis=1)]
-        # Add SD.1 column for ID if not present
-        if "SD" in syensqo_df.columns and "SD.1" not in syensqo_df.columns:
-            syensqo_df["SD.1"] = syensqo_df["SD"]
+
+        # === DEBUG OUTPUT: Print real column names and a sample row ===
+        st.write("DEBUG: Syensqo column headers:", list(syensqo_df.columns))
+        if not syensqo_df.empty:
+            st.write("DEBUG: First data row dict:", syensqo_df.iloc[0].to_dict())
 
 def safe_float(val):
     try:
-        # If "no kink" or blank, return 0
         val = str(val).strip().replace(",", "")
         if val.lower() == "no kink" or val == "":
             return 0.0
@@ -94,13 +95,13 @@ if fiber_source == "Syensqo" and not syensqo_df.empty:
     selected_fiber = st.selectbox("Batch Fiber ID (from Syensqo sheet)", syensqo_fiber_ids, key="Batch_Fiber_ID")
     syensqo_row = syensqo_df[syensqo_df["Fiber"] == selected_fiber].iloc[0]
 
-    # --- All mapping fields with robust header match and type conversion ---
+    # === COPY-PASTE the column names you see from the debug printout below! ===
     form_values["Batch_Fiber_ID"] = safe_text(syensqo_row.get("Fiber", ""))
     form_values["Inside_Diameter_Avg"] = st.number_input(
         "Inside Diameter (um) avg", value=safe_float(syensqo_row.get("ID", 0)), key="Inside_Diameter_Avg"
     )
     form_values["Inside_Diameter_StDev"] = st.number_input(
-        "Inside Diameter (um) StDev", value=safe_float(syensqo_row.get("SD.1", syensqo_row.get("SD", 0))), key="Inside_Diameter_StDev"
+        "Inside Diameter (um) StDev", value=safe_float(syensqo_row.get("SD", 0)), key="Inside_Diameter_StDev"
     )
     form_values["Outside_Diameter_Avg"] = st.number_input(
         "Outside Diameter (um) Avg", value=safe_float(syensqo_row.get("OD", 0)), key="Outside_Diameter_Avg"
