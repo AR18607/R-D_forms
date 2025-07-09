@@ -1,328 +1,206 @@
-import json
+# --- IMPORTS ---
 import streamlit as st
+import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, timedelta
-import pandas as pd
+import json
+from datetime import datetime
 
-# === DISABLE ENTER KEY FORM SUBMIT ===
-st.markdown("""
-    <script>
-        document.addEventListener("keydown", function(e) {
-            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
-                e.preventDefault();
-            }
-        });
-    </script>
-""", unsafe_allow_html=True)
-
-# === GOOGLE SHEET SETUP ===
+# --- GOOGLE SHEET SETUP ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
 client = gspread.authorize(creds)
 sheet_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
 spreadsheet = client.open_by_url(sheet_url)
 
-# === LOAD SYENSQO SHEET SAFELY ===
-syensqo_sheet = spreadsheet.worksheet("Sheet1")
-raw_data = syensqo_sheet.get_all_values()
-headers = [h.strip() for h in raw_data[0]]
-data_rows = raw_data[1:]
-syensqo_df = pd.DataFrame(data_rows, columns=headers)
-
-# Clean fiber number column
-syensqo_df["Fiber"] = syensqo_df["Fiber"].astype(str).str.strip()
-syensqo_df = syensqo_df[syensqo_df["Fiber"] != ""]
-
-# Clean tracking number column
-syensqo_df["Tracking number UPS"] = syensqo_df["Tracking number UPS"].astype(str).str.strip()
-syensqo_df = syensqo_df.applymap(lambda x: str(x).strip() if isinstance(x, str) else x)
-
-# === HELPER FUNCTIONS ===
-def get_or_create_worksheet(sheet, title, headers):
-    try:
-        worksheet = sheet.worksheet(title)
-    except gspread.exceptions.WorksheetNotFound:
-        worksheet = sheet.add_worksheet(title=title, rows="1000", cols="50")
-        worksheet.append_row(headers)
-    return worksheet
-
-def get_next_id(worksheet, id_column):
-    records = worksheet.get_all_records()
-    if records:
-        last_id = max([int(record[id_column]) for record in records if str(record[id_column]).isdigit()])
-        return last_id + 1
-    return 1
-
-def parse_float(val):
-    try:
-        val = str(val).replace(",", "").replace("%", "").strip()
-        return float(val)
-    except:
-        return 0.0
-
-# === UNCOATED FIBER FORM ===
-st.header("Uncoated Fiber Data Entry")
-ufd_headers = [
-    "Batch_Fiber_ID", "Spool_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
+# --- HEADERS ---
+UFD_HEADERS = [
+    "Batch_Fiber_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
     "Outside_Diameter_Avg", "Outside_Diameter_StDev", "Reported_Concentricity", "Batch_Length",
     "Shipment_Date", "Tracking_Number", "Fiber_Source", "Average_t_OD", "Minimum_t_OD",
     "Minimum_Wall_Thickness", "Average_Wall_Thickness", "N2_Permeance", "Collapse_Pressure",
-    "Kink_Test_2_95", "Kink_Test_2_36", "Order_On_Bobbin", "Number_Of_Blue_Splices",
-    "Notes", "Date_Time"
+    "Kink_Test_2_95", "Kink_Test_2_36", "Order_On_Bobbin", "Number_Of_Blue_Splices", "Notes", "Date_Time"
 ]
-ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", ufd_headers)
 
-fiber_source = st.selectbox("Fiber Source", ["EMI", "Syensqo", "Polymem", "Other"])
+# --- LOAD SYENSQO SHEET ---
+try:
+    syensqo_sheet = spreadsheet.worksheet("Syensqo")
+except:
+    st.warning("⚠️ Could not load 'Syensqo' worksheet.")
+    syensqo_sheet = None
 
-if 'batch_list' not in st.session_state:
-    st.session_state.batch_list = []
+syensqo_df = pd.DataFrame()
+if syensqo_sheet:
+    syensqo_raw = syensqo_sheet.get_all_values()
+    if syensqo_raw:
+        syensqo_headers = [h.strip() for h in syensqo_raw[0]]
+        syensqo_data = syensqo_raw[1:]
+        syensqo_df = pd.DataFrame(syensqo_data, columns=syensqo_headers)
+        # Remove completely empty rows (common in Sheets)
+        syensqo_df = syensqo_df.loc[~(syensqo_df == '').all(axis=1)]
 
-if fiber_source == "Syensqo":
-    syensqo_fibers = sorted(syensqo_df["Fiber"].dropna().unique())
-    selected_fiber = st.selectbox("Select Fiber", syensqo_fibers)
-    matching_rows = syensqo_df[syensqo_df["Fiber"] == selected_fiber]
-    if not matching_rows.empty:
-        selected_row = matching_rows.iloc[0]
+def parse_float(val):
+    try:
+        return float(str(val).replace(",", "").replace("%", "").strip())
+    except:
+        return 0.0
 
-        with st.form("syensqo_entry_form"):
-            batch_fiber_id = st.text_input("Batch Fiber ID (provided by vendor)", value=selected_row.get("Fiber", ""))
-            spool_id = st.text_input("Spool ID")
-            supplier_batch_id = st.text_input("Supplier Batch ID", value=selected_row.get("Fiber", ""))
-            inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=parse_float(selected_row.get("ID", 0)))
-            inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=0.0)
-            outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=parse_float(selected_row.get("OD", 0)))
-            outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=0.0)
-            reported_concentricity = st.number_input("Reported Concentricity (%)", value=0.0)
-            batch_length = st.number_input("Batch Length (m)", value=parse_float(selected_row.get("Batch length (m)", 0)))
-            shipment_date_val = selected_row.get("Shipment date", "")
-            try:
-                parsed_date = datetime.strptime(str(shipment_date_val), "%m/%d/%Y")
-            except:
-                parsed_date = datetime.today()
-            shipment_date = st.date_input("Shipment Date", value=parsed_date)
-            tracking_number = st.text_input("Tracking Number", value=selected_row.get("Tracking number UPS", ""))
-            average_t_od = st.number_input("Average t/OD", value=0.0)
-            minimum_t_od = st.number_input("Minimum t/OD", value=0.0)
-            min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=0.0)
-            avg_wall_thickness = st.number_input("Average Wall Thickness (um)", value=0.0)
-            n2_permeance = st.number_input("N2 Permeance (GPU)", value=0.0)
-            collapse_pressure = st.number_input("Collapse Pressure (psi)", value=0.0)
-            kink_295 = st.number_input("Kink Test 2.95 (mm)", value=0.0)
-            kink_236 = st.number_input("Kink Test 2.36 (mm)", value=0.0)
-            order_bobbin = st.number_input("Order on Bobbin", value=0)
-            blue_splices = st.number_input("Number of Blue Splices", value=0)
-            notes = st.text_area("Notes")
-            add_btn = st.form_submit_button("➕ Add to Batch List")
-            if add_btn:
-                if batch_fiber_id and spool_id:
-                    row_data = [
-                        batch_fiber_id, spool_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
-                        outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
-                        shipment_date.strftime("%Y-%m-%d"), tracking_number, "Syensqo",
-                        average_t_od, minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
-                        collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    ]
-                    st.session_state.batch_list.append(row_data)
-                    st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
-                else:
-                    st.warning("Please enter both Batch_Fiber_ID and Spool_ID before adding to the list.")
-else:
-    # ALL FIELDS MANUAL ENTRY FOR OTHER VENDORS (EMI, Polymem, Other)
-    with st.form("other_vendor_entry_form"):
-        batch_fiber_id = st.text_input("Batch Fiber ID (provided by vendor)")
-        spool_id = st.text_input("Spool ID")
-        supplier_batch_id = st.text_input("Supplier Batch ID")
-        inside_diameter_avg = st.number_input("Inside Diameter Avg (um)", value=0.0)
-        inside_diameter_stdev = st.number_input("Inside Diameter StDev (um)", value=0.0)
-        outside_diameter_avg = st.number_input("Outside Diameter Avg (um)", value=0.0)
-        outside_diameter_stdev = st.number_input("Outside Diameter StDev (um)", value=0.0)
-        reported_concentricity = st.number_input("Reported Concentricity (%)", value=0.0)
-        batch_length = st.number_input("Batch Length (m)", value=0.0)
-        shipment_date = st.date_input("Shipment Date", value=datetime.today())
-        tracking_number = st.text_input("Tracking Number")
-        average_t_od = st.number_input("Average t/OD", value=0.0)
-        minimum_t_od = st.number_input("Minimum t/OD", value=0.0)
-        min_wall_thickness = st.number_input("Minimum Wall Thickness (um)", value=0.0)
-        avg_wall_thickness = st.number_input("Average Wall Thickness (um)", value=0.0)
-        n2_permeance = st.number_input("N2 Permeance (GPU)", value=0.0)
-        collapse_pressure = st.number_input("Collapse Pressure (psi)", value=0.0)
-        kink_295 = st.number_input("Kink Test 2.95 (mm)", value=0.0)
-        kink_236 = st.number_input("Kink Test 2.36 (mm)", value=0.0)
-        order_bobbin = st.number_input("Order on Bobbin", value=0)
-        blue_splices = st.number_input("Number of Blue Splices", value=0)
-        notes = st.text_area("Notes")
-        add_btn = st.form_submit_button("➕ Add to Batch List")
-        if add_btn:
-            if batch_fiber_id and spool_id:
-                row_data = [
-                    batch_fiber_id, spool_id, supplier_batch_id, inside_diameter_avg, inside_diameter_stdev,
-                    outside_diameter_avg, outside_diameter_stdev, reported_concentricity, batch_length,
-                    shipment_date.strftime("%Y-%m-%d"), tracking_number, fiber_source,
-                    average_t_od, minimum_t_od, min_wall_thickness, avg_wall_thickness, n2_permeance,
-                    collapse_pressure, kink_295, kink_236, order_bobbin, blue_splices, notes,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                ]
-                st.session_state.batch_list.append(row_data)
-                st.success(f"Added Batch_Fiber_ID {batch_fiber_id} to the list. Click below to submit all.")
-            else:
-                st.warning("Please enter both Batch_Fiber_ID and Spool_ID before adding to the list.")
+def parse_int(val):
+    try:
+        return int(float(str(val).replace(",", "").replace("%", "").strip()))
+    except:
+        return 0
 
-if st.session_state.batch_list:
-    st.markdown("### 📝 Batches to be Submitted:")
-    st.dataframe(pd.DataFrame(st.session_state.batch_list, columns=ufd_headers))
-    if st.button("✅ Submit All Batches"):
-        for row in st.session_state.batch_list:
-            ufd_sheet.append_row(row, value_input_option="USER_ENTERED")
-        st.success(f"✅ {len(st.session_state.batch_list)} batches submitted successfully.")
-        st.session_state.batch_list.clear()
-
-# ... [your Uncoated Fiber Data Tbl logic above is unchanged!] ...
-
-# --- UNCOATED SPOOL ID TABLE: Manual Entry ---
-usid_headers = ["UncoatedSpool_ID", "Date_Time"]
-usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", usid_headers)
-
-st.header("Manual Entry: UnCoatedSpool ID Tbl")
-with st.form("usid_form_manual"):
-    usid_val = st.text_input("UncoatedSpool_ID (manual)")
-    usid_date = st.date_input("Date (manual)", value=datetime.today(), key="usid_manual")
-    usid_submit = st.form_submit_button("Add UncoatedSpool ID (Manual)")
-    if usid_submit:
-        if usid_val:
-            usid_sheet.append_row([usid_val, usid_date.strftime("%Y-%m-%d %H:%M:%S")])
-            st.success(f"Added UncoatedSpool_ID: {usid_val}")
-        else:
-            st.warning("Please fill UncoatedSpool_ID.")
-
-# --- AS RECEIVED UNCOATED SPOOLS TABLE: Manual Entry ---
-ar_headers = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes", "Date_Time"]
-ar_sheet = get_or_create_worksheet(spreadsheet, "As Received UnCoatedSpools Tbl", ar_headers)
-
-st.header("Manual Entry: As Received UnCoatedSpools Tbl")
-with st.form("ar_manual_form"):
-    received_spool_pk = st.text_input("Received_Spool_PK (manual)")
-    uncoated_spool_id_ar = st.text_input("UncoatedSpool_ID (manual)")
-    batch_fiber_id_ar = st.text_input("Batch_Fiber_ID (manual)")
-    notes_ar = st.text_area("Notes (manual)")
-    date_ar = st.date_input("Date (manual)", value=datetime.today(), key="ar_manual")
-    ar_submit = st.form_submit_button("Add As Received (Manual)")
-    if ar_submit:
-        if received_spool_pk and uncoated_spool_id_ar and batch_fiber_id_ar:
-            ar_sheet.append_row([
-                received_spool_pk,
-                uncoated_spool_id_ar,
-                batch_fiber_id_ar,
-                notes_ar,
-                date_ar.strftime("%Y-%m-%d %H:%M:%S")
-            ])
-            st.success(f"Added As Received Spool: {received_spool_pk}")
-        else:
-            st.warning("Please fill all required fields.")
-
-# --- COMBINED SPOOLS TABLE: Manual Entry ---
-cs_headers = ["Combined_SpoolsPK", "UncoatedSpool_ID", "Received_Spool_PK", "Date_Time"]
-cs_sheet = get_or_create_worksheet(spreadsheet, "Combined Spools Tbl", cs_headers)
-
-st.header("Manual Entry: Combined Spools Tbl")
-with st.form("cs_manual_form"):
-    combined_spool_pk = st.text_input("Combined_SpoolsPK (manual)")
-    uncoated_spool_id_cs = st.text_input("UncoatedSpool_ID (manual)")
-    received_spool_pk_cs = st.text_input("Received_Spool_PK (manual)")
-    date_cs = st.date_input("Date (manual)", value=datetime.today(), key="cs_manual")
-    cs_submit = st.form_submit_button("Add Combined Spools (Manual)")
-    if cs_submit:
-        if combined_spool_pk and uncoated_spool_id_cs and received_spool_pk_cs:
-            cs_sheet.append_row([
-                combined_spool_pk,
-                uncoated_spool_id_cs,
-                received_spool_pk_cs,
-                date_cs.strftime("%Y-%m-%d %H:%M:%S")
-            ])
-            st.success(f"Added Combined Spools PK: {combined_spool_pk}")
-        else:
-            st.warning("Please fill all required fields.")
-
-# --- ARDENT FIBER DIMENSION QC TABLE: Manual Entry ---
-qc_headers = [
-    "Ardent_QC_ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "Ardent_QC_Inside_Diameter",
-    "Ardent_QC_Outside_Diameter", "Measured_Concentricity", "Wall_Thickness",
-    "Operator_Initials", "Notes", "Date_Time", "Inside_Circularity", "Outside_Circularity"
-]
-qc_sheet = get_or_create_worksheet(spreadsheet, "Ardent Fiber Dimension QC Tbl", qc_headers)
-
-st.header("Manual Entry: Ardent Fiber Dimension QC Tbl")
-with st.form("qc_manual_form"):
-    ardent_qc_id = st.text_input("Ardent_QC_ID (manual)")
-    batch_fiber_id_qc = st.text_input("Batch_Fiber_ID (manual)")
-    uncoated_spool_id_qc = st.text_input("UncoatedSpool_ID (manual)")
-    qc_inside_dia = st.number_input("Ardent_QC_Inside_Diameter (um)", min_value=0.0)
-    qc_outside_dia = st.number_input("Ardent_QC_Outside_Diameter (um)", min_value=0.0)
-    qc_conc = st.number_input("Measured_Concentricity (%)", min_value=0.0)
-    qc_wall = st.number_input("Wall_Thickness (um)", min_value=0.0)
-    qc_initials = st.text_input("Operator_Initials (manual)")
-    qc_notes = st.text_area("Notes (manual)")
-    qc_date = st.date_input("Date (manual)", value=datetime.today(), key="qc_manual")
-    qc_inside_circ = st.number_input("Inside_Circularity", min_value=0.0)
-    qc_outside_circ = st.number_input("Outside_Circularity", min_value=0.0)
-    qc_submit = st.form_submit_button("Add QC Entry (Manual)")
-    if qc_submit:
-        if ardent_qc_id and batch_fiber_id_qc and uncoated_spool_id_qc:
-            qc_sheet.append_row([
-                ardent_qc_id,
-                batch_fiber_id_qc,
-                uncoated_spool_id_qc,
-                qc_inside_dia,
-                qc_outside_dia,
-                qc_conc,
-                qc_wall,
-                qc_initials,
-                qc_notes,
-                qc_date.strftime("%Y-%m-%d %H:%M:%S"),
-                qc_inside_circ,
-                qc_outside_circ
-            ])
-            st.success(f"Added QC Entry: {ardent_qc_id}")
-        else:
-            st.warning("Please fill all required QC fields.")
-
-# -------------- Your 7-day preview logic remains as is --------------
-
-
-
-
-# ------------------ 7-DAYS DATA PREVIEW FOR ALL TABLES ------------------
-st.markdown("## 📅 Last 7 Days Data Preview")
-
-def parse_date(date_str):
-    formats = ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y"]
-    for fmt in formats:
+def parse_date(val):
+    # Accepts both European and US dates
+    for fmt in ("%m/%d/%Y", "%d/%m/%Y", "%Y-%m-%d"):
         try:
-            return datetime.strptime(date_str.strip(), fmt)
-        except Exception:
+            return datetime.strptime(str(val).strip(), fmt).date()
+        except:
             continue
-    return None
+    return datetime.today().date()
 
-def filter_last_7_days(records, date_key):
-    today = datetime.today()
-    filtered_records = []
-    for record in records:
-        date_str = record.get(date_key, "").strip()
-        parsed = parse_date(date_str)
-        if parsed and parsed.date() >= (today - timedelta(days=7)).date():
-            filtered_records.append(record)
-    return filtered_records
+def get_next_id(worksheet, id_col):
+    records = worksheet.get_all_records()
+    if records:
+        last_id = max([parse_int(rec[id_col]) for rec in records if str(rec[id_col]).isdigit()] or [0])
+        return last_id + 1
+    return 1
 
-def safe_preview(title, records, headers):
-    st.markdown(f"### {title}")
-    df = pd.DataFrame(records, columns=headers)
-    st.dataframe(df)  # Always shows headers even if no rows
-    if df.empty:
-        st.markdown('<div style="color: #888; font-size: 16px;">No records in the last 7 days.</div>', unsafe_allow_html=True)
+# --- UFD SHEET PREP ---
+try:
+    ufd_sheet = spreadsheet.worksheet("Uncoated Fiber Data Tbl")
+except:
+    st.error("Could not find 'Uncoated Fiber Data Tbl' worksheet!")
+    st.stop()
+ufd_ws_headers = ufd_sheet.row_values(1)
+# If missing columns, fix the sheet
+if ufd_ws_headers != UFD_HEADERS:
+    # Re-write the header row
+    ufd_sheet.resize(rows=1)
+    ufd_sheet.insert_row(UFD_HEADERS, 1)
 
-safe_preview("🧪 Uncoated Fiber Data", filter_last_7_days(ufd_sheet.get_all_records(), "Date_Time"), ufd_headers)
-safe_preview("🧵 UnCoatedSpool ID", filter_last_7_days(usid_sheet.get_all_records(), "Date_Time"), ["UncoatedSpool_ID", "Date_Time"])
-safe_preview("📦 As Received UncoatedSpools", filter_last_7_days(ar_sheet.get_all_records(), "Date_Time"), ar_headers)
-safe_preview("🔗 Combined Spools", filter_last_7_days(cs_sheet.get_all_records(), "Date_Time"), cs_headers)
-safe_preview("🧪 Ardent Fiber Dimension QC", filter_last_7_days(qc_sheet.get_all_records(), "Date_Time"), qc_headers)
+# --- STREAMLIT FORM ---
+st.header("Uncoated Fiber Data Entry")
+fiber_source_options = ["Syensqo", "EMI", "Polymem", "other"]
+fiber_source = st.selectbox("Fiber Source", fiber_source_options)
+
+form_values = {h: "" for h in UFD_HEADERS}
+
+form_values["Fiber_Source"] = fiber_source
+form_values["Supplier_Batch_ID"] = st.text_input("Supplier batch ID")
+
+# 1. If SYENSQO: Offer select box for Batch Fiber ID, then auto-fill if available
+if fiber_source == "Syensqo" and not syensqo_df.empty:
+    syensqo_fiber_ids = sorted(syensqo_df["Fiber"].dropna().unique())
+    selected_fiber = st.selectbox("Batch Fiber ID (from Syensqo sheet)", syensqo_fiber_ids)
+    syensqo_row = syensqo_df[syensqo_df["Fiber"] == selected_fiber].iloc[0]
+
+    form_values["Batch_Fiber_ID"] = selected_fiber
+
+    # Map all columns, show as prefilled but editable
+    form_values["Inside_Diameter_Avg"] = st.number_input("Inside Diameter (um) avg",
+        value=parse_float(syensqo_row.get("ID", 0)))
+    form_values["Inside_Diameter_StDev"] = st.number_input("Inside Diameter (um) StDev",
+        value=parse_float(syensqo_row.get("SD", 0)))
+    form_values["Outside_Diameter_Avg"] = st.number_input("Outside Diameter (um) Avg",
+        value=parse_float(syensqo_row.get("OD", 0)))
+    form_values["Outside_Diameter_StDev"] = st.number_input("Outside Diameter (um) StDev",
+        value=parse_float(syensqo_row.get("SD", 0)))
+    form_values["Reported_Concentricity"] = st.number_input("Reported Concentricity (%)",
+        value=parse_float(syensqo_row.get("Concentricity (%)", 0)))
+    form_values["Batch_Length"] = st.number_input("Batch Length (m)",
+        value=parse_float(syensqo_row.get("Batch length (m)", 0)))
+    form_values["Shipment_Date"] = st.date_input("Shipment Date",
+        value=parse_date(syensqo_row.get("Shipment date", "")))
+    form_values["Tracking_Number"] = st.text_input("Tracking number",
+        value=str(syensqo_row.get("Tracking number UPS", "")))
+    form_values["Average_t_OD"] = st.number_input("Average t/OD",
+        value=parse_float(syensqo_row.get("Thickness/OD", 0)))
+    form_values["Minimum_t_OD"] = st.number_input("Minimum t/OD",
+        value=parse_float(syensqo_row.get("minimum thickness/OD", 0)))
+    form_values["Minimum_Wall_Thickness"] = st.number_input("Minimum wall thickness (um)",
+        value=parse_float(syensqo_row.get("Thickness (µm)", 0)))
+    form_values["Average_Wall_Thickness"] = st.number_input("Average wall thickness (um)",
+        value=0.0) # Not in Syensqo: user can fill if known
+    form_values["N2_Permeance"] = st.number_input("N2 permeance (GPU)",
+        value=parse_float(syensqo_row.get("GPU (N2)", 0)))
+    form_values["Collapse_Pressure"] = st.number_input("Collapse Pressure (psi)",
+        value=parse_float(syensqo_row.get("Collapse pressure (PSI)", 0)))
+    form_values["Kink_Test_2_95"] = st.number_input("Kink test 2.95 (mm)",
+        value=parse_float(syensqo_row.get("Kink test 2.95 inches (mm)", 0)))
+    form_values["Kink_Test_2_36"] = st.number_input("Kink test 2.36 (mm)",
+        value=parse_float(syensqo_row.get("Kink test 2.36 inches (mm)", 0)))
+    form_values["Order_On_Bobbin"] = st.number_input("Order on bobbin (outside = 1)",
+        value=parse_int(syensqo_row.get("Bobbin number", 1)))
+    form_values["Number_Of_Blue_Splices"] = st.number_input("Number of blue splices",
+        value=parse_int(syensqo_row.get("Blue Splicings number", 0)))
+    form_values["Notes"] = st.text_area("Notes", value="")
+
+    # For extra columns not in Syensqo, give text/number input as blank
+    if "Average_Wall_Thickness" not in syensqo_row:
+        form_values["Average_Wall_Thickness"] = st.number_input("Average wall thickness (um)",
+            value=0.0)
+    if "Notes" not in syensqo_row:
+        form_values["Notes"] = st.text_area("Notes", value="")
+
+else:
+    # For EMI, Polymem, Other: All manual input
+    form_values["Batch_Fiber_ID"] = st.text_input("Batch Fiber ID")
+    form_values["Inside_Diameter_Avg"] = st.number_input("Inside Diameter (um) avg", value=0)
+    form_values["Inside_Diameter_StDev"] = st.number_input("Inside Diameter (um) StDev", value=0)
+    form_values["Outside_Diameter_Avg"] = st.number_input("Outside Diameter (um) Avg", value=0)
+    form_values["Outside_Diameter_StDev"] = st.number_input("Outside Diameter (um) StDev", value=0)
+    form_values["Reported_Concentricity"] = st.number_input("Reported Concentricity (%)", value=0)
+    form_values["Batch_Length"] = st.number_input("Batch Length (m)", value=0)
+    form_values["Shipment_Date"] = st.date_input("Shipment Date")
+    form_values["Tracking_Number"] = st.text_input("Tracking number")
+    form_values["Average_t_OD"] = st.number_input("Average t/OD", value=0.0)
+    form_values["Minimum_t_OD"] = st.number_input("Minimum t/OD", value=0.0)
+    form_values["Minimum_Wall_Thickness"] = st.number_input("Minimum wall thickness (um)", value=0)
+    form_values["Average_Wall_Thickness"] = st.number_input("Average wall thickness (um)", value=0)
+    form_values["N2_Permeance"] = st.number_input("N2 permeance (GPU)", value=0)
+    form_values["Collapse_Pressure"] = st.number_input("Collapse Pressure (psi)", value=0)
+    form_values["Kink_Test_2_95"] = st.number_input("Kink test 2.95 (mm)", value=0.0)
+    form_values["Kink_Test_2_36"] = st.number_input("Kink test 2.36 (mm)", value=0.0)
+    form_values["Order_On_Bobbin"] = st.number_input("Order on bobbin (outside = 1)", value=0)
+    form_values["Number_Of_Blue_Splices"] = st.number_input("Number of blue splices", value=0)
+    form_values["Notes"] = st.text_area("Notes", value="")
+
+# --- SUBMISSION ---
+if st.button("Submit Fiber Data"):
+    # Auto PK logic
+    batch_fiber_id = form_values["Batch_Fiber_ID"]
+    if not batch_fiber_id:
+        st.warning("Batch Fiber ID is required.")
+    else:
+        # Compose row as per header order
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        row = [
+            form_values["Batch_Fiber_ID"],
+            form_values["Supplier_Batch_ID"],
+            form_values["Inside_Diameter_Avg"],
+            form_values["Inside_Diameter_StDev"],
+            form_values["Outside_Diameter_Avg"],
+            form_values["Outside_Diameter_StDev"],
+            form_values["Reported_Concentricity"],
+            form_values["Batch_Length"],
+            form_values["Shipment_Date"] if isinstance(form_values["Shipment_Date"], str) else form_values["Shipment_Date"].strftime("%Y-%m-%d"),
+            form_values["Tracking_Number"],
+            form_values["Fiber_Source"],
+            form_values["Average_t_OD"],
+            form_values["Minimum_t_OD"],
+            form_values["Minimum_Wall_Thickness"],
+            form_values["Average_Wall_Thickness"],
+            form_values["N2_Permeance"],
+            form_values["Collapse_Pressure"],
+            form_values["Kink_Test_2_95"],
+            form_values["Kink_Test_2_36"],
+            form_values["Order_On_Bobbin"],
+            form_values["Number_Of_Blue_Splices"],
+            form_values["Notes"],
+            now_str
+        ]
+        ufd_sheet.append_row(row, value_input_option="USER_ENTERED")
+        st.success(f"Fiber data for Batch Fiber ID {batch_fiber_id} submitted successfully!")
+
