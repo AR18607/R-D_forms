@@ -4,37 +4,6 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
 from datetime import datetime
-from datetime import datetime, timedelta
-
-from datetime import datetime, timedelta
-
-def parse_datetime_str(dt_str):
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y"):
-        try:
-            return datetime.strptime(str(dt_str).strip(), fmt)
-        except Exception:
-            continue
-    return None
-
-def filter_last_7_days(records, date_key="Date_Time"):
-    today = datetime.today()
-    filtered_records = []
-    for record in records:
-        dt_str = record.get(date_key, "").strip()
-        parsed = parse_datetime_str(dt_str)
-        if parsed and parsed.date() >= (today - timedelta(days=7)).date():
-            filtered_records.append(record)
-    return filtered_records
-
-def show_table_preview(title, worksheet, date_col="Date_Time"):
-    st.markdown(f"#### {title}")
-    records = worksheet.get_all_records()
-    filtered = filter_last_7_days(records, date_col)
-    if filtered:
-        st.dataframe(pd.DataFrame(filtered))
-    else:
-        st.info("No records in the last 7 days.")
-
 
 # === GOOGLE SHEET SETUP ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -120,7 +89,6 @@ def get_next_id(worksheet, id_column):
         return last_id + 1
     return 1
 
-# === WORKSHEET GET/CREATE ===
 def get_or_create_worksheet(sheet, title, headers):
     try:
         worksheet = sheet.worksheet(title)
@@ -267,17 +235,21 @@ st.header("UnCoatedSpool ID Entry")
 spool_type = st.selectbox("Type", ["As received", "Combined"], key="usid_type")
 c_length = st.number_input("C-Length (sum of batch lengths on the spool)", value=0.0, key="usid_c_length")
 usid_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-if st.button("Submit UnCoatedSpool ID"):
-    next_spool_id = get_next_id(usid_sheet, "UncoatedSpool_ID")
-    usid_sheet.append_row([next_spool_id, spool_type, c_length, usid_now])
-    st.success(f"UncoatedSpool_ID {next_spool_id} submitted.")
+st.button("Submit UnCoatedSpool ID", on_click=lambda: usid_sheet.append_row(
+    [get_next_id(usid_sheet, "UncoatedSpool_ID"), spool_type, c_length, usid_now]
+))
 
 # === AS RECEIVED UNCOATED SPOOLS TABLE ===
 st.header("As Received UnCoatedSpools Entry")
 uncoated_spool_ids = [str(record["UncoatedSpool_ID"]) for record in usid_sheet.get_all_records() if record.get("UncoatedSpool_ID")]
 batch_fiber_ids = [str(record["Batch_Fiber_ID"]) for record in ufd_sheet.get_all_records() if record.get("Batch_Fiber_ID")]
 ar_notes = st.text_area("Notes for As Received UnCoatedSpools", key="ar_notes")
-if uncoated_spool_ids and batch_fiber_ids:
+if not uncoated_spool_ids or not batch_fiber_ids:
+    st.warning("⚠️ Please ensure both UncoatedSpool IDs and Batch Fiber IDs are available before submitting.")
+    st.selectbox("UncoatedSpool ID", uncoated_spool_ids or ["No IDs available"], key="ar_usid", disabled=True)
+    st.selectbox("Batch Fiber ID", batch_fiber_ids or ["No IDs available"], key="ar_bfid", disabled=True)
+    st.button("Submit As Received UnCoatedSpools", disabled=True)
+else:
     selected_usid = st.selectbox("UncoatedSpool ID", uncoated_spool_ids, key="ar_usid")
     selected_bfid = st.selectbox("Batch Fiber ID", batch_fiber_ids, key="ar_bfid")
     if st.button("Submit As Received UnCoatedSpools"):
@@ -289,7 +261,12 @@ if uncoated_spool_ids and batch_fiber_ids:
 # === COMBINED SPOOLS TABLE ===
 st.header("Combined Spools Entry")
 received_spool_pks = [str(record["Received_Spool_PK"]) for record in ar_sheet.get_all_records() if record.get("Received_Spool_PK")]
-if uncoated_spool_ids and received_spool_pks:
+if not uncoated_spool_ids or not received_spool_pks:
+    st.warning("⚠️ Please ensure both UncoatedSpool IDs and Received Spool PKs are available before submitting.")
+    st.selectbox("UncoatedSpool ID for Combined", uncoated_spool_ids or ["No IDs available"], key="cs_usid", disabled=True)
+    st.selectbox("Received Spool PK", received_spool_pks or ["No PKs available"], key="cs_rspk", disabled=True)
+    st.button("Submit Combined Spools", disabled=True)
+else:
     selected_usid_c = st.selectbox("UncoatedSpool ID for Combined", uncoated_spool_ids, key="cs_usid")
     selected_rspk = st.selectbox("Received Spool PK", received_spool_pks, key="cs_rspk")
     if st.button("Submit Combined Spools"):
@@ -300,7 +277,21 @@ if uncoated_spool_ids and received_spool_pks:
 
 # === ARDENT FIBER DIMENSION QC TABLE ===
 st.header("Ardent Fiber Dimension QC Entry")
-if batch_fiber_ids and uncoated_spool_ids:
+if not batch_fiber_ids or not uncoated_spool_ids:
+    st.warning("⚠️ Please ensure Batch Fiber IDs and UncoatedSpool IDs are available before entering QC data.")
+    st.selectbox("Batch Fiber ID for QC", batch_fiber_ids or ["No IDs available"], key="qc_bfid", disabled=True)
+    st.selectbox("UncoatedSpool ID for QC", uncoated_spool_ids or ["No IDs available"], key="qc_usid", disabled=True)
+    st.number_input("Ardent QC Inside Diameter (um)", value=0.0, key="qc_id", disabled=True)
+    st.number_input("Ardent QC Outside Diameter (um)", value=0.0, key="qc_od", disabled=True)
+    st.number_input("Measured Concentricity (%)", value=0.0, key="qc_conc", disabled=True)
+    st.number_input("Wall Thickness (um)", value=0.0, key="qc_wall", disabled=True)
+    st.text_input("Operator Initials", key="qc_init", disabled=True)
+    st.text_area("Notes for QC", key="qc_notes", disabled=True)
+    st.date_input("Date", value=datetime.today(), key="qc_date", disabled=True)
+    st.number_input("Inside Circularity", value=0.0, key="qc_ic", disabled=True)
+    st.number_input("Outside Circularity", value=0.0, key="qc_oc", disabled=True)
+    st.button("Submit Fiber Dimension QC", disabled=True)
+else:
     selected_bfid_qc = st.selectbox("Batch Fiber ID for QC", batch_fiber_ids, key="qc_bfid")
     selected_usid_qc = st.selectbox("UncoatedSpool ID for QC", uncoated_spool_ids, key="qc_usid")
     ardent_qc_inside_d = st.number_input("Ardent QC Inside Diameter (um)", value=0.0, key="qc_id")
@@ -322,9 +313,37 @@ if batch_fiber_ids and uncoated_spool_ids:
         ])
         st.success(f"Ardent QC Entry ID {next_qc_id} submitted.")
 
+# === 7 DAY PREVIEW ===
+from datetime import timedelta
+
+def parse_datetime_str(dt_str):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(str(dt_str).strip(), fmt)
+        except Exception:
+            continue
+    return None
+
+def filter_last_7_days(records, date_key="Date_Time"):
+    today = datetime.today()
+    filtered_records = []
+    for record in records:
+        dt_str = record.get(date_key, "").strip()
+        parsed = parse_datetime_str(dt_str)
+        if parsed and parsed.date() >= (today - timedelta(days=7)).date():
+            filtered_records.append(record)
+    return filtered_records
+
+def show_table_preview(title, worksheet, date_col="Date_Time"):
+    st.markdown(f"#### {title}")
+    records = worksheet.get_all_records()
+    filtered = filter_last_7_days(records, date_col)
+    if filtered:
+        st.dataframe(pd.DataFrame(filtered))
+    else:
+        st.info("No records in the last 7 days.")
 
 st.markdown("## 📅 Last 7 Days Data Preview")
-
 show_table_preview("🧪 Uncoated Fiber Data", ufd_sheet, "Date_Time")
 show_table_preview("🧵 UnCoatedSpool ID", usid_sheet, "Date_Time")
 show_table_preview("📦 As Received UncoatedSpools", ar_sheet, "Date_Time")
