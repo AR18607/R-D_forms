@@ -4,6 +4,37 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import json
 from datetime import datetime
+from datetime import datetime, timedelta
+
+from datetime import datetime, timedelta
+
+def parse_datetime_str(dt_str):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(str(dt_str).strip(), fmt)
+        except Exception:
+            continue
+    return None
+
+def filter_last_7_days(records, date_key="Date_Time"):
+    today = datetime.today()
+    filtered_records = []
+    for record in records:
+        dt_str = record.get(date_key, "").strip()
+        parsed = parse_datetime_str(dt_str)
+        if parsed and parsed.date() >= (today - timedelta(days=7)).date():
+            filtered_records.append(record)
+    return filtered_records
+
+def show_table_preview(title, worksheet, date_col="Date_Time"):
+    st.markdown(f"#### {title}")
+    records = worksheet.get_all_records()
+    filtered = filter_last_7_days(records, date_col)
+    if filtered:
+        st.dataframe(pd.DataFrame(filtered))
+    else:
+        st.info("No records in the last 7 days.")
+
 
 # === GOOGLE SHEET SETUP ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -12,13 +43,21 @@ client = gspread.authorize(creds)
 sheet_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
 spreadsheet = client.open_by_url(sheet_url)
 
-# === HEADERS (MATCH YOUR GOOGLE SHEET TABLE) ===
+# === HEADERS (MATCH YOUR GOOGLE SHEET TABLES) ===
 UFD_HEADERS = [
     "Batch_Fiber_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
     "Outside_Diameter_Avg", "Outside_Diameter_StDev", "Reported_Concentricity", "Batch_Length",
     "Shipment_Date", "Tracking_Number", "Fiber_Source", "Average_t_OD", "Minimum_t_OD",
     "Minimum_Wall_Thickness", "Average_Wall_Thickness", "N2_Permeance", "Collapse_Pressure",
     "Kink_Test_2_95", "Kink_Test_2_36", "Order_On_Bobbin", "Number_Of_Blue_Splices", "Notes", "Date_Time"
+]
+USID_HEADERS = ["UncoatedSpool_ID", "Type", "C_Length", "Date_Time"]
+AR_HEADERS = ["Received_Spool_PK", "UncoatedSpool_ID", "Batch_Fiber_ID", "Notes", "Date_Time"]
+CS_HEADERS = ["Combined_SpoolsPK", "UncoatedSpool_ID", "Received_Spool_PK", "Date_Time"]
+QC_HEADERS = [
+    "Ardent_QC_ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "Ardent_QC_Inside_Diameter",
+    "Ardent_QC_Outside_Diameter", "Measured_Concentricity", "Wall_Thickness",
+    "Operator_Initials", "Notes", "Date_Time", "Inside_Circularity", "Outside_Circularity"
 ]
 
 # === LOAD SYENSQO SHEET: MANUAL HEADER ASSIGNMENT ===
@@ -42,9 +81,6 @@ if syensqo_sheet:
         trimmed_data = [row[:len(syensqo_headers)] for row in syensqo_data]
         syensqo_df = pd.DataFrame(trimmed_data, columns=syensqo_headers)
         syensqo_df = syensqo_df.loc[~(syensqo_df == '').all(axis=1)]
-        st.write("DEBUG: Syensqo column headers:", list(syensqo_df.columns))
-        if not syensqo_df.empty:
-            st.write("DEBUG: First data row dict:", syensqo_df.iloc[0].to_dict())
     else:
         syensqo_df = pd.DataFrame()
 
@@ -77,18 +113,30 @@ def parse_date(val):
             continue
     return datetime.today().date()
 
-# === UFD SHEET PREP ===
-try:
-    ufd_sheet = spreadsheet.worksheet("Uncoated Fiber Data Tbl")
-except Exception:
-    st.error("Could not find 'Uncoated Fiber Data Tbl' worksheet!")
-    st.stop()
-ufd_ws_headers = ufd_sheet.row_values(1)
-if ufd_ws_headers != UFD_HEADERS:
-    ufd_sheet.resize(rows=1)
-    ufd_sheet.insert_row(UFD_HEADERS, 1)
+def get_next_id(worksheet, id_column):
+    records = worksheet.get_all_records()
+    if records:
+        last_id = max([int(record[id_column]) for record in records if str(record[id_column]).isdigit()])
+        return last_id + 1
+    return 1
 
-# === STREAMLIT FORM ===
+# === WORKSHEET GET/CREATE ===
+def get_or_create_worksheet(sheet, title, headers):
+    try:
+        worksheet = sheet.worksheet(title)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = sheet.add_worksheet(title=title, rows="1000", cols="50")
+        worksheet.append_row(headers)
+    return worksheet
+
+# === TABLE SHEETS ===
+ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", UFD_HEADERS)
+usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", USID_HEADERS)
+ar_sheet = get_or_create_worksheet(spreadsheet, "As Received UnCoatedSpools Tbl", AR_HEADERS)
+cs_sheet = get_or_create_worksheet(spreadsheet, "Combined Spools Tbl", CS_HEADERS)
+qc_sheet = get_or_create_worksheet(spreadsheet, "Ardent Fiber Dimension QC Tbl", QC_HEADERS)
+
+# === UNCOATED FIBER DATA ENTRY ===
 st.header("Uncoated Fiber Data Entry")
 fiber_source_options = ["Syensqo", "EMI", "Polymem", "other"]
 fiber_source = st.selectbox("Fiber Source", fiber_source_options, key="fiber_source")
@@ -102,7 +150,6 @@ if fiber_source == "Syensqo" and not syensqo_df.empty:
     selected_fiber = st.selectbox("Batch Fiber ID (from Syensqo sheet)", syensqo_fiber_ids, key="Batch_Fiber_ID")
     syensqo_row = syensqo_df[syensqo_df["Fiber"] == selected_fiber].iloc[0]
 
-    # --- MAPPING: edit the lines below as needed for new/missing fields ---
     form_values["Batch_Fiber_ID"] = safe_text(syensqo_row.get("Fiber", ""))
     form_values["Inside_Diameter_Avg"] = st.number_input(
         "Inside Diameter (um) avg", value=safe_float(syensqo_row.get("ID", 0)), key="Inside_Diameter_Avg"
@@ -159,9 +206,7 @@ if fiber_source == "Syensqo" and not syensqo_df.empty:
         "Number of blue splices", value=safe_int(syensqo_row.get("Blue Splicings number", 0)), key="Number_Of_Blue_Splices"
     )
     form_values["Notes"] = st.text_area("Notes", value="", key="Notes")
-
 else:
-    # --- For EMI, Polymem, Other: All manual input ---
     form_values["Batch_Fiber_ID"] = st.text_input("Batch Fiber ID", key="Batch_Fiber_ID")
     form_values["Inside_Diameter_Avg"] = st.number_input("Inside Diameter (um) avg", value=0, key="Inside_Diameter_Avg")
     form_values["Inside_Diameter_StDev"] = st.number_input("Inside Diameter (um) StDev", value=0, key="Inside_Diameter_StDev")
@@ -183,7 +228,6 @@ else:
     form_values["Number_Of_Blue_Splices"] = st.number_input("Number of blue splices", value=0, key="Number_Of_Blue_Splices")
     form_values["Notes"] = st.text_area("Notes", value="", key="Notes")
 
-# --- SUBMISSION ---
 if st.button("Submit Fiber Data"):
     batch_fiber_id = form_values["Batch_Fiber_ID"]
     if not batch_fiber_id:
@@ -217,3 +261,72 @@ if st.button("Submit Fiber Data"):
         ]
         ufd_sheet.append_row(row, value_input_option="USER_ENTERED")
         st.success(f"Fiber data for Batch Fiber ID {batch_fiber_id} submitted successfully!")
+
+# === UNCOATED SPOOL ID TABLE ===
+st.header("UnCoatedSpool ID Entry")
+spool_type = st.selectbox("Type", ["As received", "Combined"], key="usid_type")
+c_length = st.number_input("C-Length (sum of batch lengths on the spool)", value=0.0, key="usid_c_length")
+usid_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+if st.button("Submit UnCoatedSpool ID"):
+    next_spool_id = get_next_id(usid_sheet, "UncoatedSpool_ID")
+    usid_sheet.append_row([next_spool_id, spool_type, c_length, usid_now])
+    st.success(f"UncoatedSpool_ID {next_spool_id} submitted.")
+
+# === AS RECEIVED UNCOATED SPOOLS TABLE ===
+st.header("As Received UnCoatedSpools Entry")
+uncoated_spool_ids = [str(record["UncoatedSpool_ID"]) for record in usid_sheet.get_all_records() if record.get("UncoatedSpool_ID")]
+batch_fiber_ids = [str(record["Batch_Fiber_ID"]) for record in ufd_sheet.get_all_records() if record.get("Batch_Fiber_ID")]
+ar_notes = st.text_area("Notes for As Received UnCoatedSpools", key="ar_notes")
+if uncoated_spool_ids and batch_fiber_ids:
+    selected_usid = st.selectbox("UncoatedSpool ID", uncoated_spool_ids, key="ar_usid")
+    selected_bfid = st.selectbox("Batch Fiber ID", batch_fiber_ids, key="ar_bfid")
+    if st.button("Submit As Received UnCoatedSpools"):
+        next_ar_pk = get_next_id(ar_sheet, "Received_Spool_PK")
+        ar_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ar_sheet.append_row([next_ar_pk, selected_usid, selected_bfid, ar_notes, ar_now])
+        st.success(f"As Received UnCoatedSpools PK {next_ar_pk} submitted.")
+
+# === COMBINED SPOOLS TABLE ===
+st.header("Combined Spools Entry")
+received_spool_pks = [str(record["Received_Spool_PK"]) for record in ar_sheet.get_all_records() if record.get("Received_Spool_PK")]
+if uncoated_spool_ids and received_spool_pks:
+    selected_usid_c = st.selectbox("UncoatedSpool ID for Combined", uncoated_spool_ids, key="cs_usid")
+    selected_rspk = st.selectbox("Received Spool PK", received_spool_pks, key="cs_rspk")
+    if st.button("Submit Combined Spools"):
+        next_cs_pk = get_next_id(cs_sheet, "Combined_SpoolsPK")
+        cs_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cs_sheet.append_row([next_cs_pk, selected_usid_c, selected_rspk, cs_now])
+        st.success(f"Combined Spools PK {next_cs_pk} submitted.")
+
+# === ARDENT FIBER DIMENSION QC TABLE ===
+st.header("Ardent Fiber Dimension QC Entry")
+if batch_fiber_ids and uncoated_spool_ids:
+    selected_bfid_qc = st.selectbox("Batch Fiber ID for QC", batch_fiber_ids, key="qc_bfid")
+    selected_usid_qc = st.selectbox("UncoatedSpool ID for QC", uncoated_spool_ids, key="qc_usid")
+    ardent_qc_inside_d = st.number_input("Ardent QC Inside Diameter (um)", value=0.0, key="qc_id")
+    ardent_qc_outside_d = st.number_input("Ardent QC Outside Diameter (um)", value=0.0, key="qc_od")
+    measured_conc = st.number_input("Measured Concentricity (%)", value=0.0, key="qc_conc")
+    wall_thick = st.number_input("Wall Thickness (um)", value=0.0, key="qc_wall")
+    operator_init = st.text_input("Operator Initials", key="qc_init")
+    qc_notes = st.text_area("Notes for QC", key="qc_notes")
+    qc_date = st.date_input("Date", value=datetime.today(), key="qc_date")
+    inside_circ = st.number_input("Inside Circularity", value=0.0, key="qc_ic")
+    outside_circ = st.number_input("Outside Circularity", value=0.0, key="qc_oc")
+    if st.button("Submit Fiber Dimension QC"):
+        next_qc_id = get_next_id(qc_sheet, "Ardent_QC_ID")
+        qc_now = qc_date.strftime("%Y-%m-%d %H:%M:%S")
+        qc_sheet.append_row([
+            next_qc_id, selected_bfid_qc, selected_usid_qc, ardent_qc_inside_d,
+            ardent_qc_outside_d, measured_conc, wall_thick, operator_init,
+            qc_notes, qc_now, inside_circ, outside_circ
+        ])
+        st.success(f"Ardent QC Entry ID {next_qc_id} submitted.")
+
+
+st.markdown("## 📅 Last 7 Days Data Preview")
+
+show_table_preview("🧪 Uncoated Fiber Data", ufd_sheet, "Date_Time")
+show_table_preview("🧵 UnCoatedSpool ID", usid_sheet, "Date_Time")
+show_table_preview("📦 As Received UncoatedSpools", ar_sheet, "Date_Time")
+show_table_preview("🔗 Combined Spools", cs_sheet, "Date_Time")
+show_table_preview("🧪 Ardent Fiber Dimension QC", qc_sheet, "Date_Time")
