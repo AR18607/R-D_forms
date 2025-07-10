@@ -328,11 +328,17 @@ def filter_last_7_days(records, date_key="Date_Time"):
     today = datetime.today()
     filtered_records = []
     for record in records:
-        dt_str = record.get(date_key, "").strip()
+        if not isinstance(record, dict):
+            continue
+        dt_str = record.get(date_key, "")
+        if dt_str is None:
+            continue
+        dt_str = str(dt_str).strip()
         parsed = parse_datetime_str(dt_str)
         if parsed and parsed.date() >= (today - timedelta(days=7)).date():
             filtered_records.append(record)
     return filtered_records
+
 
 def show_table_preview(title, worksheet, date_col="Date_Time"):
     st.markdown(f"#### {title}")
