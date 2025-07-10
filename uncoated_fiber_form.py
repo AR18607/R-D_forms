@@ -12,7 +12,7 @@ client = gspread.authorize(creds)
 sheet_url = "https://docs.google.com/spreadsheets/d/1AGZ1g3LeSPtLAKV685snVQeERWXVPF4WlIAV8aAj9o8"
 spreadsheet = client.open_by_url(sheet_url)
 
-# === HEADERS ===
+# === HEADERS (MATCH YOUR GOOGLE SHEET TABLE) ===
 UFD_HEADERS = [
     "Batch_Fiber_ID", "Supplier_Batch_ID", "Inside_Diameter_Avg", "Inside_Diameter_StDev",
     "Outside_Diameter_Avg", "Outside_Diameter_StDev", "Reported_Concentricity", "Batch_Length",
@@ -21,8 +21,7 @@ UFD_HEADERS = [
     "Kink_Test_2_95", "Kink_Test_2_36", "Order_On_Bobbin", "Number_Of_Blue_Splices", "Notes", "Date_Time"
 ]
 
-# === LOAD SYENSQO SHEET ===
-# === LOAD SYENSQO SHEET ===
+# === LOAD SYENSQO SHEET: MANUAL HEADER ASSIGNMENT ===
 try:
     syensqo_sheet = spreadsheet.worksheet("Syensqo")
 except Exception:
@@ -32,16 +31,22 @@ syensqo_df = pd.DataFrame()
 if syensqo_sheet:
     syensqo_raw = syensqo_sheet.get_all_values()
     if len(syensqo_raw) > 2:
-        syensqo_headers = [h.strip() for h in syensqo_raw[1]]  # 2nd row is header
+        syensqo_headers = [
+            "Fiber", "Shipment date", "Tracking number UPS", "Batch length (m)", "OD", "SD",
+            "ID", "SD_ID", "Thickness (µm)", "Thickness/OD", "minimum thickness/OD",
+            "Concentricity (%)", "GPU (N2)", "Collapse pressure (PSI)",
+            "Kink test 2.95 inches (mm)", "Kink test 2.36 inches (mm)",
+            "Bobbin number", "Order (coating)", "Blue Splicings number", "Surface (m^2)"
+        ]
         syensqo_data = syensqo_raw[2:]  # Data starts from 3rd row
-        syensqo_df = pd.DataFrame(syensqo_data, columns=syensqo_headers)
+        trimmed_data = [row[:len(syensqo_headers)] for row in syensqo_data]
+        syensqo_df = pd.DataFrame(trimmed_data, columns=syensqo_headers)
         syensqo_df = syensqo_df.loc[~(syensqo_df == '').all(axis=1)]
         st.write("DEBUG: Syensqo column headers:", list(syensqo_df.columns))
         if not syensqo_df.empty:
             st.write("DEBUG: First data row dict:", syensqo_df.iloc[0].to_dict())
     else:
         syensqo_df = pd.DataFrame()
-
 
 def safe_float(val):
     try:
@@ -97,13 +102,13 @@ if fiber_source == "Syensqo" and not syensqo_df.empty:
     selected_fiber = st.selectbox("Batch Fiber ID (from Syensqo sheet)", syensqo_fiber_ids, key="Batch_Fiber_ID")
     syensqo_row = syensqo_df[syensqo_df["Fiber"] == selected_fiber].iloc[0]
 
-    # === COPY-PASTE the column names you see from the debug printout below! ===
+    # --- MAPPING: edit the lines below as needed for new/missing fields ---
     form_values["Batch_Fiber_ID"] = safe_text(syensqo_row.get("Fiber", ""))
     form_values["Inside_Diameter_Avg"] = st.number_input(
         "Inside Diameter (um) avg", value=safe_float(syensqo_row.get("ID", 0)), key="Inside_Diameter_Avg"
     )
     form_values["Inside_Diameter_StDev"] = st.number_input(
-        "Inside Diameter (um) StDev", value=safe_float(syensqo_row.get("SD", 0)), key="Inside_Diameter_StDev"
+        "Inside Diameter (um) StDev", value=safe_float(syensqo_row.get("SD_ID", 0)), key="Inside_Diameter_StDev"
     )
     form_values["Outside_Diameter_Avg"] = st.number_input(
         "Outside Diameter (um) Avg", value=safe_float(syensqo_row.get("OD", 0)), key="Outside_Diameter_Avg"
