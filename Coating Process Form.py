@@ -20,22 +20,19 @@ def get_or_create_worksheet(sheet, title, headers):
         worksheet.append_row(headers)
     return worksheet
 
-# --------- PK GENERATION UTILITIES ---------
-def get_next_numeric_id(worksheet, id_column):
-    records = worksheet.get_all_records()
-    nums = [int(record[id_column]) for record in records if str(record.get(id_column, "")).isdigit()]
-    return max(nums) + 1 if nums else 1
-
-def get_next_prefixed_id(worksheet, id_column, prefix):
-    records = worksheet.get_all_records()
-    nums = []
-    for record in records:
-        val = str(record.get(id_column, ""))
-        m = re.match(rf"^{prefix}-(\d+)$", val)
-        if m:
-            nums.append(int(m.group(1)))
-    next_id = (max(nums) + 1 if nums else 1)
-    return f"{prefix}-{next_id:03d}"
+def get_safe_all_records(worksheet, headers):
+    """Get only records that match the expected number of columns (headers)."""
+    all_values = worksheet.get_all_values()
+    if not all_values or len(all_values) < 2:
+        return []
+    sheet_headers = all_values[0][:len(headers)]
+    records = []
+    for row in all_values[1:]:
+        # Pad row if needed
+        row = row[:len(headers)] + [""] * (len(headers) - len(row))
+        record = dict(zip(sheet_headers, row[:len(headers)]))
+        records.append(record)
+    return records
 
 # --------- HEADERS FROM GOOGLE SHEETS ---------
 pcp_headers = [
@@ -63,7 +60,24 @@ csm_sheet = get_or_create_worksheet(spreadsheet, "Coating Solution Mass Tbl", cs
 
 # --------- REFERENCE SHEETS FOR FK DROPDOWNS ---------
 solution_sheet = get_or_create_worksheet(spreadsheet, "Solution ID Tbl", ["Solution ID"])
-solution_ids = [record["Solution ID"] for record in solution_sheet.get_all_records() if record.get("Solution ID")]
+solution_ids = [record["Solution ID"] for record in get_safe_all_records(solution_sheet, ["Solution ID"]) if record.get("Solution ID")]
+
+# --------- PK GENERATION UTILITIES ---------
+def get_next_numeric_id(worksheet, id_column, headers):
+    records = get_safe_all_records(worksheet, headers)
+    nums = [int(record[id_column]) for record in records if str(record.get(id_column, "")).isdigit()]
+    return max(nums) + 1 if nums else 1
+
+def get_next_prefixed_id(worksheet, id_column, prefix, headers):
+    records = get_safe_all_records(worksheet, headers)
+    nums = []
+    for record in records:
+        val = str(record.get(id_column, ""))
+        m = re.match(rf"^{prefix}-(\d+)$", val)
+        if m:
+            nums.append(int(m.group(1)))
+    next_id = (max(nums) + 1 if nums else 1)
+    return f"{prefix}-{next_id:03d}"
 
 # --------- UI LAYOUT ---------
 st.title("🧪 Coating Process Data Entry")
@@ -73,7 +87,7 @@ tabs = st.tabs(["Pilot Coating", "Dip Coating", "Coater Tension", "Solution Mass
 with tabs[0]:
     st.subheader("Pilot Coating Process Entry")
     with st.form("pilot_form"):
-        pcoating_id = get_next_prefixed_id(pcp_sheet, "PCoating ID", "PCOAT")
+        pcoating_id = get_next_prefixed_id(pcp_sheet, "PCoating ID", "PCOAT", pcp_headers)
         st.markdown(f"**Auto-generated PCoating ID:** `{pcoating_id}`")
         pilot = {
             "solution_id": st.selectbox("Solution ID", solution_ids, key="p_solution"),
@@ -109,7 +123,7 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("Dip Coating Process Entry")
     with st.form("dip_form"):
-        dcoating_id = get_next_numeric_id(dcp_sheet, "DCoating_ID")
+        dcoating_id = get_next_numeric_id(dcp_sheet, "DCoating_ID", dcp_headers)
         st.markdown(f"**Auto-generated DCoating ID:** `{dcoating_id}`")
         dip = {
             "solution_id": st.selectbox("Solution_ID", solution_ids, key="d_solution"),
@@ -138,7 +152,7 @@ with tabs[1]:
 # --------- COATER TENSION FORM WITH MULTI-ENTRY ---------
 with tabs[2]:
     st.subheader("Coater Tension Entry (Multi Measurement)")
-    pcoating_ids = [record["PCoating ID"] for record in pcp_sheet.get_all_records() if record.get("PCoating ID")]
+    pcoating_ids = [record["PCoating ID"] for record in get_safe_all_records(pcp_sheet, pcp_headers) if record.get("PCoating ID")]
     if "tension_list" not in st.session_state:
         st.session_state.tension_list = []
     with st.form("tension_form"):
@@ -154,7 +168,7 @@ with tabs[2]:
         st.table(pd.DataFrame(st.session_state.tension_list, columns=["PCoating ID", "Payout Location", "Tension (g)", "Notes"]))
     if st.button("Submit All Tension Data"):
         for entry in st.session_state.tension_list:
-            tid = get_next_prefixed_id(ct_sheet, "Tension ID", "TENSION")
+            tid = get_next_prefixed_id(ct_sheet, "Tension ID", "TENSION", ct_headers)
             ct_sheet.append_row([tid] + list(entry))
         st.session_state.tension_list.clear()
         st.success(":white_check_mark: All entries saved!")
@@ -162,14 +176,12 @@ with tabs[2]:
 # --------- COATING SOLUTION MASS FORM WITH MULTI-ENTRY ---------
 with tabs[3]:
     st.subheader("Coating Solution Mass Entry (Multi Measurement)")
-    # DCoating IDs for dropdown (from Dip Coating, if any exist)
-    dcoating_ids = [str(record["DCoating_ID"]) for record in dcp_sheet.get_all_records() if record.get("DCoating_ID")]
-    pcoating_ids = [record["PCoating ID"] for record in pcp_sheet.get_all_records() if record.get("PCoating ID")]
+    dcoating_ids = [str(record["DCoating_ID"]) for record in get_safe_all_records(dcp_sheet, dcp_headers) if record.get("DCoating_ID")]
+    pcoating_ids = [record["PCoating ID"] for record in get_safe_all_records(pcp_sheet, pcp_headers) if record.get("PCoating ID")]
     if "mass_list" not in st.session_state:
         st.session_state.mass_list = []
     with st.form("mass_form"):
         sid = st.selectbox("Solution ID", solution_ids, key="sm_solution")
-        # Use date and time input widgets
         date_part = st.date_input("Date", key="sm_date")
         time_part = st.time_input("Time", key="sm_time")
         date_time = datetime.combine(date_part, time_part)
@@ -191,7 +203,7 @@ with tabs[3]:
         ))
     if st.button("Submit All Mass Entries"):
         for entry in st.session_state.mass_list:
-            mid = get_next_numeric_id(csm_sheet, "SolutionMass ID")
+            mid = get_next_numeric_id(csm_sheet, "SolutionMass ID", csm_headers)
             formatted_entry = list(entry)
             formatted_entry[1] = formatted_entry[1].strftime("%Y-%m-%d %H:%M")
             csm_sheet.append_row([mid] + formatted_entry)
@@ -218,16 +230,20 @@ def filter_last_7_days(records, date_key):
             continue
     return filtered
 
-def safe_preview(title, records, key):
+def safe_preview(title, records, key, use_latest_if_no_date=False):
     st.markdown(f"### :white_check_mark: {title}")
-    filtered = filter_last_7_days(records, key)
-    if filtered:
-        st.dataframe(pd.DataFrame(filtered))
+    if use_latest_if_no_date:
+        # Show the last 7 entries if there's no date
+        st.dataframe(pd.DataFrame(records[-7:]))
     else:
-        st.write("No entries in the last 7 days.")
+        filtered = filter_last_7_days(records, key)
+        if filtered:
+            st.dataframe(pd.DataFrame(filtered))
+        else:
+            st.write("No entries in the last 7 days.")
 
 st.markdown("## :date: Recent Entries (Last 7 Days)")
-safe_preview("Pilot Coating", pcp_sheet.get_all_records(), "Date")
-safe_preview("Dip Coating", dcp_sheet.get_all_records(), "Date")
-safe_preview("Coater Tension", ct_sheet.get_all_records(), "Tension ID")  # There is no date, so last 7 by insert order only
-safe_preview("Coating Solution Mass", csm_sheet.get_all_records(), "Date & Time")
+safe_preview("Pilot Coating", get_safe_all_records(pcp_sheet, pcp_headers), "Date")
+safe_preview("Dip Coating", get_safe_all_records(dcp_sheet, dcp_headers), "Date")
+safe_preview("Coater Tension", get_safe_all_records(ct_sheet, ct_headers), "Tension ID", use_latest_if_no_date=True)  # Just shows latest 7 if no date
+safe_preview("Coating Solution Mass", get_safe_all_records(csm_sheet, csm_headers), "Date & Time")
