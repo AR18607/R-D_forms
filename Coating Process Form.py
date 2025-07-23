@@ -47,7 +47,7 @@ pcp_headers = [
 dcp_headers = [
     "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow", "Number_of_Fibers",
     "Coating_Speed", "Annealing_Time", "Annealing_Temperature", "Coating_Layer_Type", "Operator_Initials",
-    "Ambient_Temperature", "Ambient_RH", "Notes"
+    "Ambient_Temperature", "Ambient_RH", "Notes", "Batch_Fiber_ID", "UncoatedSpool_ID"
 ]
 ct_headers = ["Tension ID", "PCoating ID", "Payout Location", "Tension (g)", "Notes"]
 csm_headers = [
@@ -63,12 +63,12 @@ csm_sheet = get_or_create_worksheet(spreadsheet, "Coating Solution Mass Tbl", cs
 
 # --------- REFERENCE SHEETS FOR FK DROPDOWNS ---------
 solution_sheet = get_or_create_worksheet(spreadsheet, "Solution ID Tbl", ["Solution ID"])
-ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", ["Batch Fiber ID"])
-usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UnCoatedSpool ID"])
+ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", ["Batch_Fiber_ID"])
+usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID"])
 
 solution_ids = [record["Solution ID"] for record in solution_sheet.get_all_records() if record.get("Solution ID")]
-batch_fiber_ids = [record["Batch Fiber ID"] for record in ufd_sheet.get_all_records() if record.get("Batch Fiber ID")]
-uncoated_spool_ids = [record["UnCoatedSpool ID"] for record in usid_sheet.get_all_records() if record.get("UnCoatedSpool ID")]
+batch_fiber_ids = [record["Batch_Fiber_ID"] for record in ufd_sheet.get_all_records() if record.get("Batch_Fiber_ID")]
+uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_all_records() if record.get("UncoatedSpool_ID")]
 
 # --------- UI LAYOUT ---------
 st.title("🧪 Coating Process Data Entry")
@@ -123,7 +123,7 @@ with tabs[1]:
             "box_rh": st.number_input("Box_RH", min_value=0.0, key="d_box_rh"),
             "n2_flow": st.number_input("N2_Flow", min_value=0.0, key="d_n2"),
             "num_fibers": st.number_input("Number_of_Fibers", min_value=0, key="d_fibers"),
-            "coating_speed": st.number_input("Coating_Speed", min_value=0.0, value=1.0, key="d_speed"),  # default value
+            "coating_speed": st.number_input("Coating_Speed", min_value=0.0, value=1.0, key="d_speed"),
             "anneal_time": st.number_input("Annealing_Time", min_value=0.0, value=10.0, key="d_anneal_time"),
             "anneal_temp": st.number_input("Annealing_Temperature", min_value=0.0, value=60.0, key="d_anneal_temp"),
             "layer_type": st.selectbox("Coating_Layer_Type", ["GL", "AL", "PL"], key="d_layer"),
@@ -131,15 +131,16 @@ with tabs[1]:
             "ambient_temp": st.number_input("Ambient_Temperature", min_value=0.0, key="d_amb_temp"),
             "ambient_rh": st.number_input("Ambient_RH", min_value=0.0, key="d_amb_rh"),
             "notes": st.text_area("Notes", key="d_notes"),
-            "batch_fiber": st.selectbox("Batch Fiber ID", batch_fiber_ids, key="d_batch"),
-            "spool": st.selectbox("UnCoatedSpool ID", uncoated_spool_ids, key="d_spool"),
+            "batch_fiber": st.selectbox("Batch_Fiber_ID", batch_fiber_ids, key="d_batch"),
+            "spool": st.selectbox("UncoatedSpool_ID", uncoated_spool_ids, key="d_spool"),
         }
-        # Order must match your sheet headers!
+        # Extend headers and append in the same order if your table has the two extra columns.
         if st.form_submit_button("Submit Dip Coating"):
             dcp_sheet.append_row([
                 dcoating_id, dip["solution_id"], dip["date"].strftime("%Y-%m-%d"), dip["box_temp"], dip["box_rh"], dip["n2_flow"],
                 dip["num_fibers"], dip["coating_speed"], dip["anneal_time"], dip["anneal_temp"],
-                dip["layer_type"], dip["operator"], dip["ambient_temp"], dip["ambient_rh"], dip["notes"]
+                dip["layer_type"], dip["operator"], dip["ambient_temp"], dip["ambient_rh"], dip["notes"],
+                dip["batch_fiber"], dip["spool"]
             ])
             st.success(f"Saved entry for Dip Coating ID {dcoating_id}")
 
@@ -199,7 +200,6 @@ with tabs[3]:
     if st.button("Submit All Mass Entries"):
         for entry in st.session_state.mass_list:
             mid = get_next_numeric_id(csm_sheet, "SolutionMass ID")
-            # date_time is a datetime object, format it for storage
             formatted_entry = list(entry)
             formatted_entry[1] = formatted_entry[1].strftime("%Y-%m-%d %H:%M")
             csm_sheet.append_row([mid] + formatted_entry)
@@ -213,6 +213,9 @@ def filter_last_7_days(records, date_key):
     for record in records:
         date_str = record.get(date_key, "").strip()
         try:
+            if not date_str:
+                continue
+            # Try date and datetime parsing
             if " " in date_str:
                 date_val = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
             else:
@@ -234,5 +237,5 @@ def safe_preview(title, records, key):
 st.markdown("## :date: Recent Entries (Last 7 Days)")
 safe_preview("Pilot Coating", pcp_sheet.get_all_records(), "Date")
 safe_preview("Dip Coating", dcp_sheet.get_all_records(), "Date")
-safe_preview("Coater Tension", ct_sheet.get_all_records(), "PCoating ID")
+safe_preview("Coater Tension", ct_sheet.get_all_records(), "Tension ID")  # Could use PCoating ID if you want
 safe_preview("Coating Solution Mass", csm_sheet.get_all_records(), "Date & Time")
