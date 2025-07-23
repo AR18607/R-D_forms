@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import re
 
-# --------- GOOGLE SHEETS SETUP ---------
+# ------------- GOOGLE SHEETS SETUP -------------
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["gcp_service_account"]), scope)
 client = gspread.authorize(creds)
@@ -37,7 +37,7 @@ def get_next_prefixed_id(worksheet, id_column, prefix):
     next_id = (max(nums) + 1 if nums else 1)
     return f"{prefix}-{next_id:03d}"
 
-# --------- SHEET HEADERS (EXACT) ---------
+# --------- HEADERS FROM GOOGLE SHEETS ---------
 pcp_headers = [
     "PCoating ID", "Solution ID", "Date", "Box Temperature", "Box RH", "N2 flow", "Load cell slope",
     "Number of fibers", "Coating Speed", "Tower 1 set point", "Tower 1 entry temperature",
@@ -47,7 +47,7 @@ pcp_headers = [
 dcp_headers = [
     "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow", "Number_of_Fibers",
     "Coating_Speed", "Annealing_Time", "Annealing_Temperature", "Coating_Layer_Type", "Operator_Initials",
-    "Ambient_Temperature", "Ambient_RH", "Notes", "Batch_Fiber_ID", "UncoatedSpool_ID"
+    "Ambient_Temperature", "Ambient_RH", "Notes"
 ]
 ct_headers = ["Tension ID", "PCoating ID", "Payout Location", "Tension (g)", "Notes"]
 csm_headers = [
@@ -63,12 +63,7 @@ csm_sheet = get_or_create_worksheet(spreadsheet, "Coating Solution Mass Tbl", cs
 
 # --------- REFERENCE SHEETS FOR FK DROPDOWNS ---------
 solution_sheet = get_or_create_worksheet(spreadsheet, "Solution ID Tbl", ["Solution ID"])
-ufd_sheet = get_or_create_worksheet(spreadsheet, "Uncoated Fiber Data Tbl", ["Batch_Fiber_ID"])
-usid_sheet = get_or_create_worksheet(spreadsheet, "UnCoatedSpool ID Tbl", ["UncoatedSpool_ID"])
-
 solution_ids = [record["Solution ID"] for record in solution_sheet.get_all_records() if record.get("Solution ID")]
-batch_fiber_ids = [record["Batch_Fiber_ID"] for record in ufd_sheet.get_all_records() if record.get("Batch_Fiber_ID")]
-uncoated_spool_ids = [record["UncoatedSpool_ID"] for record in usid_sheet.get_all_records() if record.get("UncoatedSpool_ID")]
 
 # --------- UI LAYOUT ---------
 st.title("🧪 Coating Process Data Entry")
@@ -131,16 +126,12 @@ with tabs[1]:
             "ambient_temp": st.number_input("Ambient_Temperature", min_value=0.0, key="d_amb_temp"),
             "ambient_rh": st.number_input("Ambient_RH", min_value=0.0, key="d_amb_rh"),
             "notes": st.text_area("Notes", key="d_notes"),
-            "batch_fiber": st.selectbox("Batch_Fiber_ID", batch_fiber_ids, key="d_batch"),
-            "spool": st.selectbox("UncoatedSpool_ID", uncoated_spool_ids, key="d_spool"),
         }
-        # Extend headers and append in the same order if your table has the two extra columns.
         if st.form_submit_button("Submit Dip Coating"):
             dcp_sheet.append_row([
                 dcoating_id, dip["solution_id"], dip["date"].strftime("%Y-%m-%d"), dip["box_temp"], dip["box_rh"], dip["n2_flow"],
                 dip["num_fibers"], dip["coating_speed"], dip["anneal_time"], dip["anneal_temp"],
-                dip["layer_type"], dip["operator"], dip["ambient_temp"], dip["ambient_rh"], dip["notes"],
-                dip["batch_fiber"], dip["spool"]
+                dip["layer_type"], dip["operator"], dip["ambient_temp"], dip["ambient_rh"], dip["notes"]
             ])
             st.success(f"Saved entry for Dip Coating ID {dcoating_id}")
 
@@ -171,6 +162,7 @@ with tabs[2]:
 # --------- COATING SOLUTION MASS FORM WITH MULTI-ENTRY ---------
 with tabs[3]:
     st.subheader("Coating Solution Mass Entry (Multi Measurement)")
+    # DCoating IDs for dropdown (from Dip Coating, if any exist)
     dcoating_ids = [str(record["DCoating_ID"]) for record in dcp_sheet.get_all_records() if record.get("DCoating_ID")]
     pcoating_ids = [record["PCoating ID"] for record in pcp_sheet.get_all_records() if record.get("PCoating ID")]
     if "mass_list" not in st.session_state:
@@ -215,10 +207,10 @@ def filter_last_7_days(records, date_key):
         try:
             if not date_str:
                 continue
-            # Try date and datetime parsing
-            if " " in date_str:
+            # Try datetime with time first, then just date
+            try:
                 date_val = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
-            else:
+            except:
                 date_val = datetime.strptime(date_str, "%Y-%m-%d")
             if date_val.date() >= (today - timedelta(days=7)).date():
                 filtered.append(record)
@@ -237,5 +229,5 @@ def safe_preview(title, records, key):
 st.markdown("## :date: Recent Entries (Last 7 Days)")
 safe_preview("Pilot Coating", pcp_sheet.get_all_records(), "Date")
 safe_preview("Dip Coating", dcp_sheet.get_all_records(), "Date")
-safe_preview("Coater Tension", ct_sheet.get_all_records(), "Tension ID")  # Could use PCoating ID if you want
+safe_preview("Coater Tension", ct_sheet.get_all_records(), "Tension ID")  # There is no date, so last 7 by insert order only
 safe_preview("Coating Solution Mass", csm_sheet.get_all_records(), "Date & Time")
