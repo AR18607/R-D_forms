@@ -22,13 +22,11 @@ def get_or_create_worksheet(sheet, title, headers):
 
 # --------- PK GENERATION UTILITIES ---------
 def get_next_numeric_id(worksheet, id_column):
-    """For purely numeric PKs."""
     records = worksheet.get_all_records()
     nums = [int(record[id_column]) for record in records if str(record.get(id_column, "")).isdigit()]
     return max(nums) + 1 if nums else 1
 
 def get_next_prefixed_id(worksheet, id_column, prefix):
-    """For PKs like PCOAT-001, TENSION-001, etc."""
     records = worksheet.get_all_records()
     nums = []
     for record in records:
@@ -178,7 +176,10 @@ with tabs[3]:
         st.session_state.mass_list = []
     with st.form("mass_form"):
         sid = st.selectbox("Solution ID", solution_ids, key="sm_solution")
-        date_time = st.datetime_input("Date & Time", key="sm_date")
+        # Use date and time input widgets
+        date_part = st.date_input("Date", key="sm_date")
+        time_part = st.time_input("Time", key="sm_time")
+        date_time = datetime.combine(date_part, time_part)
         d_id = st.selectbox("DCoating ID (optional)", ["None"] + dcoating_ids, key="sm_dcoating")
         p_id = st.selectbox("Pcoating ID", pcoating_ids, key="sm_pcoating")
         mass = st.number_input("Solution Mass", min_value=0.0, key="sm_mass")
@@ -186,14 +187,22 @@ with tabs[3]:
         note = st.text_area("Notes", key="sm_note")
         add = st.form_submit_button("Add Solution Mass Measurement")
         if add:
-            st.session_state.mass_list.append((sid, date_time, d_id if d_id != "None" else "", p_id, mass, initials, note))
+            st.session_state.mass_list.append((
+                sid, date_time, d_id if d_id != "None" else "", p_id, mass, initials, note
+            ))
     if st.session_state.mass_list:
         st.write("### Preview Mass Entries")
-        st.table(pd.DataFrame(st.session_state.mass_list, columns=["Solution ID", "Date & Time", "DCoating ID", "Pcoating ID", "Solution Mass", "Operators Initials", "Notes"]))
+        st.table(pd.DataFrame(
+            st.session_state.mass_list,
+            columns=["Solution ID", "Date & Time", "DCoating ID", "Pcoating ID", "Solution Mass", "Operators Initials", "Notes"]
+        ))
     if st.button("Submit All Mass Entries"):
         for entry in st.session_state.mass_list:
             mid = get_next_numeric_id(csm_sheet, "SolutionMass ID")
-            csm_sheet.append_row([mid] + list(entry))
+            # date_time is a datetime object, format it for storage
+            formatted_entry = list(entry)
+            formatted_entry[1] = formatted_entry[1].strftime("%Y-%m-%d %H:%M")
+            csm_sheet.append_row([mid] + formatted_entry)
         st.session_state.mass_list.clear()
         st.success(":white_check_mark: All mass entries saved!")
 
