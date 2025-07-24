@@ -14,6 +14,17 @@ TAB_MODULE = "Module Tbl"
 TAB_LEAK = "Leak Test Tbl"
 TAB_FAILURES = "Module Failures Tbl"
 
+# Prevent accidental form submit on Enter
+st.markdown("""
+    <script>
+        document.addEventListener("keydown", function(e) {
+            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+                e.preventDefault();
+            }
+        });
+    </script>
+""", unsafe_allow_html=True)
+
 # --- Google Sheet Functions ---
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -91,7 +102,7 @@ except Exception as e:
     st.error(f"Error loading table data: {e}")
     st.stop()
 
-# --- Prepare Module Option with Type & Label ---
+# --- Prepare Module Option with Type & Label (not Notes) ---
 def module_label(row):
     return f"{row['Module ID']} / {row.get('Module Type', '')} / {row.get('Label', '')}".replace(' /  / ', ' / ')
 
@@ -131,8 +142,10 @@ with st.form("failure_entry_form", clear_on_submit=True):
     failure_mode = st.text_input("Failure Mode")
     operator_initials = st.text_input("Operator Initials")
     failure_date = st.date_input("Failure Date")
-    label_fail = st.selectbox("Label (select to view previous)", 
-        sorted(existing_modules_df["Label"].unique().tolist()) if not existing_modules_df.empty else [""])
+    label_fail = st.selectbox(
+        "Label (select to view previous)", 
+        sorted(existing_modules_df["Label"].unique().tolist()) if not existing_modules_df.empty else [""]
+    )
     if label_fail:
         prev_details = existing_modules_df[existing_modules_df["Label"] == label_fail]
         if not prev_details.empty:
