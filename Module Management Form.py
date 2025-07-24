@@ -71,7 +71,7 @@ st.title("🛠 Module Management Form")
 try:
     spreadsheet = cached_connect_google_sheet(GOOGLE_SHEET_NAME)
     tab_names = [ws.title for ws in spreadsheet.worksheets()]
-    st.info(f"Tabs found: {tab_names}")
+    #st.info(f"Tabs found: {tab_names}")
 except Exception as e:
     st.error(f"Failed to load sheet: {e}")
     st.stop()
