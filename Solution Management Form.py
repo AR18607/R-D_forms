@@ -123,8 +123,18 @@ def display_table_with_date_filter(records, headers, table_title, date_col="Date
     if not records:
         st.write("No records.")
         return
+    # Create DataFrame and patch missing columns
+    df = pd.DataFrame(records)
+    for col in headers:
+        if col not in df.columns:
+            df[col] = ""
+    # Reorder columns to match headers
+    df = df[headers]
+    # Clean up the Date column
+    if "Date" in df.columns:
+        df["Date"] = df["Date"].astype(str).replace("nan", "")
     # Date filter
-    dates = [parse_date(r.get(date_col, "")) for r in records if parse_date(r.get(date_col, ""))]
+    dates = [parse_date(d) for d in df["Date"] if parse_date(d)]
     if dates:
         min_date = min(dates).date()
         max_date = max(dates).date()
@@ -132,14 +142,12 @@ def display_table_with_date_filter(records, headers, table_title, date_col="Date
         today = datetime.today().date()
         min_date, max_date = today - timedelta(days=default_days), today
     filter_start, filter_end = st.date_input(f"Select {table_title} date range", (min_date, max_date), key=f"{table_title}_date_range")
-    filtered = [
-        r for r in records
-        if (d := parse_date(r.get(date_col, ""))) and filter_start <= d.date() <= filter_end
-    ]
-    if filtered:
-        st.dataframe(pd.DataFrame(filtered)[headers])
+    filtered = df[df["Date"].apply(lambda d: parse_date(d) and filter_start <= parse_date(d).date() <= filter_end if d else False)]
+    if not filtered.empty:
+        st.dataframe(filtered)
     else:
         st.write(f"No records found for selected date range.")
+
 
 # --- Prevent accidental form submit on Enter ---
 st.markdown("""
