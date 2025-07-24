@@ -8,17 +8,17 @@ import time
 
 # --- Google Sheets Config ---
 SPREADSHEET_KEY = "1uPdUWiiwMdJCYJaxZ5TneFa9h6tbSrs327BVLT5GVPY"
-SOLUTION_ID_HEADERS = ["Solution ID", "Type", "Expired", "Consumed", "C-Solution Conc"]
+SOLUTION_ID_HEADERS = ["Solution ID", "Type", "Expired", "Consumed", "C-Solution Conc", "Date"]
 PREP_HEADERS = [
     "Solution Prep ID", "Solution ID (FK)", "Desired Solution Concentration", "Desired Final Volume (ml)",
     "Solvent", "Solvent Lot Number", "Solvent Weight Measured (g)", "Polymer",
     "Polymer starting concentration", "Polymer Lot Number", "Polymer Weight Measured (g)",
-    "Prep Date", "Initials", "Notes", "C-Solution Concentration", "C-Label for jar"
+    "Prep Date", "Initials", "Notes", "C-Solution Concentration", "C-Label for jar", "Date"
 ]
 COMBINED_HEADERS = [
     "Combined Solution ID", "Solution ID A", "Solution ID B",
     "Solution Mass A", "Solution Mass B", "Combined Solution Conc",
-    "Combined Date", "Initials", "Notes"
+    "Combined Date", "Initials", "Notes", "Date"
 ]
 
 @st.cache_resource(ttl=600)
@@ -44,15 +44,19 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = retry_open_worksheet(spreadsheet, tab_name)
     except gspread.exceptions.WorksheetNotFound:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
+        worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols=str(len(headers)))
         worksheet.insert_row(headers, 1)
+    # Ensure Date column is present and last
+    actual_headers = worksheet.row_values(1)
+    if "Date" not in actual_headers:
+        actual_headers.append("Date")
+        worksheet.delete_row(1)
+        worksheet.insert_row(actual_headers, 1)
+    elif actual_headers[-1] != "Date":
+        actual_headers = [h for h in actual_headers if h != "Date"] + ["Date"]
+        worksheet.delete_row(1)
+        worksheet.insert_row(actual_headers, 1)
     return worksheet
-
-@st.cache_data(ttl=120)
-def cached_col_values(sheet_key, tab_name, col=1):
-    spreadsheet = connect_google_sheet(sheet_key)
-    worksheet = retry_open_worksheet(spreadsheet, tab_name)
-    return worksheet.col_values(col)[1:]
 
 @st.cache_data(ttl=120)
 def cached_get_all_records(sheet_key, tab_name):
@@ -61,7 +65,6 @@ def cached_get_all_records(sheet_key, tab_name):
     return worksheet.get_all_records()
 
 def get_last_id_from_records(records, id_prefix):
-    """Return next auto-increment ID (e.g., COMB-014). Records can be string or dict or None."""
     ids = set()
     for r in records:
         val = None
@@ -105,6 +108,39 @@ def parse_date(date_val):
                 continue
     return None
 
+def label_status(row):
+    label = row["Solution ID"]
+    if row.get("Expired", "No") == "Yes":
+        label += " (expired)"
+    elif row.get("Consumed", "No") == "Yes":
+        label += " (consumed)"
+    elif row.get("Type", "New") == "Combined":
+        label += " (combined)"
+    return label
+
+def display_table_with_date_filter(records, headers, table_title, date_col="Date", default_days=7):
+    st.markdown(f"### {table_title}")
+    if not records:
+        st.write("No records.")
+        return
+    # Date filter
+    dates = [parse_date(r.get(date_col, "")) for r in records if parse_date(r.get(date_col, ""))]
+    if dates:
+        min_date = min(dates).date()
+        max_date = max(dates).date()
+    else:
+        today = datetime.today().date()
+        min_date, max_date = today - timedelta(days=default_days), today
+    filter_start, filter_end = st.date_input(f"Select {table_title} date range", (min_date, max_date), key=f"{table_title}_date_range")
+    filtered = [
+        r for r in records
+        if (d := parse_date(r.get(date_col, ""))) and filter_start <= d.date() <= filter_end
+    ]
+    if filtered:
+        st.dataframe(pd.DataFrame(filtered)[headers])
+    else:
+        st.write(f"No records found for selected date range.")
+
 # --- Prevent accidental form submit on Enter ---
 st.markdown("""
     <script>
@@ -116,7 +152,7 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
-# ----------- REFRESH DATA BUTTON (ONLY reruns HERE) ----------
+# ----------- REFRESH DATA BUTTON ----------
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
     st.rerun()
@@ -134,23 +170,13 @@ solution_records = cached_get_all_records(SPREADSHEET_KEY, "Solution ID Tbl")
 prep_records = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
 combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 
-def label_status(row):
-    label = row["Solution ID"]
-    if row.get("Expired", "No") == "Yes":
-        label += " (expired)"
-    elif row.get("Consumed", "No") == "Yes":
-        label += " (consumed)"
-    elif row.get("Type", "New") == "Combined":
-        label += " (combined)"
-    return label
-
-# ------------------- Solution ID Management -------------------
+# ====================== Solution ID Management ======================
 st.markdown("## 🔹 Solution ID Entry / Management")
 with st.expander("View / Update Existing Solution IDs", expanded=False):
     df = pd.DataFrame(solution_records)
     if not df.empty:
         df["Label"] = df.apply(label_status, axis=1)
-        st.dataframe(df[["Solution ID", "Type", "Expired", "Consumed"]])
+        st.dataframe(df[["Solution ID", "Type", "Expired", "Consumed", "Date"]])
         to_edit = st.selectbox("Select Solution ID to update", options=[""] + df["Solution ID"].tolist())
         if to_edit:
             idx = df[df["Solution ID"] == to_edit].index[0]
@@ -171,11 +197,13 @@ with st.form("solution_id_form", clear_on_submit=True):
     solution_type = st.selectbox("Type", ['New', 'Combined'])
     expired = st.selectbox("Expired?", ['No', 'Yes'], index=0)
     consumed = st.selectbox("Consumed?", ['No', 'Yes'], index=0)
+    sol_date = st.date_input("Solution ID Creation Date", value=datetime.today())
     submit_solution = st.form_submit_button("Submit New Solution ID")
     if submit_solution:
-        solution_sheet.append_row([next_id, solution_type, expired, consumed, ""])
+        data = [next_id, solution_type, expired, consumed, "", sol_date.strftime("%Y-%m-%d")]
+        solution_sheet.append_row(data)
         st.cache_data.clear()
-        st.success(":white_check_mark: Solution ID saved! Dropdowns and tables updated.")
+        st.success(":white_check_mark: Solution ID saved!")
         st.rerun()
 
 # Reload records after possible rerun
@@ -185,15 +213,17 @@ df_solution["Label"] = df_solution.apply(label_status, axis=1)
 prep_records = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
 combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 
-# ------------------- Solution Prep Data Entry -------------------
+# ====================== Solution Prep Data Entry ======================
 st.markdown("---")
 st.markdown("## 🔹 Solution Prep Data Entry")
 
+# 1. Filter: Only "New" solution types (NOT 'Combined')
 prep_valid_df = df_solution[
-    ((df_solution['Type'].isin(["New", "Combined"])) &
-     ~((df_solution['Expired'] == "Yes") & (df_solution['Consumed'] == "Yes")))
+    (df_solution['Type'] == "New") & 
+    ~((df_solution['Expired'] == "Yes") & (df_solution['Consumed'] == "Yes"))
 ]
 prep_valid_ids = prep_valid_df["Solution ID"].tolist()
+
 selected_solution_fk = st.selectbox("Select Solution ID", options=prep_valid_ids, key="prep_solution_fk")
 prep_entries = prep_records
 existing_record = next((r for r in prep_entries if r.get("Solution ID (FK)", "") == selected_solution_fk), None)
@@ -238,7 +268,7 @@ with st.form("prep_data_form"):
         prep_date = datetime.strptime(prep_date_str, "%Y-%m-%d").date() if prep_date_str else datetime.today().date()
     except:
         prep_date = datetime.today().date()
-    prep_date = st.date_input("Prep Date", value=prep_date)
+    prep_date = st.date_input("Prep Date", value=prep_date, key="prep_date_input")
     initials = st.text_input("Initials", value=safe_get(existing_record, "Initials", ""))
     notes = st.text_area("Notes", value=safe_get(existing_record, "Notes", ""))
     c_sol_conc_value = polymer_weight / (solvent_weight + polymer_weight) if (solvent_weight + polymer_weight) > 0 else 0.0
@@ -250,18 +280,19 @@ with st.form("prep_data_form"):
         unsafe_allow_html=True,
     )
     c_label_jar = st.text_input("C-Label for jar", value=safe_get(existing_record, "C-Label for jar", ""))
+    this_row_date = st.date_input("Date (Record Creation/Update)", value=datetime.today().date(), key="prep_row_date")
     submit_prep = st.form_submit_button("Submit/Update Prep Details")
     if submit_prep:
         data = [
             prep_id, selected_solution_fk, desired_conc, final_volume, solvent, solvent_lot,
             solvent_weight, polymer, polymer_conc, polymer_lot, polymer_weight, str(prep_date),
-            initials, notes, c_sol_conc_value, c_label_jar
+            initials, notes, c_sol_conc_value, c_label_jar, this_row_date.strftime("%Y-%m-%d")
         ]
         try:
             if existing_record:
                 cell = prep_sheet.find(selected_solution_fk)
                 row_number = cell.row
-                prep_sheet.update(f"A{row_number}:P{row_number}", [data])
+                prep_sheet.update(f"A{row_number}:Q{row_number}", [data])
                 sol_row = df_solution[df_solution["Solution ID"]==selected_solution_fk].index[0] + 2
                 solution_sheet.update(f"E{sol_row}", [[c_sol_conc_value]])
                 st.cache_data.clear()
@@ -284,14 +315,11 @@ df_solution["Label"] = df_solution.apply(label_status, axis=1)
 prep_records = cached_get_all_records(SPREADSHEET_KEY, "Solution Prep Data Tbl")
 combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 
-# --------------------- COMBINED SOLUTION ENTRY -----------------------
+# ====================== Combined Solution Entry ======================
 st.markdown("---")
 st.markdown("## 🔹 Combined Solution Entry")
 
-# -- Always refresh combined records before generating next ID --
-combined_records = cached_get_all_records(SPREADSHEET_KEY, "Combined Solution Tbl")
 combined_id = get_last_id_from_records(combined_records, "COMB")
-
 valid_comb_df = df_solution[
     (df_solution["Type"] == "Combined") &
     ((df_solution['Consumed'] == "No") | (df_solution['Expired'] == "No"))
@@ -333,50 +361,37 @@ with st.form("combined_solution_form", clear_on_submit=True):
     combined_date = st.date_input("Combined Date")
     combined_initials = st.text_input("Initials")
     combined_notes = st.text_area("Notes")
+    this_row_date = st.date_input("Date (Record Creation/Update)", value=datetime.today().date(), key="combined_row_date")
     submit_combined = st.form_submit_button("Submit Combined Solution Details")
     if submit_combined:
-        combined_sheet.append_row([
-            combined_id, sid_a, sid_b,
-            solution_mass_a, solution_mass_b, combined_conc,
-            str(combined_date), combined_initials, combined_notes
-        ])
+        data = [
+            combined_id, sid_a, sid_b, solution_mass_a, solution_mass_b, combined_conc,
+            str(combined_date), combined_initials, combined_notes, this_row_date.strftime("%Y-%m-%d")
+        ]
+        combined_sheet.append_row(data)
         st.cache_data.clear()
         st.success(":white_check_mark: Combined Solution saved! Dropdowns and tables updated.")
         st.rerun()
 
-# ----------- 7-Day Recent Data Section (all activities) -----------
+# ================= PREVIEW TABLES WITH DATE FILTERS =================
+
 st.markdown("---")
-st.markdown("## 📅 Last 7 Days Data Preview")
+st.markdown("## 📅 Solution Management Data Preview")
 
-today = datetime.today()
-recent_prep_ids = [
-    rec for rec in prep_records
-    if (parsed := parse_date(rec.get("Prep Date", ""))) and parsed >= today - timedelta(days=7)
-]
-recent_combined = [
-    rec for rec in combined_records
-    if (cd := parse_date(rec.get("Combined Date", rec.get("Date", "")))) and cd >= today - timedelta(days=7)
-]
-recent_solution_ids = set(rec.get("Solution ID (FK)", "").strip() for rec in recent_prep_ids)
-recent_solution_ids.update(rec.get("Solution ID A", "").strip() for rec in recent_combined)
-recent_solution_ids.update(rec.get("Solution ID B", "").strip() for rec in recent_combined)
+display_table_with_date_filter(
+    solution_records,
+    SOLUTION_ID_HEADERS,
+    "Solution ID Table"
+)
 
-st.markdown("### Solution ID Table (Filtered by Recent Activity)")
-filtered_solution_ids = [rec for rec in solution_records if rec.get("Solution ID", "").strip() in recent_solution_ids]
-if filtered_solution_ids:
-    st.dataframe(pd.DataFrame(filtered_solution_ids))
-else:
-    st.write("No recent Solution ID records based on activity.")
+display_table_with_date_filter(
+    prep_records,
+    PREP_HEADERS,
+    "Solution Prep Data Table"
+)
 
-st.markdown("### Solution Prep Data (Last 7 Days Only)")
-if recent_prep_ids:
-    st.dataframe(pd.DataFrame(recent_prep_ids))
-else:
-    st.write("No Solution Prep records in the last 7 days.")
-
-st.markdown("### Combined Solution Data (Last 7 Days Only)")
-if recent_combined:
-    st.dataframe(pd.DataFrame(recent_combined))
-else:
-    st.write("No Combined Solution records in the last 7 days.")
-
+display_table_with_date_filter(
+    combined_records,
+    COMBINED_HEADERS,
+    "Combined Solution Data Table"
+)
