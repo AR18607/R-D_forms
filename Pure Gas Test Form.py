@@ -1,4 +1,3 @@
-# --- IMPORTS ---
 import streamlit as st
 import pandas as pd
 import gspread
@@ -13,6 +12,17 @@ TAB_MODULE = "Module Tbl"
 TAB_WOUND = "Wound Module Tbl"
 TAB_MINI = "Mini Module Tbl"
 
+# --- Prevent accidental submit on Enter ---
+st.markdown("""
+    <script>
+        document.addEventListener("keydown", function(e) {
+            if(e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+                e.preventDefault();
+            }
+        });
+    </script>
+""", unsafe_allow_html=True)
+
 # --- UTILS ---
 def connect_google_sheet(sheet_name):
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -20,7 +30,6 @@ def connect_google_sheet(sheet_name):
     json_key["private_key"] = json_key["private_key"].replace("\\n", "\n")
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json_key, scope)
     return gspread.authorize(creds).open(sheet_name)
-
 
 def get_or_create_tab(sheet, name, headers):
     try:
@@ -65,7 +74,6 @@ def get_display_label(row):
         label = match["Module Label"].values[0] if not match.empty else "—"
     elif mtype == "wound":
         match = wound_df[wound_df["Module ID (FK)"] == mid]
-
         label = match["Wound Module ID"].values[0] if not match.empty else "—"
     else:
         label = "—"
@@ -74,65 +82,102 @@ def get_display_label(row):
 module_df["Display"] = module_df.apply(get_display_label, axis=1)
 module_options = dict(zip(module_df["Display"], module_df["Module ID"]))
 
-# --- FORM ---
-st.title("🧪 Pure Gas Test Form")
-st.markdown("You can enter multiple gas readings per module. Selectivity and pass/fail will be computed automatically.")
-st.markdown("<style>button[title='Submit']{margin-top:20px !important;}</style>", unsafe_allow_html=True)
+# --- SESSION STATE FOR READINGS ---
+if "readings" not in st.session_state:
+    st.session_state.readings = [
+        {"Gas": "CO2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0},
+        {"Gas": "N2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0}
+    ]
 
-with st.form("pure_gas_test_form", clear_on_submit=True):
+st.title("🧪 Pure Gas Test Form")
+st.markdown("""
+You can enter multiple gas readings per module. Selectivity and pass/fail will be computed automatically.<br>
+**How Pass/Fail is determined:** At least one CO₂ and one N₂ reading are required to compute selectivity and pass the test.<br>
+**Tip:** Use the 'Preview' button to see all calculated values before submitting.
+""", unsafe_allow_html=True)
+
+with st.form("pure_gas_test_form", clear_on_submit=False):
     pg_id = get_last_id(pure_sheet, "PGT")
     st.markdown(f"**Pure Gas Test ID:** `{pg_id}`")
     test_date = st.date_input("Test Date", datetime.today())
     module_display = st.selectbox("Select Module", list(module_options.keys()))
     module_id = module_options[module_display]
     module_type = module_display.split("|")[1].strip()
-
     initials = st.text_input("Operator Initials")
     notes = st.text_area("Notes")
 
+    # --- Add/Remove Readings Dynamically ---
     st.subheader("➕ Add Gas Readings")
-    num_readings = st.number_input("How many gas readings?", min_value=2, value=2, step=1)
-
-    readings = []
-    for i in range(num_readings):
+    n_readings = len(st.session_state.readings)
+    for i in range(n_readings):
         st.markdown(f"**Reading {i+1}**")
-        gas = st.selectbox(f"Gas {i+1}", ["CO2", "N2", "O2"], key=f"gas_{i}")
-        feed = st.number_input(f"Feed Pressure (psi) {i+1}", min_value=0.0, key=f"feed_{i}")
-        perm = st.number_input(f"Perm Pressure (psi) {i+1}", min_value=0.0, key=f"perm_{i}")
-        flow = st.number_input(f"Flow (mL/min) {i+1}", min_value=0.0, key=f"flow_{i}")
-        readings.append({"Gas": gas, "Feed": feed, "Perm": perm, "Flow": flow})
+        col1, col2, col3, col4 = st.columns([2,2,2,2])
+        with col1:
+            st.session_state.readings[i]["Gas"] = st.selectbox(f"Gas {i+1}", ["CO2", "N2", "O2"], key=f"gas_{i}", index=["CO2", "N2", "O2"].index(st.session_state.readings[i]["Gas"]) if st.session_state.readings[i]["Gas"] in ["CO2", "N2", "O2"] else 0)
+        with col2:
+            st.session_state.readings[i]["Feed"] = st.number_input(f"Feed Pressure (psi) {i+1}", min_value=0.0, key=f"feed_{i}", value=float(st.session_state.readings[i]["Feed"]))
+        with col3:
+            st.session_state.readings[i]["Perm"] = st.number_input(f"Perm Pressure (psi) {i+1}", min_value=0.0, key=f"perm_{i}", value=float(st.session_state.readings[i]["Perm"]))
+        with col4:
+            st.session_state.readings[i]["Flow"] = st.number_input(f"Flow (mL/min) {i+1}", min_value=0.0, key=f"flow_{i}", value=float(st.session_state.readings[i]["Flow"]))
+    colA, colB = st.columns([1,1])
+    with colA:
+        if st.form_submit_button("➕ Add Reading", use_container_width=True):
+            st.session_state.readings.append({"Gas": "CO2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0})
+            st.experimental_rerun()
+    with colB:
+        if n_readings > 2 and st.form_submit_button("➖ Remove Last", use_container_width=True):
+            st.session_state.readings.pop()
+            st.experimental_rerun()
 
-    area_cm2 = st.number_input("Module Area (cm²)", min_value=0.001, format="%.3f")
+    area_cm2 = st.number_input("Module Area (cm²)", min_value=0.001, format="%.3f", value=1.000)
 
-    submitted = st.form_submit_button("💾 Submit")
+    preview = st.form_submit_button("👁️ Preview Calculations")
+    submit = st.form_submit_button("💾 Submit", disabled=False)
 
-# --- PROCESS ---
-if submitted:
-    co2_perm, n2_perm = 0, 0
-    data_rows = []
-    for r in readings:
+# --- PREVIEW & SUBMIT LOGIC ---
+def calc_results():
+    co2_perm, n2_perm = None, None
+    rows = []
+    for r in st.session_state.readings:
         perm = compute_permeance(r["Flow"], area_cm2, r["Feed"], r["Perm"])
-        if r["Gas"] == "CO2": co2_perm = perm
-        if r["Gas"] == "N2": n2_perm = perm
-        data_rows.append([
-            pg_id, str(test_date), module_id, module_type, module_display, r["Gas"],
-            r["Feed"], r["Perm"], r["Flow"], initials, notes, round(perm, 6), "", ""
-            ])
-
-
-    selectivity = round(co2_perm / n2_perm, 6) if n2_perm else 0
+        if r["Gas"] == "CO2":
+            co2_perm = perm
+        if r["Gas"] == "N2":
+            n2_perm = perm
+        rows.append({
+            "Gas": r["Gas"],
+            "Feed Pressure (psi)": r["Feed"],
+            "Perm Pressure (psi)": r["Perm"],
+            "Flow (mL/min)": r["Flow"],
+            "Permeance": round(perm, 6)
+        })
+    selectivity = round(co2_perm / n2_perm, 6) if co2_perm and n2_perm else 0
     passed = "Yes" if co2_perm and n2_perm else "No"
+    return rows, selectivity, passed
 
-    # Update each row's selectivity and pass result
-    for row in data_rows:
-        row[12] = selectivity
-        row[13] = passed
+if preview or submit:
+    calc_rows, selectivity, passed = calc_results()
+    st.markdown("### Preview of Results:")
+    st.dataframe(pd.DataFrame(calc_rows))
+    st.markdown(f"**Selectivity:** `{selectivity}` &nbsp; | &nbsp; **Passed:** `{passed}`")
 
-
+if submit:
+    calc_rows, selectivity, passed = calc_results()
     try:
-        for row in data_rows:
-            pure_sheet.append_row(row)
-        st.success(f"✅ Submitted {len(readings)} gas readings with selectivity: `{selectivity}` and Pass: {passed}")
+        # Write each row to the sheet
+        for i, r in enumerate(st.session_state.readings):
+            permeance = pd.DataFrame(calc_rows).iloc[i]["Permeance"]
+            pure_sheet.append_row([
+                pg_id, str(test_date), module_id, module_type, module_display, r["Gas"],
+                r["Feed"], r["Perm"], r["Flow"], initials, notes, permeance, selectivity, passed
+            ])
+        st.success(f"✅ Submitted {len(st.session_state.readings)} gas readings with selectivity: `{selectivity}` and Pass: {passed}")
+        st.session_state.readings = [
+            {"Gas": "CO2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0},
+            {"Gas": "N2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0}
+        ]  # reset for next run
+        st.experimental_rerun()
     except Exception as e:
         st.error(f"❌ Failed to save entries: {e}")
 
