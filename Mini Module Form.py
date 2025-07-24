@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 import time
 
-GOOGLE_SHEET_NAME = "R&D Data Form"
+#GOOGLE_SHEET_NAME = "R&D Data Form"
+GOOGLE_SHEET_NAME = "R&D Data Form – TEMP TEST"
+
 TAB_MINI_MODULE = "Mini Module Tbl"
 TAB_MODULE = "Module Tbl"
 TAB_BATCH_FIBER = "Uncoated Fiber Data Tbl"
