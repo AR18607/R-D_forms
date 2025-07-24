@@ -56,20 +56,21 @@ def get_last_qc_id(worksheet):
     if not records:
         return "QC-001"
     nums = [int(r.split('-')[-1]) for r in records if r.startswith("QC")]
-    next_num = max(nums) + 1
+    next_num = max(nums) + 1 if nums else 1
     return f"QC-{str(next_num).zfill(3)}"
 
 def disable_if_filled(val):
     return bool(val) and str(val).strip() not in ["", "None"]
 
+# Only these fields are required for completion:
 def is_complete_qc_record(rec):
     required_fields = [
-        "Solution QC ID", "Solution ID (FK)", "Test Date", "Dish Tare Mass (g)",
-        "Initial Solution Mass (g)", "Final Dish Mass (g)", "Operator Initials",
-        "QC Date"
+        "Solution QC ID", "Solution ID (FK)", "Test Date",
+        "Dish Tare Mass (g)", "Initial Solution Mass (g)", "Final Dish Mass (g)"
     ]
     for k in required_fields:
-        if str(rec.get(k,"")).strip() == "" or rec.get(k) is None:
+        val = rec.get(k, "")
+        if str(val).strip() == "" or val is None:
             return False
     return True
 
@@ -150,7 +151,6 @@ with st.form("solution_qc_form", clear_on_submit=False):
 
 if submit_button:
     try:
-        status = "Completed"
         if edit_mode:
             rownum = None
             for i, rec in enumerate(qc_records):
@@ -171,15 +171,14 @@ if submit_button:
                     notes,
                     str(qc_date) if not disable_if_filled(fieldval("QC Date")) else fieldval("QC Date"),
                     c_percent_solids if not disable_if_filled(fieldval("C-Percent Solids")) else fieldval("C-Percent Solids"),
-                    status
+                    "Pending" # will update below
                 ]
-                req = updated_row[:9]
-                if "" in [str(x).strip() for x in req] or "None" in [str(x).strip() for x in req]:
-                    status = "Pending"
-                    updated_row[-1] = status
-                    st.warning("Submitted but pending (incomplete). You can revisit and fill the rest later.")
-
-                # UPDATE IN PLACE INSTEAD OF DELETE/INSERT
+                updated_row_dict = dict(zip(QC_HEADERS, updated_row))
+                if is_complete_qc_record(updated_row_dict):
+                    updated_row[-1] = "Completed"
+                else:
+                    updated_row[-1] = "Pending"
+                    st.warning("Submitted but pending (incomplete for concentration calculation). You can revisit and fill the rest later.")
                 qc_sheet.update(f"A{rownum}:K{rownum}", [updated_row])
                 st.success("QC record updated successfully!")
                 st.rerun()
@@ -187,13 +186,14 @@ if submit_button:
             row = [
                 qc_id, solution_id_fk, str(test_date), dish_tare_mass,
                 initial_solution_mass, final_dish_mass, operator_initials,
-                notes, str(qc_date), c_percent_solids, status
+                notes, str(qc_date), c_percent_solids, "Pending" # will update below
             ]
-            req = row[:9]
-            if "" in [str(x).strip() for x in req] or "None" in [str(x).strip() for x in req]:
-                status = "Pending"
-                row[-1] = status
-                st.warning("Submitted but pending (incomplete). You can revisit and fill the rest later.")
+            row_dict = dict(zip(QC_HEADERS, row))
+            if is_complete_qc_record(row_dict):
+                row[-1] = "Completed"
+            else:
+                row[-1] = "Pending"
+                st.warning("Submitted but pending (incomplete for concentration calculation). You can revisit and fill the rest later.")
             qc_sheet.append_row(row)
             st.success("QC record successfully saved!")
             st.rerun()
