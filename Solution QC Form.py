@@ -104,7 +104,7 @@ with st.form("solution_qc_form", clear_on_submit=False):
     if edit_mode:
         qc_id = selected_pending_qc["Solution QC ID"]
         solution_id_fk = selected_pending_qc["Solution ID (FK)"]
-        st.info(f"Editing pending record: {qc_id} (only blank fields can be updated)")
+        st.info(f"Editing pending record: {qc_id}")
     else:
         qc_id = get_last_qc_id(qc_sheet)
         solution_id_fk = st.selectbox("Select Solution ID (FK)", existing_solution_ids) if existing_solution_ids else st.text_input("Solution ID (FK)")
@@ -114,13 +114,13 @@ with st.form("solution_qc_form", clear_on_submit=False):
     def fieldval(k, fallback=""):
         return selected_pending_qc.get(k, fallback) if edit_mode else fallback
 
-    test_date = st.date_input("Test Date", value=pd.to_datetime(fieldval("Test Date")).date() if disable_if_filled(fieldval("Test Date")) else datetime.today().date(), disabled=edit_mode and disable_if_filled(fieldval("Test Date")))
-    dish_tare_mass = st.number_input("Dish Tare Mass (g)", format="%.2f", value=float(fieldval("Dish Tare Mass (g)",0.0)), disabled=edit_mode and disable_if_filled(fieldval("Dish Tare Mass (g)")))
-    initial_solution_mass = st.number_input("Initial Solution Mass (g)", format="%.2f", value=float(fieldval("Initial Solution Mass (g)",0.0)), disabled=edit_mode and disable_if_filled(fieldval("Initial Solution Mass (g)")))
-    final_dish_mass = st.number_input("Final Dish Mass (g)", format="%.2f", value=float(fieldval("Final Dish Mass (g)",0.0)), disabled=edit_mode and disable_if_filled(fieldval("Final Dish Mass (g)")))
-    operator_initials = st.text_input("Operator Initials", value=fieldval("Operator Initials"), disabled=edit_mode and disable_if_filled(fieldval("Operator Initials")))
+    test_date = st.date_input("Test Date", value=pd.to_datetime(fieldval("Test Date")).date() if disable_if_filled(fieldval("Test Date")) else datetime.today().date())
+    dish_tare_mass = st.number_input("Dish Tare Mass (g)", format="%.2f", value=float(fieldval("Dish Tare Mass (g)",0.0)))
+    initial_solution_mass = st.number_input("Initial Solution Mass (g)", format="%.2f", value=float(fieldval("Initial Solution Mass (g)",0.0)))
+    final_dish_mass = st.number_input("Final Dish Mass (g)", format="%.2f", value=float(fieldval("Final Dish Mass (g)",0.0)))
+    operator_initials = st.text_input("Operator Initials", value=fieldval("Operator Initials"))
     notes = st.text_area("Notes", value=fieldval("Notes",""))
-    qc_date = st.date_input("QC Date", value=pd.to_datetime(fieldval("QC Date")).date() if disable_if_filled(fieldval("QC Date")) else datetime.today().date(), disabled=edit_mode and disable_if_filled(fieldval("QC Date")))
+    qc_date = st.date_input("QC Date", value=pd.to_datetime(fieldval("QC Date")).date() if disable_if_filled(fieldval("QC Date")) else datetime.today().date())
 
     dry_polymer_weight = (final_dish_mass or 0) - (dish_tare_mass or 0)
     c_percent_solids = (dry_polymer_weight / (initial_solution_mass or 1)) * 100 if initial_solution_mass else 0.0
@@ -130,32 +130,10 @@ with st.form("solution_qc_form", clear_on_submit=False):
 
     st.divider()
 
-    fields_edited = []
-    if edit_mode:
-        if not disable_if_filled(fieldval("Test Date")) and test_date:
-            fields_edited.append("Test Date")
-        if not disable_if_filled(fieldval("Dish Tare Mass (g)")) and dish_tare_mass:
-            fields_edited.append("Dish Tare Mass (g)")
-        if not disable_if_filled(fieldval("Initial Solution Mass (g)")) and initial_solution_mass:
-            fields_edited.append("Initial Solution Mass (g)")
-        if not disable_if_filled(fieldval("Final Dish Mass (g)")) and final_dish_mass:
-            fields_edited.append("Final Dish Mass (g)")
-        if not disable_if_filled(fieldval("Operator Initials")) and operator_initials:
-            fields_edited.append("Operator Initials")
-        if not disable_if_filled(fieldval("QC Date")) and qc_date:
-            fields_edited.append("QC Date")
-
-    # ----------- Updated Button Logic -----------
-        # ----------- Improved Button Logic -----------
-    if edit_mode:
-        incomplete = not is_complete_qc_record(selected_pending_qc)
-        can_submit = incomplete
-    else:
-        can_submit = True
+    # ----------- Button Logic: always enabled for incomplete record -----------
+    can_submit = True
     submit_button = st.form_submit_button("💾 Save QC Record", disabled=not can_submit)
-    # ---------------------------------------------
-
-    # --------------------------------------------
+    # --------------------------------------------------------------------------
 
 if submit_button:
     try:
@@ -171,14 +149,14 @@ if submit_button:
                 updated_row = [
                     qc_id,
                     solution_id_fk,
-                    str(test_date) if not disable_if_filled(fieldval("Test Date")) else fieldval("Test Date"),
-                    dish_tare_mass if not disable_if_filled(fieldval("Dish Tare Mass (g)")) else fieldval("Dish Tare Mass (g)"),
-                    initial_solution_mass if not disable_if_filled(fieldval("Initial Solution Mass (g)")) else fieldval("Initial Solution Mass (g)"),
-                    final_dish_mass if not disable_if_filled(fieldval("Final Dish Mass (g)")) else fieldval("Final Dish Mass (g)"),
-                    operator_initials if not disable_if_filled(fieldval("Operator Initials")) else fieldval("Operator Initials"),
+                    str(test_date),
+                    dish_tare_mass,
+                    initial_solution_mass,
+                    final_dish_mass,
+                    operator_initials,
                     notes,
-                    str(qc_date) if not disable_if_filled(fieldval("QC Date")) else fieldval("QC Date"),
-                    c_percent_solids if not disable_if_filled(fieldval("C-Percent Solids")) else fieldval("C-Percent Solids"),
+                    str(qc_date),
+                    c_percent_solids,
                     "Pending" # will update below
                 ]
                 updated_row_dict = dict(zip(QC_HEADERS, updated_row))
