@@ -48,7 +48,15 @@ def generate_c_module_label(operator_initials):
     return base + next_letter
 
 # ---------- LOAD SHEETS ----------
-sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
+SPREADSHEET_KEY = "1v9nEiUP-5pdIIz0ms-7EzcdRb6zzyE19NYmde8j5la0"
+def connect_google_sheet_by_key(sheet_key):
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(
+        json.loads(st.secrets["gcp_service_account"]), scope)
+    return gspread.authorize(creds).open_by_key(sheet_key)
+
+sheet = connect_google_sheet_by_key(SPREADSHEET_KEY)
+
 
 mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, [
     "Mini Module ID", "Module ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "CoatedSpool_ID", "DCoating_ID",
