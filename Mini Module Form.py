@@ -6,13 +6,12 @@ from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ---------- CONFIG ----------
-#GOOGLE_SHEET_NAME = "R&D Data Form"
 GOOGLE_SHEET_NAME = "R&D Data Form – TEMP TEST"
 
 TAB_MINI_MODULE = "Mini Module Tbl"
 TAB_MODULE = "Module Tbl"
 TAB_BATCH_FIBER = "Uncoated Fiber Data Tbl"
-TAB_UNCOATED_SPOOL = "UnCoatedSpool ID Tbl"
+TAB_UNCOATED_SPOOL = "UncoatedSpool ID Tbl"
 TAB_COATED_SPOOL = "Coated Spool Tbl"
 TAB_DCOATING = "Dip Coating Process Tbl"
 
@@ -26,7 +25,10 @@ def connect_google_sheet(sheet_name):
 def get_or_create_tab(spreadsheet, tab_name, headers):
     try:
         worksheet = spreadsheet.worksheet(tab_name)
-        if not worksheet.get_all_values():
+        # Ensure header row matches
+        existing_headers = worksheet.row_values(1)
+        if [h.strip() for h in existing_headers] != [h.strip() for h in headers]:
+            worksheet.delete_row(1)
             worksheet.insert_row(headers, 1)
     except gspread.exceptions.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols="50")
@@ -48,83 +50,81 @@ def generate_c_module_label(operator_initials):
     return base + next_letter
 
 # ---------- LOAD SHEETS ----------
-SPREADSHEET_KEY = "1v9nEiUP-5pdIIz0ms-7EzcdRb6zzyE19NYmde8j5la0"
-def connect_google_sheet_by_key(sheet_key):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(
-        json.loads(st.secrets["gcp_service_account"]), scope)
-    return gspread.authorize(creds).open_by_key(sheet_key)
-
-sheet = connect_google_sheet_by_key(SPREADSHEET_KEY)
-
-
-mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, [
-    "Mini Module ID", "Module ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "CoatedSpool_ID", "DCoating_ID",
-    "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"
-])
-
-module_sheet = get_or_create_tab(sheet, TAB_MODULE, ["Module ID", "Module Type", "Notes"])
-batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, ["Batch_Fiber_ID"])
-uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, ["UncoatedSpool_ID"])
 try:
-    coated_sheet = sheet.worksheet(TAB_COATED_SPOOL)
-    coated_data = coated_sheet.get_all_records()
-    if coated_data:
-        coated_df = pd.DataFrame(coated_data)
-        coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist()
-    else:
-        st.warning("⚠️ 'Coated Spool Tbl' is empty.")
-        coated_ids = []
-except gspread.exceptions.WorksheetNotFound:
-    st.warning("⚠️ 'Coated Spool Tbl' not found. Skipping dropdown.")
-    coated_ids = []
+    sheet = connect_google_sheet(GOOGLE_SHEET_NAME)
 
-  # ✅ FIXED HEADERS
-dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, [
-    "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
-    "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
-    "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"
-    ])
+    mini_headers = [
+        "Mini Module ID", "Module ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "CoatedSpool_ID", "DCoating_ID",
+        "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"
+    ]
+    module_headers = ["Module ID", "Module Type", "Notes"]
+    batch_headers = ["Batch_Fiber_ID"]
+    uncoated_headers = ["UncoatedSpool_ID"]
+    coated_headers = ["CoatedSpool_ID"]
+    dcoating_headers = [
+        "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
+        "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
+        "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"
+    ]
 
-# ---------- LOAD DATA ----------
-module_df = pd.DataFrame(module_sheet.get_all_records())
-mini_df = pd.DataFrame(mini_sheet.get_all_records())
-batch_df = pd.DataFrame(batch_sheet.get_all_records())
-uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
-coated_df = pd.DataFrame(coated_sheet.get_all_records())
-dcoating_df = pd.DataFrame(dcoating_sheet.get_all_records())
+    mini_sheet = get_or_create_tab(sheet, TAB_MINI_MODULE, mini_headers)
+    module_sheet = get_or_create_tab(sheet, TAB_MODULE, module_headers)
+    batch_sheet = get_or_create_tab(sheet, TAB_BATCH_FIBER, batch_headers)
+    uncoated_sheet = get_or_create_tab(sheet, TAB_UNCOATED_SPOOL, uncoated_headers)
 
-mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module ID"].tolist()
+    try:
+        coated_sheet = sheet.worksheet(TAB_COATED_SPOOL)
+    except gspread.exceptions.WorksheetNotFound:
+        coated_sheet = sheet.add_worksheet(title=TAB_COATED_SPOOL, rows="1000", cols="50")
+        coated_sheet.insert_row(coated_headers, 1)
+
+    dcoating_sheet = get_or_create_tab(sheet, TAB_DCOATING, dcoating_headers)
+
+    # Load DataFrames
+    module_df = pd.DataFrame(module_sheet.get_all_records())
+    mini_df = pd.DataFrame(mini_sheet.get_all_records())
+    batch_df = pd.DataFrame(batch_sheet.get_all_records())
+    uncoated_df = pd.DataFrame(uncoated_sheet.get_all_records())
+    coated_df = pd.DataFrame(coated_sheet.get_all_records())
+    dcoating_df = pd.DataFrame(dcoating_sheet.get_all_records())
+
+except Exception as e:
+    st.error(f"❌ Error loading sheets: {e}")
+    st.stop()
+
+# ---------- Selection/Dropdown data ----------
+mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module ID"].tolist() if not module_df.empty else []
 batch_ids = batch_df.get("Batch_Fiber_ID", pd.Series()).dropna().tolist()
 uncoated_ids = uncoated_df.get("UncoatedSpool_ID", pd.Series()).dropna().tolist()
-coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist()
-
-dcoating_ids = dcoating_df.get("DCoating_ID", pd.Series()).dropna().tolist()
+coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist() if not coated_df.empty else []
+dcoating_ids = dcoating_df.get("DCoating_ID", pd.Series()).dropna().tolist() if not dcoating_df.empty else []
 
 # ---------- FORM ----------
 st.title("🧪 Mini Module Entry Form")
 with st.form("mini_module_form", clear_on_submit=True):
     st.subheader("🔹 Mini Module Entry")
 
-    selected_module = st.selectbox("Module ID (Mini only)", mini_modules)
-    existing = mini_df[mini_df["Module ID"] == selected_module]
-    prefill = existing.iloc[0] if not existing.empty else None
+    if mini_modules:
+        selected_module = st.selectbox("Module ID (Mini only)", mini_modules)
+        existing = mini_df[mini_df["Module ID"] == selected_module]
+        prefill = existing.iloc[0] if not existing.empty else None
+    else:
+        st.error("No mini modules found in Module Tbl.")
+        st.stop()
 
     mini_module_id = prefill["Mini Module ID"] if prefill is not None else get_last_id(mini_sheet, "MINIMOD")
     st.markdown(f"**Mini Module ID:** `{mini_module_id}`")
 
     batch_fiber_id = st.selectbox("Batch_Fiber_ID", batch_ids, index=batch_ids.index(prefill["Batch_Fiber_ID"]) if prefill else 0)
     uncoated_spool_id = st.selectbox("UncoatedSpool_ID", uncoated_ids, index=uncoated_ids.index(prefill["UncoatedSpool_ID"]) if prefill else 0)
-    if coated_ids:
-        coated_spool_id = st.selectbox(
-            "CoatedSpool_ID",
-            coated_ids,
-            index=coated_ids.index(prefill["CoatedSpool_ID"]) if prefill and prefill["CoatedSpool_ID"] in coated_ids else 0)
-    else:
-        st.warning("⚠️ No Coated Spool IDs found. Please add them to the 'Coated Spool Tbl' sheet.")
-        coated_spool_id = ""
-
-    dcoating_id = st.selectbox("DCoating_ID", dcoating_ids, index=dcoating_ids.index(prefill["DCoating_ID"]) if prefill and prefill["DCoating_ID"] in dcoating_ids else 0)
+    coated_spool_id = st.selectbox(
+        "CoatedSpool_ID", coated_ids,
+        index=coated_ids.index(prefill["CoatedSpool_ID"]) if prefill and prefill["CoatedSpool_ID"] in coated_ids else 0
+    ) if coated_ids else ""
+    dcoating_id = st.selectbox(
+        "DCoating_ID", dcoating_ids,
+        index=dcoating_ids.index(prefill["DCoating_ID"]) if prefill and prefill["DCoating_ID"] in dcoating_ids else 0
+    ) if dcoating_ids else ""
 
     num_fibers = st.number_input("Number of Fibers", step=1, value=int(prefill["Number of Fibers"]) if prefill else 0)
     fiber_length = st.number_input("Fiber Length (inches)", format="%.2f", value=float(prefill["Fiber Length"]) if prefill else 0.0)
@@ -133,7 +133,7 @@ with st.form("mini_module_form", clear_on_submit=True):
     auto_label = st.checkbox("Auto-generate C-Module Label?", value=True)
     module_label = generate_c_module_label(operator_initials) if auto_label and operator_initials else st.text_input("C-Module Label", value=prefill["Module Label"] if prefill else "")
     notes = st.text_area("Notes", value=prefill["Notes"] if prefill else "")
-    date_val = st.date_input("Date", value=datetime.today().date() if prefill is None else datetime.strptime(prefill["Date"], "%Y-%m-%d").date())
+    date_val = st.date_input("Date", value=datetime.today().date() if prefill is None else datetime.strptime(str(prefill["Date"]), "%Y-%m-%d").date())
 
     submit = st.form_submit_button("💾 Save Entry")
 
@@ -145,8 +145,10 @@ if submit:
         operator_initials, module_label, notes, str(date_val)
     ]
     try:
-        if prefill is not None:
-            idx = mini_df[mini_df["Mini Module ID"] == mini_module_id].index[0] + 2
+        # Check if we need to update or insert
+        idx_list = mini_df[mini_df["Mini Module ID"] == mini_module_id].index.tolist()
+        if idx_list:
+            idx = idx_list[0] + 2  # +2 because gspread is 1-indexed and header is row 1
             mini_sheet.delete_rows(idx)
             mini_sheet.insert_row(row, idx)
             st.success("✅ Entry updated.")
@@ -167,4 +169,3 @@ if not mini_df.empty:
         st.info("No entries in last 7 days.")
 else:
     st.info("No data yet.")
-
