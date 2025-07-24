@@ -6,7 +6,15 @@ import json
 from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 
-# === DISABLE ENTER KEY FORM SUBMIT ===
+
+# === CONFIG ===
+GOOGLE_SHEET_NAME = "R&D Data Form"
+TAB_MODULE = "Module Tbl"
+TAB_WOUND = "Wound Module Tbl"
+TAB_MINI = "Mini Module Tbl"
+TAB_MIXED = "Mixed Gas Test Tbl"
+
+# Prevent accidental form submit on Enter
 st.markdown("""
     <script>
         document.addEventListener("keydown", function(e) {
@@ -16,13 +24,6 @@ st.markdown("""
         });
     </script>
 """, unsafe_allow_html=True)
-
-# === CONFIG ===
-GOOGLE_SHEET_NAME = "R&D Data Form"
-TAB_MODULE = "Module Tbl"
-TAB_WOUND = "Wound Module Tbl"
-TAB_MINI = "Mini Module Tbl"
-TAB_MIXED = "Mixed Gas Test Tbl"
 
 # === UTILS ===
 def connect_google_sheet(sheet_name):
