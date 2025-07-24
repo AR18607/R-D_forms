@@ -146,12 +146,15 @@ with st.form("solution_qc_form", clear_on_submit=False):
             fields_edited.append("QC Date")
 
     # ----------- Updated Button Logic -----------
+        # ----------- Improved Button Logic -----------
     if edit_mode:
         incomplete = not is_complete_qc_record(selected_pending_qc)
-        can_submit = incomplete or bool(fields_edited)
+        can_submit = incomplete
     else:
         can_submit = True
     submit_button = st.form_submit_button("💾 Save QC Record", disabled=not can_submit)
+    # ---------------------------------------------
+
     # --------------------------------------------
 
 if submit_button:
