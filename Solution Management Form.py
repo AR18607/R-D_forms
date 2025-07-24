@@ -46,17 +46,17 @@ def get_or_create_tab(spreadsheet, tab_name, headers):
     except gspread.exceptions.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=tab_name, rows="1000", cols=str(len(headers)))
         worksheet.insert_row(headers, 1)
+        return worksheet
     # Ensure Date column is present and last
     actual_headers = worksheet.row_values(1)
     if "Date" not in actual_headers:
         actual_headers.append("Date")
-        worksheet.delete_row(1)
-        worksheet.insert_row(actual_headers, 1)
+        worksheet.update('A1', [actual_headers])
     elif actual_headers[-1] != "Date":
         actual_headers = [h for h in actual_headers if h != "Date"] + ["Date"]
-        worksheet.delete_row(1)
-        worksheet.insert_row(actual_headers, 1)
+        worksheet.update('A1', [actual_headers])
     return worksheet
+
 
 @st.cache_data(ttl=120)
 def cached_get_all_records(sheet_key, tab_name):
