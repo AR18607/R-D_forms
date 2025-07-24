@@ -60,11 +60,16 @@ def get_last_qc_id(worksheet):
     return f"QC-{str(next_num).zfill(3)}"
 
 def disable_if_filled(val):
-    if isinstance(val, (int, float)):
-        # Only disable if not 0 and not None
-        return val not in [0, 0.0, None]
-    # For strings, check for blank or "None" or "0"
-    return bool(val) and str(val).strip() not in ["", "None", "0", "0.0"]
+    # If value is None or empty string or 'None' or '0' or '0.00' -> treat as NOT filled
+    if val in [None, "", "None", "0", "0.0", "0.00"]:
+        return False
+    try:
+        # Try to interpret as float
+        return float(val) != 0
+    except Exception:
+        # Not a number, treat as filled if non-blank
+        return bool(val) and str(val).strip() not in ["", "None", "0", "0.0", "0.00"]
+
 
 
 def is_complete_qc_record(rec):
