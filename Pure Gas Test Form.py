@@ -89,11 +89,26 @@ if "readings" not in st.session_state:
         {"Gas": "N2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0}
     ]
 
+# --- Add/Remove Reading Buttons (OUTSIDE form) ---
+st.sidebar.markdown("### Gas Readings Controls")
+add_reading = st.sidebar.button("➕ Add Reading", key="add_btn")
+remove_reading = st.sidebar.button("➖ Remove Last Reading", key="remove_btn")
+
+if add_reading:
+    st.session_state.readings.append({"Gas": "CO2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0})
+if remove_reading and len(st.session_state.readings) > 2:
+    st.session_state.readings.pop()
+
+if len(st.session_state.readings) > 2 and st.sidebar.button("➖ Remove Last Reading"):
+    st.session_state.readings.pop()
+    st.experimental_rerun()
+st.sidebar.info("You can add or remove readings here before submitting.")
+
 st.title("🧪 Pure Gas Test Form")
 st.markdown("""
 You can enter multiple gas readings per module. Selectivity and pass/fail will be computed automatically.<br>
 **How Pass/Fail is determined:** At least one CO₂ and one N₂ reading are required to compute selectivity and pass the test.<br>
-**Tip:** Use the 'Preview' button to see all calculated values before submitting.
+**Tip:** Use the 'Preview Calculations' button to see all calculated values before submitting.
 """, unsafe_allow_html=True)
 
 with st.form("pure_gas_test_form", clear_on_submit=False):
@@ -106,8 +121,7 @@ with st.form("pure_gas_test_form", clear_on_submit=False):
     initials = st.text_input("Operator Initials")
     notes = st.text_area("Notes")
 
-    # --- Add/Remove Readings Dynamically ---
-    st.subheader("➕ Add Gas Readings")
+    st.subheader("Gas Readings")
     n_readings = len(st.session_state.readings)
     for i in range(n_readings):
         st.markdown(f"**Reading {i+1}**")
@@ -120,16 +134,6 @@ with st.form("pure_gas_test_form", clear_on_submit=False):
             st.session_state.readings[i]["Perm"] = st.number_input(f"Perm Pressure (psi) {i+1}", min_value=0.0, key=f"perm_{i}", value=float(st.session_state.readings[i]["Perm"]))
         with col4:
             st.session_state.readings[i]["Flow"] = st.number_input(f"Flow (mL/min) {i+1}", min_value=0.0, key=f"flow_{i}", value=float(st.session_state.readings[i]["Flow"]))
-    colA, colB = st.columns([1,1])
-    with colA:
-        if st.form_submit_button("➕ Add Reading", use_container_width=True):
-            st.session_state.readings.append({"Gas": "CO2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0})
-            st.experimental_rerun()
-    with colB:
-        if n_readings > 2 and st.form_submit_button("➖ Remove Last", use_container_width=True):
-            st.session_state.readings.pop()
-            st.experimental_rerun()
-
     area_cm2 = st.number_input("Module Area (cm²)", min_value=0.001, format="%.3f", value=1.000)
 
     preview = st.form_submit_button("👁️ Preview Calculations")
