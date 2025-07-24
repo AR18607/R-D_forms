@@ -14,7 +14,7 @@ TAB_UNCOATED_SPOOL = "UnCoatedSpool ID Tbl"
 TAB_COATED_SPOOL = "Coated Spool Tbl"
 TAB_DCOATING = "Dip Coating Process Tbl"
 
-# ------------- GOOGLE CLIENT CACHING -------------
+# --- Google Client Connect ---
 @st.cache_resource
 def get_gsheet_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -23,67 +23,86 @@ def get_gsheet_client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
     return gspread.authorize(creds)
 
-# ------------- DATA CACHING -------------
-@st.cache_data(ttl=120)
-def get_tab_df(tab_name, headers=None):
+# --- Data Load from Google Sheets (on-demand only) ---
+def load_all_tab_data():
     try:
         gc = get_gsheet_client()
         sh = gc.open(GOOGLE_SHEET_NAME)
-        try:
-            ws = sh.worksheet(tab_name)
-            if headers and not ws.get_all_values():
+        # Each worksheet, with fallback for missing
+        def load_tab(tab, headers):
+            try:
+                ws = sh.worksheet(tab)
+                if headers and not ws.get_all_values():
+                    ws.insert_row(headers, 1)
+                df = pd.DataFrame(ws.get_all_records())
+                return df
+            except gspread.exceptions.WorksheetNotFound:
+                ws = sh.add_worksheet(title=tab, rows="1000", cols="50")
                 ws.insert_row(headers, 1)
-        except gspread.exceptions.WorksheetNotFound:
-            ws = sh.add_worksheet(title=tab_name, rows="1000", cols="50")
-            if headers:
-                ws.insert_row(headers, 1)
-        df = pd.DataFrame(ws.get_all_records())
-        return df
+                return pd.DataFrame(ws.get_all_records())
+        # Define all headers
+        mini_headers = [
+            "Mini Module ID", "Module ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "CoatedSpool_ID", "DCoating_ID",
+            "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"
+        ]
+        module_headers = ["Module ID", "Module Type", "Notes"]
+        batch_headers = ["Batch_Fiber_ID"]
+        uncoated_headers = ["UncoatedSpool_ID"]
+        coated_headers = ["CoatedSpool_ID"]
+        dcoating_headers = [
+            "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
+            "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
+            "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"
+        ]
+        return {
+            "mini_df": load_tab(TAB_MINI_MODULE, mini_headers),
+            "module_df": load_tab(TAB_MODULE, module_headers),
+            "batch_df": load_tab(TAB_BATCH_FIBER, batch_headers),
+            "uncoated_df": load_tab(TAB_UNCOATED_SPOOL, uncoated_headers),
+            "coated_df": load_tab(TAB_COATED_SPOOL, coated_headers),
+            "dcoating_df": load_tab(TAB_DCOATING, dcoating_headers),
+        }
     except gspread.exceptions.APIError:
-        st.error("Google Sheets API error (quota exceeded or unavailable). Please wait a minute and try again.")
-        st.stop()
+        st.error("Google Sheets API error (quota exceeded or unavailable). Please wait and try again.")
+        return None
 
-def refresh_all():
-    st.cache_data.clear()
+# --- Manual Data Refresh & Caching ---
+def manual_refresh(force=False):
+    last_refresh = st.session_state.get("last_refresh", 0)
+    if not force and (time.time() - last_refresh < 60):
+        st.warning("Please wait at least a minute between refreshes.")
+        return
+    with st.spinner("Loading data from Google Sheets..."):
+        data = load_all_tab_data()
+        if data is not None:
+            st.session_state["tab_data"] = data
+            st.session_state["last_refresh"] = time.time()
+            st.session_state["refresh_time_str"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.success(f"Data loaded successfully! (as of {st.session_state['refresh_time_str']})")
 
-if st.button("🔄 Refresh Data"):
-    refresh_all()
+# --- UI: Manual Refresh Button ---
+st.button("🔄 Load/Refresh Data", on_click=manual_refresh)
 
-# ------------- LOAD DATA -------------
-mini_headers = [
-    "Mini Module ID", "Module ID", "Batch_Fiber_ID", "UncoatedSpool_ID", "CoatedSpool_ID", "DCoating_ID",
-    "Number of Fibers", "Fiber Length", "Active Area", "Operator Initials", "Module Label", "Notes", "Date"
-]
-module_headers = ["Module ID", "Module Type", "Notes"]
-batch_headers = ["Batch_Fiber_ID"]
-uncoated_headers = ["UncoatedSpool_ID"]
-coated_headers = ["CoatedSpool_ID"]
-dcoating_headers = [
-    "DCoating_ID", "Solution_ID", "Date", "Box_Temperature", "Box_RH", "N2_Flow",
-    "Number_of_Fibers", "Coating_Speed", "Annealing_Time", "Annealing_Temperature",
-    "Coating_Layer_Type", "Operator_Initials", "Ambient_Temperature", "Ambient_RH", "Notes"
-]
+if "tab_data" not in st.session_state:
+    st.info("Click 'Load/Refresh Data' to load the latest info from Google Sheets.")
+    st.stop()
 
-mini_df = get_tab_df(TAB_MINI_MODULE, mini_headers)
-module_df = get_tab_df(TAB_MODULE, module_headers)
-batch_df = get_tab_df(TAB_BATCH_FIBER, batch_headers)
-uncoated_df = get_tab_df(TAB_UNCOATED_SPOOL, uncoated_headers)
-try:
-    coated_df = get_tab_df(TAB_COATED_SPOOL, coated_headers)
-    coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist()
-except Exception:
-    st.warning("⚠️ 'Coated Spool Tbl' not found. Skipping dropdown.")
-    coated_ids = []
+tab_data = st.session_state["tab_data"]
+mini_df = tab_data["mini_df"]
+module_df = tab_data["module_df"]
+batch_df = tab_data["batch_df"]
+uncoated_df = tab_data["uncoated_df"]
+coated_df = tab_data["coated_df"]
+dcoating_df = tab_data["dcoating_df"]
 
-dcoating_df = get_tab_df(TAB_DCOATING, dcoating_headers)
-
+# --- Selection/Dropdown data ---
 mini_modules = module_df[module_df["Module Type"].str.lower() == "mini"]["Module ID"].tolist()
 batch_ids = batch_df.get("Batch_Fiber_ID", pd.Series()).dropna().tolist()
 uncoated_ids = uncoated_df.get("UncoatedSpool_ID", pd.Series()).dropna().tolist()
 coated_ids = coated_df.get("CoatedSpool_ID", pd.Series()).dropna().tolist() if not coated_df.empty else []
 dcoating_ids = dcoating_df.get("DCoating_ID", pd.Series()).dropna().tolist()
 
-# ------------- LABEL GENERATOR -------------
+# --- Label generator ---
 def generate_c_module_label(operator_initials):
     today = datetime.today().strftime("%Y%m%d")
     base = today + operator_initials.upper()
@@ -92,8 +111,9 @@ def generate_c_module_label(operator_initials):
     next_letter = chr(ord(max(existing)) + 1) if existing else 'A'
     return base + next_letter
 
-# ------------- FORM -------------
+# --- Mini Module Form ---
 st.title("🧪 Mini Module Entry Form")
+st.caption(f"Last data refresh: {st.session_state.get('refresh_time_str', '-')}")
 with st.form("mini_module_form", clear_on_submit=True):
     st.subheader("🔹 Mini Module Entry")
 
@@ -126,7 +146,7 @@ with st.form("mini_module_form", clear_on_submit=True):
     date_val = st.date_input("Date", value=datetime.today().date() if prefill is None else datetime.strptime(str(prefill["Date"]), "%Y-%m-%d").date())
     submit = st.form_submit_button("💾 Save Entry")
 
-# ------------- SAVE -------------
+# --- Save to Google Sheets on Submit ---
 if submit:
     row = [
         mini_module_id, selected_module, batch_fiber_id, uncoated_spool_id,
@@ -140,20 +160,20 @@ if submit:
         if prefill is not None:
             idx = mini_df[mini_df["Mini Module ID"] == mini_module_id].index[0] + 2
             ws.delete_rows(idx)
-            time.sleep(1)  # Avoid quota spike
+            time.sleep(1)
             ws.insert_row(row, idx)
             st.success("✅ Entry updated.")
         else:
             ws.append_row(row)
             st.success("✅ Entry saved.")
         time.sleep(1)
-        refresh_all()  # Everyone sees latest
+        manual_refresh(force=True)
     except gspread.exceptions.APIError:
         st.error("Google Sheets API error on save. Try again in a minute.")
     except Exception as e:
         st.error(f"❌ Error saving: {e}")
 
-# ------------- LAST 7 DAYS -------------
+# --- Recent (Last 7 Days) ---
 st.subheader("📅 Mini Modules: Last 7 Days")
 if not mini_df.empty:
     mini_df["Date"] = pd.to_datetime(mini_df["Date"], errors="coerce")
