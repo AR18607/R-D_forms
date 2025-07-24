@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 
 GOOGLE_SHEET_NAME = "R&D Data Form"
@@ -60,7 +60,7 @@ def get_last_qc_id(worksheet):
     return f"QC-{str(next_num).zfill(3)}"
 
 def disable_if_filled(val):
-    # For numbers/strings: treat None, '', 0, 0.0, '0', '0.0', '0.00', 'None' as NOT filled
+    # Treat None, "", "None", "0", "0.0", "0.00", 0, 0.0 as NOT filled
     if val is None:
         return False
     try:
@@ -122,12 +122,7 @@ with st.form("solution_qc_form", clear_on_submit=False):
     def fieldval(k, fallback=""):
         return selected_pending_qc.get(k, fallback) if edit_mode else fallback
 
-    # DEBUG: print raw value for each required field
-    if edit_mode:
-        print("DEBUG: RAW VALUES for current record:")
-        for k in ["Test Date", "Dish Tare Mass (g)", "Initial Solution Mass (g)", "Final Dish Mass (g)", "Operator Initials", "QC Date"]:
-            print(f"{k}: {repr(fieldval(k))}")
-
+    # Main required fields logic
     test_date = st.date_input(
         "Test Date",
         value=pd.to_datetime(fieldval("Test Date")).date() if disable_if_filled(fieldval("Test Date")) else datetime.today().date(),
@@ -152,7 +147,7 @@ with st.form("solution_qc_form", clear_on_submit=False):
         "Operator Initials", value=fieldval("Operator Initials"),
         disabled=edit_mode and disable_if_filled(fieldval("Operator Initials"))
     )
-    notes = st.text_area("Notes", value=fieldval("Notes",""))
+    notes = st.text_area("Notes", value=fieldval("Notes",""))  # always editable
     qc_date = st.date_input(
         "QC Date",
         value=pd.to_datetime(fieldval("QC Date")).date() if disable_if_filled(fieldval("QC Date")) else datetime.today().date(),
@@ -167,24 +162,17 @@ with st.form("solution_qc_form", clear_on_submit=False):
 
     st.divider()
 
-    # Track if any enabled field is filled/changed
-    fields_edited = []
-    if edit_mode:
-        if not disable_if_filled(fieldval("Test Date")) and test_date:
-            fields_edited.append("Test Date")
-        if not disable_if_filled(fieldval("Dish Tare Mass (g)")) and dish_tare_mass:
-            fields_edited.append("Dish Tare Mass (g)")
-        if not disable_if_filled(fieldval("Initial Solution Mass (g)")) and initial_solution_mass:
-            fields_edited.append("Initial Solution Mass (g)")
-        if not disable_if_filled(fieldval("Final Dish Mass (g)")) and final_dish_mass:
-            fields_edited.append("Final Dish Mass (g)")
-        if not disable_if_filled(fieldval("Operator Initials")) and operator_initials:
-            fields_edited.append("Operator Initials")
-        if not disable_if_filled(fieldval("QC Date")) and qc_date:
-            fields_edited.append("QC Date")
+    # Enable submit if ANY required field is editable (i.e., missing or zero)
+    required_fields = [
+        "Test Date", "Dish Tare Mass (g)", "Initial Solution Mass (g)",
+        "Final Dish Mass (g)", "Operator Initials", "QC Date"
+    ]
+    editable_fields = [
+        not disable_if_filled(fieldval(field))
+        for field in required_fields
+    ]
+    can_submit = any(editable_fields) if edit_mode else True
 
-    # Enable the submit button only if a previously blank field is now filled
-    can_submit = True if not edit_mode else bool(fields_edited)
     submit_button = st.form_submit_button("💾 Save QC Record", disabled=not can_submit)
 
 if submit_button:
