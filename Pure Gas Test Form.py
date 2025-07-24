@@ -89,8 +89,7 @@ if "readings" not in st.session_state:
         {"Gas": "N2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0}
     ]
 
-# --- Add/Remove Reading Buttons (OUTSIDE form) ---
-st.sidebar.markdown("### Gas Readings Controls")
+# --- Add/Remove Reading Buttons (OUTSIDE form, only ONCE) ---
 add_reading = st.sidebar.button("➕ Add Reading", key="add_btn")
 remove_reading = st.sidebar.button("➖ Remove Last Reading", key="remove_btn")
 
@@ -98,10 +97,6 @@ if add_reading:
     st.session_state.readings.append({"Gas": "CO2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0})
 if remove_reading and len(st.session_state.readings) > 2:
     st.session_state.readings.pop()
-
-if len(st.session_state.readings) > 2 and st.sidebar.button("➖ Remove Last Reading"):
-    st.session_state.readings.pop()
-    st.experimental_rerun()
 st.sidebar.info("You can add or remove readings here before submitting.")
 
 st.title("🧪 Pure Gas Test Form")
@@ -169,7 +164,6 @@ if preview or submit:
 if submit:
     calc_rows, selectivity, passed = calc_results()
     try:
-        # Write each row to the sheet
         for i, r in enumerate(st.session_state.readings):
             permeance = pd.DataFrame(calc_rows).iloc[i]["Permeance"]
             pure_sheet.append_row([
@@ -177,11 +171,12 @@ if submit:
                 r["Feed"], r["Perm"], r["Flow"], initials, notes, permeance, selectivity, passed
             ])
         st.success(f"✅ Submitted {len(st.session_state.readings)} gas readings with selectivity: `{selectivity}` and Pass: {passed}")
+        # Just reset readings, then rerun to clear the form!
         st.session_state.readings = [
             {"Gas": "CO2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0},
             {"Gas": "N2", "Feed": 0.0, "Perm": 0.0, "Flow": 0.0}
-        ]  # reset for next run
-        st.experimental_rerun()
+        ]
+        st.rerun()   # <--- This works in latest Streamlit!
     except Exception as e:
         st.error(f"❌ Failed to save entries: {e}")
 
