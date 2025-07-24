@@ -60,17 +60,16 @@ def get_last_qc_id(worksheet):
     return f"QC-{str(next_num).zfill(3)}"
 
 def disable_if_filled(val):
-    # If value is None or empty string or 'None' or '0' or '0.00' -> treat as NOT filled
-    if val in [None, "", "None", "0", "0.0", "0.00"]:
+    # For numbers/strings: treat None, '', 0, 0.0, '0', '0.0', '0.00', 'None' as NOT filled
+    if val is None:
         return False
     try:
-        # Try to interpret as float
-        return float(val) != 0
+        if float(val) == 0.0:
+            return False
     except Exception:
-        # Not a number, treat as filled if non-blank
-        return bool(val) and str(val).strip() not in ["", "None", "0", "0.0", "0.00"]
-
-
+        if str(val).strip() in ["", "None", "0", "0.0", "0.00"]:
+            return False
+    return True
 
 def is_complete_qc_record(rec):
     required_fields = [
@@ -79,7 +78,7 @@ def is_complete_qc_record(rec):
     ]
     for k in required_fields:
         val = rec.get(k, "")
-        if str(val).strip() == "" or val is None:
+        if str(val).strip() == "" or val is None or (str(val).replace(".", "", 1).isdigit() and float(val) == 0):
             return False
     return True
 
@@ -113,7 +112,7 @@ with st.form("solution_qc_form", clear_on_submit=False):
     if edit_mode:
         qc_id = selected_pending_qc["Solution QC ID"]
         solution_id_fk = selected_pending_qc["Solution ID (FK)"]
-        st.info(f"Editing pending record: {qc_id} (already-filled fields are read-only, blank fields are editable)")
+        st.info(f"Editing pending record: {qc_id} (already-filled fields are read-only, blank/zero fields are editable)")
     else:
         qc_id = get_last_qc_id(qc_sheet)
         solution_id_fk = st.selectbox("Select Solution ID (FK)", existing_solution_ids) if existing_solution_ids else st.text_input("Solution ID (FK)")
@@ -123,7 +122,12 @@ with st.form("solution_qc_form", clear_on_submit=False):
     def fieldval(k, fallback=""):
         return selected_pending_qc.get(k, fallback) if edit_mode else fallback
 
-    # Only enable if not filled already in edit mode
+    # DEBUG: print raw value for each required field
+    if edit_mode:
+        print("DEBUG: RAW VALUES for current record:")
+        for k in ["Test Date", "Dish Tare Mass (g)", "Initial Solution Mass (g)", "Final Dish Mass (g)", "Operator Initials", "QC Date"]:
+            print(f"{k}: {repr(fieldval(k))}")
+
     test_date = st.date_input(
         "Test Date",
         value=pd.to_datetime(fieldval("Test Date")).date() if disable_if_filled(fieldval("Test Date")) else datetime.today().date(),
