@@ -60,16 +60,20 @@ def get_last_qc_id(worksheet):
     return f"QC-{str(next_num).zfill(3)}"
 
 def disable_if_filled(val):
-    # Treat None, "", "None", "0", "0.0", "0.00", 0, 0.0 as NOT filled
-    if val is None:
-        return False
     try:
-        if float(val) == 0.0:
+        # Any of: "", None, "None", "0", "0.0", "0.00", 0, 0.0 means NOT filled
+        if val is None:
             return False
+        sval = str(val).strip()
+        if sval in ["", "None", "0", "0.0", "0.00"]:
+            return False
+        if isinstance(val, (int, float)) and float(val) == 0.0:
+            return False
+        if sval.replace('.', '', 1).isdigit() and float(sval) == 0.0:
+            return False
+        return True
     except Exception:
-        if str(val).strip() in ["", "None", "0", "0.0", "0.00"]:
-            return False
-    return True
+        return False
 
 def is_complete_qc_record(rec):
     required_fields = [
@@ -78,7 +82,7 @@ def is_complete_qc_record(rec):
     ]
     for k in required_fields:
         val = rec.get(k, "")
-        if str(val).strip() == "" or val is None or (str(val).replace(".", "", 1).isdigit() and float(val) == 0):
+        if not disable_if_filled(val):
             return False
     return True
 
@@ -112,7 +116,7 @@ with st.form("solution_qc_form", clear_on_submit=False):
     if edit_mode:
         qc_id = selected_pending_qc["Solution QC ID"]
         solution_id_fk = selected_pending_qc["Solution ID (FK)"]
-        st.info(f"Editing pending record: {qc_id} (already-filled fields are read-only, blank/zero fields are editable)")
+        st.info(f"Editing pending record: {qc_id}")
     else:
         qc_id = get_last_qc_id(qc_sheet)
         solution_id_fk = st.selectbox("Select Solution ID (FK)", existing_solution_ids) if existing_solution_ids else st.text_input("Solution ID (FK)")
@@ -122,7 +126,6 @@ with st.form("solution_qc_form", clear_on_submit=False):
     def fieldval(k, fallback=""):
         return selected_pending_qc.get(k, fallback) if edit_mode else fallback
 
-    # Main required fields logic
     test_date = st.date_input(
         "Test Date",
         value=pd.to_datetime(fieldval("Test Date")).date() if disable_if_filled(fieldval("Test Date")) else datetime.today().date(),
@@ -162,16 +165,19 @@ with st.form("solution_qc_form", clear_on_submit=False):
 
     st.divider()
 
-    # Enable submit if ANY required field is editable (i.e., missing or zero)
+    # Button enabled as long as at least one required field is still editable
     required_fields = [
         "Test Date", "Dish Tare Mass (g)", "Initial Solution Mass (g)",
         "Final Dish Mass (g)", "Operator Initials", "QC Date"
     ]
-    editable_fields = [
-        not disable_if_filled(fieldval(field))
-        for field in required_fields
-    ]
-    can_submit = any(editable_fields) if edit_mode else True
+    can_submit = False
+    if not edit_mode:
+        can_submit = True
+    else:
+        for field in required_fields:
+            if not disable_if_filled(fieldval(field)):
+                can_submit = True
+                break
 
     submit_button = st.form_submit_button("💾 Save QC Record", disabled=not can_submit)
 
